@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" class="theme-neobrutalism">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="icon" type="image/png" href="assets/brandex-favicon-20261003.png">
+  <link rel="apple-touch-icon" href="assets/brandex-logo-12.png">
+  <meta property="og:image" content="assets/brandex-social-preview-20261003.png">
+  <meta name="theme-color" content="#C94A00">
+  <title>Brandex Law Associates CMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&family=DM+Mono:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F0E8D0; --bg-alt: #E8DFC7; --bg2: #0C0C0C; --panel: #FAF6EE;
+      --black: #0C0C0C; --accent: #C94A00; --accent2: #0D9970; --accent3: #D4A800;
+      --shadow: 5px 5px 0 #0C0C0C; --shadow-sm: 3px 3px 0 #0C0C0C; --radius: 6px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Space Grotesk', Arial, sans-serif;
+      background: var(--bg); color: var(--black);
+      min-height: 100vh; line-height: 1.5; text-transform: uppercase;
+    }
+    .navbar{position:sticky;top:0;z-index:1000;height:60px;background:#0C0C0C;border-bottom:3px solid #C94A00;box-shadow:0 5px 0 rgba(0,0,0,.2);display:flex;align-items:center;justify-content:space-between;padding:0 20px;gap:12px;}
+    .nb-brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;flex-shrink:0;}
+    .nb-logo{width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #C94A00;background:#FAF6EE;}
+    .nb-brand-text{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;color:#FAF6EE;line-height:1.1;}
+    .nb-brand-sub{font-family:'DM Mono',monospace;font-size:9px;color:#0D9970;letter-spacing:2px;text-transform:uppercase;margin-top:1px;}
+    .nb-nav{display:flex;align-items:center;gap:0;flex:1;justify-content:center;}
+    .ni{display:flex;align-items:center;padding:0 16px;height:60px;color:rgba(250,246,238,.55);font-family:'DM Mono',monospace;font-size:11px;font-weight:500;letter-spacing:1px;text-transform:uppercase;text-decoration:none;border-bottom:4px solid transparent;}
+    .ni:hover{color:#FAF6EE;background:#1A1A1A;}
+    .ni.active{color:#FAF6EE;border-bottom-color:#C94A00;}
+    .nb-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+    .nb-pill{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:#C94A00;border:1.5px solid #333;padding:4px 8px;text-transform:uppercase;}
+    .bx-footer{text-align:center;padding:14px 12px;font-family:'DM Mono',monospace;font-size:0.58rem;letter-spacing:1px;color:#FFF9F0;border-top:none;background:#0C0C0C;text-transform:uppercase;}
+    .bx-footer .accent{color:#C94A00;}
+    @media(max-width:720px){.nb-brand-sub{display:none}.nb-brand-text{font-size:18px}.ni{padding:0 10px;font-size:10px}}
+    #welcome {
+      min-height: calc(100vh - 60px); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 36px 16px 50px;
+    }
+    .welcome-stamp {
+      font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; letter-spacing: 3px;
+      border: 3px solid var(--black); background: var(--accent3); color: var(--black);
+      padding: 5px 16px; border-radius: var(--radius); transform: rotate(-5deg);
+      box-shadow: var(--shadow-sm); margin-bottom: 20px; display: inline-block;
+      animation: stampIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes stampIn {
+      0% { opacity: 0; transform: rotate(-14deg) scale(0.6); }
+      100% { opacity: 1; transform: rotate(-5deg) scale(1); }
+    }
+    .welcome-title {
+      font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.3rem, 7vw, 3.6rem);
+      letter-spacing: 2px; text-align: center; line-height: 1.05; margin-bottom: 10px;
+      animation: fadeUp 0.45s ease 0.12s both;
+    }
+    .welcome-sub {
+      font-size: 0.9rem; font-weight: 500; color: #444; text-align: center;
+      max-width: 520px; margin-bottom: 32px; letter-spacing: 0.5px;
+      animation: fadeUp 0.45s ease 0.22s both;
+    }
+    @keyframes fadeUp {
+      0% { opacity: 0; transform: translateY(14px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .menu-buttons {
+      display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 560px;
+    }
+    .menu-btn {
+      font-family: 'DM Mono', monospace; font-size: 0.88rem; font-weight: 500;
+      letter-spacing: 1px; text-transform: uppercase; padding: 15px 18px;
+      border: 2.5px solid var(--black); border-radius: var(--radius); background: var(--panel);
+      color: var(--black); cursor: pointer; box-shadow: var(--shadow);
+      transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.14s ease;
+      text-align: left; display: flex; align-items: center; gap: 14px; text-decoration: none;
+      animation: fadeUp 0.4s ease both;
+    }
+    .menu-btn:nth-child(1) { animation-delay: 0.28s; }
+    .menu-btn:nth-child(2) { animation-delay: 0.34s; }
+    .menu-btn:nth-child(3) { animation-delay: 0.40s; }
+    .menu-btn:nth-child(4) { animation-delay: 0.46s; }
+    .menu-btn:nth-child(5) { animation-delay: 0.52s; }
+    .menu-btn:nth-child(6) { animation-delay: 0.58s; }
+    .menu-btn:nth-child(7) { animation-delay: 0.64s; }
+    .menu-btn:hover { transform: translate(-3px, -3px); box-shadow: 8px 8px 0 #0C0C0C; }
+    .menu-btn:active { transform: translate(3px, 3px); box-shadow: 0 0 0 #0C0C0C; transition-duration: 0.05s; }
+    .menu-btn.clicked { animation: pressPulse 0.22s ease; }
+    @keyframes pressPulse {
+      0% { transform: translate(0,0); }
+      45% { transform: translate(4px, 4px); box-shadow: 0 0 0 #0C0C0C; }
+      100% { transform: translate(0,0); }
+    }
+    .btn-num {
+      font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center; border: 2px solid currentColor;
+      border-radius: 4px; flex-shrink: 0;
+    }
+    .btn-content { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .btn-label { font-size: 1.05rem; }
+    .btn-links { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      font-size: 0.58rem; letter-spacing: 0.7px; padding: 3px 8px;
+      border: 1.5px solid var(--black); border-radius: 3px; font-weight: 500;
+    }
+    .tag-live { background: #C94A00; color: #fff; }
+    .tag-deploy { background: #0D9970; color: #fff; }
+    .tag-sheet { background: #D4A800; color: #0C0C0C; }
+    .tag-tool { background: #0C0C0C; color: #fff; }
+    .tag-soon { background: #888; color: #fff; }
+    .tag-link { text-decoration: none; cursor: pointer; }
+    .menu-card { cursor: default; }
+    .menu-btn.placeholder { opacity: 0.55; cursor: not-allowed; }
+    .menu-btn.placeholder:hover { transform: none; box-shadow: var(--shadow); }
+  </style>
+</head>
+<body>
+  <nav class="navbar" role="navigation" aria-label="Main">
+    <a class="nb-brand" href="index.html">
+      <img src="assets/brandex-logo-15.png" alt="Brandex" class="nb-logo" width="40" height="40">
+      <div>
+        <div class="nb-brand-text">BRANDEX</div>
+        <div class="nb-brand-sub">Trademark Application · CMS</div>
+      </div>
+    </a>
+    <div class="nb-nav">
+      <a class="ni active" href="index.html">Home</a>
+      <a class="ni" href="trademark-application.html">Application</a>
+      <a class="ni" href="records.html">Records</a>
+    </div>
+    <div class="nb-right">
+      <span class="nb-pill">CMS v1.3</span>
+    </div>
+  </nav>
+
+  <div id="welcome">
+    <div class="welcome-stamp">CMS v1.3</div>
+    <h1 class="welcome-title">BRANDEX LAW ASSOCIATES CMS</h1>
+    <p class="welcome-sub">Select a tool below. All data is written in CAPITAL letters.</p>
+
+    <div class="menu-buttons">
+      <div class="menu-btn menu-card">
+        <span class="btn-num">01</span>
+        <div class="btn-content">
+          <span class="btn-label">Trademark™ Application Generator</span>
+          <div class="btn-links">
+            <a class="tag tag-live tag-link" href="trademark-application.html" onclick="playClick(this)">＋ New Application</a>
+            <a class="tag tag-deploy tag-link" href="records.html" onclick="playClick(this)">Record View + Stats</a>
+            <a class="tag tag-sheet tag-link" href="https://docs.google.com/spreadsheets/d/1u7oYu63G28y54byhOw-2KS3nlt7GrpmbkT3uKMX2b8M/edit?gid=1496727423#gid=1496727423" target="_blank" rel="noopener" onclick="playClick(this)">Google Sheet</a>
+          </div>
+        </div>
+      </div>
+      <div class="menu-btn placeholder" title="Coming soon">
+        <span class="btn-num">02</span>
+        <div class="btn-content">
+          <span class="btn-label">Journal Publishing Unit</span>
+          <div class="btn-links"><span class="tag tag-soon">Coming Soon</span></div>
+        </div>
+      </div>
+      <div class="menu-btn menu-card">
+        <span class="btn-num">03</span>
+        <div class="btn-content">
+          <span class="btn-label">Database Record CMS</span>
+          <div class="btn-links">
+            <a class="tag tag-deploy tag-link" href="https://brandexsheet.vercel.app/" target="_blank" rel="noopener" onclick="playClick(this)">Open App</a>
+            <a class="tag tag-sheet tag-link" href="https://docs.google.com/spreadsheets/d/1yu27k_3Z6cCJmcnQI52z1dIC52Zi9ZxaKlo9wJiNFiQ/edit?gid=229416165#gid=229416165" target="_blank" rel="noopener" onclick="playClick(this)">Google Sheet</a>
+          </div>
+        </div>
+      </div>
+      <div class="menu-btn menu-card">
+        <span class="btn-num">04</span>
+        <div class="btn-content">
+          <span class="btn-label">Salary Logger</span>
+          <div class="btn-links">
+            <a class="tag tag-deploy tag-link" href="https://salary-report-generator.vercel.app/" target="_blank" rel="noopener" onclick="playClick(this)">Open App</a>
+            <a class="tag tag-sheet tag-link" href="https://docs.google.com/spreadsheets/d/1sc8G95EXoc6ZxC73A8qwAP068O_Z6A19YvTkgpC84SI/edit?gid=1569630085#gid=1569630085" target="_blank" rel="noopener" onclick="playClick(this)">Google Sheet</a>
+          </div>
+        </div>
+      </div>
+      <div class="menu-btn menu-card">
+        <span class="btn-num">05</span>
+        <div class="btn-content">
+          <span class="btn-label">Ledger Consultants</span>
+          <div class="btn-links">
+            <a class="tag tag-deploy tag-link" href="https://brandex-client-ledger.vercel.app/" target="_blank" rel="noopener" onclick="playClick(this)">Open App</a>
+            <a class="tag tag-sheet tag-link" href="https://docs.google.com/spreadsheets/d/1tZqytFeYCnFCxVqJWTIUqJC8qwpop_J6IkuNwbr9nfw/edit?gid=236529280#gid=236529280" target="_blank" rel="noopener" onclick="playClick(this)">Google Sheet</a>
+          </div>
+        </div>
+      </div>
+      <a class="menu-btn" href="https://docs.google.com/spreadsheets/d/1jsoevY_0tSrayxPNTZjRU5LBB9LKTFHa2hrDG57sc0k/edit?gid=1788212026#gid=1788212026" target="_blank" rel="noopener" onclick="playClick(this)">
+        <span class="btn-num">06</span>
+        <div class="btn-content">
+          <span class="btn-label">Ledger Personal (Google Sheet)</span>
+          <div class="btn-links"><span class="tag tag-sheet">Google Sheet Link</span></div>
+        </div>
+      </a>
+      <a class="menu-btn" href="https://0utlawzz.github.io/Document-Enhancer/" target="_blank" rel="noopener" onclick="playClick(this)">
+        <span class="btn-num">07</span>
+        <div class="btn-content">
+          <span class="btn-label">Tools: Document Enhancer</span>
+          <div class="btn-links"><span class="tag tag-tool">Web Application</span></div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <footer class="bx-footer">BRANDEX LAW ASSOCIATES · <span class="accent">WWW.BRANDEX.PK</span> · INFO@BRANDEX.PK · +92 336 0015009 · ISLAMABAD · KARACHI · LAHORE · MULTAN · RAWALPINDI</footer>
+
+  <script>
+    function playClick(el) {
+      el.classList.add('clicked');
+      setTimeout(function(){ el.classList.remove('clicked'); }, 240);
+      try {
+        var ctx = new (window.AudioContext || window.webkitAudioContext)();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'square'; osc.frequency.value = 380;
+        gain.gain.setValueAtTime(0.07, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+        osc.start(); osc.stop(ctx.currentTime + 0.07);
+      } catch (e) {}
+    }
+  </script>
+</body>
+</html>
