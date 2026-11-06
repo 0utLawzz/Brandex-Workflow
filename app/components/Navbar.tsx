@@ -31,7 +31,7 @@ export default function Navbar() {
       <div className="nb-nav flex items-center justify-center flex-1 gap-0">
         <Link
           href="/"
-          className={`ni flex items-center px-4 h-[60px] font-['DM_Mono',monospace] text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
+          className={`ni flex items-center px-3 sm:px-4 h-[60px] font-['DM_Mono',monospace] text-[10px] sm:text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
             pathname === '/' ? 'text-[#FAF6EE] border-b-[#C94A00]' : 'text-[rgba(250,246,238,.55)] border-b-transparent hover:text-[#FAF6EE] hover:bg-[#1A1A1A]'
           }`}
         >
@@ -39,15 +39,23 @@ export default function Navbar() {
         </Link>
         <Link
           href="/trademark-application"
-          className={`ni flex items-center px-4 h-[60px] font-['DM_Mono',monospace] text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
+          className={`ni flex items-center px-3 sm:px-4 h-[60px] font-['DM_Mono',monospace] text-[10px] sm:text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
             pathname === '/trademark-application' ? 'text-[#FAF6EE] border-b-[#C94A00]' : 'text-[rgba(250,246,238,.55)] border-b-transparent hover:text-[#FAF6EE] hover:bg-[#1A1A1A]'
           }`}
         >
           Application
         </Link>
         <Link
+          href="/clients"
+          className={`ni flex items-center px-3 sm:px-4 h-[60px] font-['DM_Mono',monospace] text-[10px] sm:text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
+            pathname === '/clients' ? 'text-[#FAF6EE] border-b-[#C94A00]' : 'text-[rgba(250,246,238,.55)] border-b-transparent hover:text-[#FAF6EE] hover:bg-[#1A1A1A]'
+          }`}
+        >
+          Clients
+        </Link>
+        <Link
           href="/records"
-          className={`ni flex items-center px-4 h-[60px] font-['DM_Mono',monospace] text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
+          className={`ni flex items-center px-3 sm:px-4 h-[60px] font-['DM_Mono',monospace] text-[10px] sm:text-[11px] font-medium tracking-[1px] uppercase text-decoration-none border-b-[4px] ${
             pathname === '/records' ? 'text-[#FAF6EE] border-b-[#C94A00]' : 'text-[rgba(250,246,238,.55)] border-b-transparent hover:text-[#FAF6EE] hover:bg-[#1A1A1A]'
           }`}
         >
@@ -56,8 +64,8 @@ export default function Navbar() {
       </div>
 
       <div className="nb-right flex items-center gap-2 shrink-0">
-        <span className="nb-pill font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#C94A00] border-[1.5px] border-[#333] px-2 py-1 uppercase">
-          CMS v1.3
+        <span className="nb-pill font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#C94A00] border-[1.5px] border-[#333] px-2 py-1 uppercase hidden sm:block">
+          SUPABASE READY
         </span>
       </div>
     </nav>

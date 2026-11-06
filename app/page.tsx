@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import { ExternalLink, Github, FileText, Database, BookOpen, ShieldCheck, Landmark } from 'lucide-react';
 
 export default function HomePage() {
   const playClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -33,15 +34,46 @@ export default function HomePage() {
       <Navbar />
 
       <div id="welcome" className="flex-1 flex flex-col items-center justify-center px-4 pt-9 pb-12">
-        <div className="welcome-stamp font-['Bebas_Neue'] text-[1.2rem] tracking-[3px] border-[3px] border-[#0C0C0C] bg-[#D4A800] text-[#0C0C0C] py-[5px] px-4 rounded-[6px] rotate-[-5deg] shadow-[3px_3px_0_#0C0C0C] mb-5 inline-block animate-[stampIn_0.55s_cubic-bezier(0.34,1.56,0.64,1)_both]">
-          CMS v1.3
+        <div className="welcome-stamp font-['Bebas_Neue'] text-[1.2rem] tracking-[3px] border-[3px] border-[#0C0C0C] bg-[#D4A800] text-[#0C0C0C] py-[5px] px-4 rounded-[6px] rotate-[-5deg] shadow-[3px_3px_0_#0C0C0C] mb-5 inline-block">
+          CMS v1.4 · SUPABASE CONNECTED
         </div>
         <h1 className="welcome-title font-['Bebas_Neue'] text-[clamp(2.3rem,7vw,3.6rem)] tracking-[2px] text-center leading-[1.05] mb-2.5">
           BRANDEX LAW ASSOCIATES CMS
         </h1>
         <p className="welcome-sub text-[0.9rem] font-medium text-[#444] text-center max-w-[520px] mb-8 tracking-[0.5px]">
-          Select a tool below. All data is written in CAPITAL letters.
+          Select a tool or government portal below. All records sync with Supabase and Google Sheets.
         </p>
+
+        {/* External Portals Quick Bar (FBR, IPO, SECP) */}
+        <div className="flex flex-wrap gap-3 justify-center mb-8 w-full max-w-[650px]">
+          <a
+            href="https://iris.fbr.gov.pk/"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={playClick}
+            className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px]"
+          >
+            <Landmark className="w-4 h-4 text-[#C94A00]" /> FBR Portal <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
+          <a
+            href="https://apply.ipo.gov.pk"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={playClick}
+            className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px]"
+          >
+            <ShieldCheck className="w-4 h-4 text-[#0D9970]" /> IPO Pakistan <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
+          <a
+            href="https://leap.secp.gov.pk/#/user/login"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={playClick}
+            className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px]"
+          >
+            <BookOpen className="w-4 h-4 text-[#D4A800]" /> SECP Portal <ExternalLink className="w-3 h-3 opacity-60" />
+          </a>
+        </div>
 
         <div className="menu-buttons flex flex-col gap-3 w-full max-w-[560px]">
           {/* Item 1 */}
@@ -50,13 +82,13 @@ export default function HomePage() {
               01
             </span>
             <div className="btn-content flex-1 flex flex-col gap-[5px]">
-              <span className="btn-label text-[1.05rem]">Trademark™ Application Generator</span>
+              <span className="btn-label text-[1.05rem]">Trademark™ Application &amp; MailMerge</span>
               <div className="btn-links flex flex-wrap gap-1.5">
                 <Link href="/trademark-application" className="tag tag-live tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#C94A00] text-white no-underline" onClick={playClick}>
                   ＋ New Application
                 </Link>
                 <Link href="/records" className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0D9970] text-white no-underline" onClick={playClick}>
-                  Record View + Stats
+                  Record View + Stages
                 </Link>
                 <a href="https://docs.google.com/spreadsheets/d/1u7oYu63G28y54byhOw-2KS3nlt7GrpmbkT3uKMX2b8M/edit?gid=1496727423#gid=1496727423" target="_blank" rel="noopener noreferrer" className="tag tag-sheet tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#D4A800] text-[#0C0C0C] no-underline" onClick={playClick}>
                   Google Sheet
@@ -86,40 +118,22 @@ export default function HomePage() {
               03
             </span>
             <div className="btn-content flex-1 flex flex-col gap-[5px]">
-              <span className="btn-label text-[1.05rem]">Database Record CMS</span>
+              <span className="btn-label text-[1.05rem]">Database Record CMS (Supabase)</span>
               <div className="btn-links flex flex-wrap gap-1.5">
-                <a href="https://brandexsheet.vercel.app/" target="_blank" rel="noopener noreferrer" className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0D9970] text-white no-underline" onClick={playClick}>
-                  Open App
-                </a>
-                <a href="https://docs.google.com/spreadsheets/d/1yu27k_3Z6cCJmcnQI52z1dIC52Zi9ZxaKlo9wJiNFiQ/edit?gid=229416165#gid=229416165" target="_blank" rel="noopener noreferrer" className="tag tag-sheet tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#D4A800] text-[#0C0C0C] no-underline" onClick={playClick}>
-                  Google Sheet
-                </a>
+                <Link href="/records" className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0D9970] text-white no-underline" onClick={playClick}>
+                  Open Records
+                </Link>
+                <span className="tag tag-sheet font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#D4A800] text-[#0C0C0C]">
+                  Supabase DB Active
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Item 4 */}
+          {/* Item 4: Ledger Consultants */}
           <div className="menu-btn menu-card font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[15px_18px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5">
             <span className="btn-num font-['Bebas_Neue'] text-[1.3rem] w-9 h-9 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0">
               04
-            </span>
-            <div className="btn-content flex-1 flex flex-col gap-[5px]">
-              <span className="btn-label text-[1.05rem]">Salary Logger</span>
-              <div className="btn-links flex flex-wrap gap-1.5">
-                <a href="https://salary-report-generator.vercel.app/" target="_blank" rel="noopener noreferrer" className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0D9970] text-white no-underline" onClick={playClick}>
-                  Open App
-                </a>
-                <a href="https://docs.google.com/spreadsheets/d/1sc8G95EXoc6ZxC73A8qwAP068O_Z6A19YvTkgpC84SI/edit?gid=1569630085#gid=1569630085" target="_blank" rel="noopener noreferrer" className="tag tag-sheet tag-link font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#D4A800] text-[#0C0C0C] no-underline" onClick={playClick}>
-                  Google Sheet
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Item 5 */}
-          <div className="menu-btn menu-card font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[15px_18px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5">
-            <span className="btn-num font-['Bebas_Neue'] text-[1.3rem] w-9 h-9 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0">
-              05
             </span>
             <div className="btn-content flex-1 flex flex-col gap-[5px]">
               <span className="btn-label text-[1.05rem]">Ledger Consultants</span>
@@ -134,31 +148,31 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Item 6 */}
-          <a href="https://docs.google.com/spreadsheets/d/1jsoevY_0tSrayxPNTZjRU5LBB9LKTFHa2hrDG57sc0k/edit?gid=1788212026#gid=1788212026" target="_blank" rel="noopener noreferrer" className="menu-btn font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[15px_18px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5 no-underline transition-all hover:translate-x-[-3px] hover:translate-y-[-3px] hover:shadow-[8px_8px_0_#0C0C0C]" onClick={playClick}>
-            <span className="btn-num font-['Bebas_Neue'] text-[1.3rem] w-9 h-9 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0">
-              06
-            </span>
-            <div className="btn-content flex-1 flex flex-col gap-[5px]">
-              <span className="btn-label text-[1.05rem]">Ledger Personal (Google Sheet)</span>
-              <div className="btn-links flex flex-wrap gap-1.5">
-                <span className="tag tag-sheet font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#D4A800] text-[#0C0C0C]">
-                  Google Sheet Link
-                </span>
-              </div>
-            </div>
-          </a>
-
-          {/* Item 7 */}
+          {/* Item 5: Document Enhancer */}
           <a href="https://0utlawzz.github.io/Document-Enhancer/" target="_blank" rel="noopener noreferrer" className="menu-btn font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[15px_18px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5 no-underline transition-all hover:translate-x-[-3px] hover:translate-y-[-3px] hover:shadow-[8px_8px_0_#0C0C0C]" onClick={playClick}>
             <span className="btn-num font-['Bebas_Neue'] text-[1.3rem] w-9 h-9 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0">
-              07
+              05
             </span>
             <div className="btn-content flex-1 flex flex-col gap-[5px]">
               <span className="btn-label text-[1.05rem]">Tools: Document Enhancer</span>
               <div className="btn-links flex flex-wrap gap-1.5">
                 <span className="tag tag-tool font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0C0C0C] text-white">
                   Web Application
+                </span>
+              </div>
+            </div>
+          </a>
+
+          {/* Item 6: GitHub Author Block */}
+          <a href="https://github.com/0utLawzz/" target="_blank" rel="noopener noreferrer" className="menu-btn font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[15px_18px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5 no-underline transition-all hover:translate-x-[-3px] hover:translate-y-[-3px] hover:shadow-[8px_8px_0_#0C0C0C]" onClick={playClick}>
+            <span className="btn-num font-['Bebas_Neue'] text-[1.3rem] w-9 h-9 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0 bg-[#0C0C0C] text-[#FAF6EE]">
+              <Github className="w-5 h-5" />
+            </span>
+            <div className="btn-content flex-1 flex flex-col gap-[5px]">
+              <span className="btn-label text-[1.05rem]">GitHub Repository · 0utLawzz</span>
+              <div className="btn-links flex flex-wrap gap-1.5">
+                <span className="tag tag-deploy font-['DM_Mono',monospace] text-[0.58rem] tracking-[0.7px] px-2 py-[3px] border-[1.5px] border-[#0C0C0C] rounded-[3px] font-medium bg-[#0C0C0C] text-white">
+                  View Profile &amp; Source
                 </span>
               </div>
             </div>
