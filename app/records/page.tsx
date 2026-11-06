@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
@@ -44,6 +46,8 @@ export default function RecordsPage() {
   const [activeModalTab, setActiveModalTab] = useState<'details' | 'history' | 'docs'>('details');
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [associatedDocs, setAssociatedDocs] = useState<any[]>([]);
+  const [modalMsg, setModalMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [savingRecord, setSavingRecord] = useState(false);
 
   useEffect(() => {
     loadAllRecords();
@@ -259,6 +263,7 @@ export default function RecordsPage() {
   const openEditModal = async (r: RecordItem) => {
     setEditingRecord(r);
     setActiveModalTab('details');
+    setModalMsg(null);
     setHistoryLogs([]);
     setAssociatedDocs([]);
 
@@ -288,35 +293,90 @@ export default function RecordsPage() {
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
+    setSavingRecord(true);
+    setModalMsg(null);
     try {
-      if (editingRecord.id) {
+      let recordId = editingRecord.id;
+
+      if (recordId) {
         const { error } = await supabase
           .from('trademark_records')
           .update({
             status: editingRecord.status,
-            tracking_id: editingRecord.trackingId,
-            trademark_no: editingRecord.tm,
-            mark_name: editingRecord.folder,
+            tracking_id: editingRecord.trackingId || '',
+            trademark_no: editingRecord.tm || '',
+            mark_name: editingRecord.folder || '',
           })
-          .eq('id', editingRecord.id);
+          .eq('id', recordId);
 
         if (error) throw error;
+      } else {
+        // Record was originally loaded from sheet, insert it into Supabase
+        const { data: newRec, error: insertError } = await supabase
+          .from('trademark_records')
+          .insert([{
+            mark_name: editingRecord.folder || '',
+            trademark_no: editingRecord.tm || '',
+            applicant_name: editingRecord.appName || '',
+            trading_as: editingRecord.appTrade || '',
+            class_no: editingRecord.classNo || '',
+            consultant_name: editingRecord.conName || '',
+            status: editingRecord.status || 'PENDING',
+            tracking_id: editingRecord.trackingId || '',
+            usage_year: editingRecord.year || '',
+            selection_menu: editingRecord.selectionMenu || 'A',
+            client_code: editingRecord.clientCode || '646',
+            case_no: editingRecord.caseNo || '001',
+            logo_url: editingRecord.img || '',
+          }])
+          .select();
 
-        // Log history change
-        await supabase.from('trademark_history').insert([
-          {
-            record_id: editingRecord.id,
-            status: editingRecord.status,
-            notes: `Status updated to ${editingRecord.status}`,
-          }
-        ]);
+        if (insertError) throw insertError;
+        if (newRec && newRec[0]) {
+          recordId = newRec[0].id;
+          setEditingRecord(prev => prev ? { ...prev, id: recordId } : null);
+        }
       }
 
-      setAllRecords(prev => prev.map(item => (item.id === editingRecord.id ? editingRecord : item)));
-      setEditingRecord(null);
-      alert('Record and history updated successfully!');
+      // Log history change in trademark_history
+      if (recordId) {
+        await supabase.from('trademark_history').insert([
+          {
+            record_id: recordId,
+            status: editingRecord.status,
+            notes: `Stage changed to ${editingRecord.status}${editingRecord.trackingId ? ` · Tracking: ${editingRecord.trackingId}` : ''}`,
+          }
+        ]);
+
+        // Refresh history logs
+        const { data: hData } = await supabase
+          .from('trademark_history')
+          .select('*')
+          .eq('record_id', recordId)
+          .order('created_at', { ascending: false });
+        if (hData) setHistoryLogs(hData);
+      }
+
+      const updatedRecord = { ...editingRecord, id: recordId };
+      setAllRecords(prev => prev.map(item => {
+        if (recordId && item.id === recordId) return updatedRecord;
+        if (!item.id && item.folder === editingRecord.folder && item.tm === editingRecord.tm) {
+          return updatedRecord;
+        }
+        return item;
+      }));
+
+      setModalMsg({
+        text: 'Record details & status timeline successfully updated in Supabase!',
+        type: 'success',
+      });
     } catch (err: any) {
-      alert('Failed to update record: ' + err.message);
+      setModalMsg({
+        text: 'Failed to update record: ' + (err.message || 'Unknown database error'),
+        type: 'error',
+      });
+    } finally {
+      setSavingRecord(false);
     }
   };
 
@@ -511,13 +571,15 @@ export default function RecordsPage() {
                         <td className="p-2.5 font-['DM_Mono',monospace]">{r.tm || '—'}</td>
                         <td className="p-2.5 truncate max-w-[150px]" title={r.appName}>{r.appName}</td>
                         <td className="p-2.5 font-['DM_Mono',monospace]">{r.trackingId || '—'}</td>
-                        <td className="p-2.5 flex gap-1.5 items-center">
-                          <button
-                            onClick={() => openEditModal(r)}
-                            className="px-2.5 py-1 border-2 border-[#0C0C0C] bg-[#FAF6EE] font-['DM_Mono',monospace] text-[0.7rem] cursor-pointer hover:bg-[#E8DFC7] font-bold"
-                          >
-                            Details &amp; Timeline
-                          </button>
+                        <td className="p-2.5">
+                          <div className="flex gap-1.5 items-center">
+                            <button
+                              onClick={() => openEditModal(r)}
+                              className="px-2.5 py-1 border-2 border-[#0C0C0C] bg-[#FAF6EE] font-['DM_Mono',monospace] text-[0.7rem] cursor-pointer hover:bg-[#E8DFC7] font-bold"
+                            >
+                              Details &amp; Timeline
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -564,6 +626,18 @@ export default function RecordsPage() {
                   ✕ Close
                 </button>
               </div>
+
+              {modalMsg && (
+                <div
+                  className={`mb-4 p-3 border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.75rem] font-bold ${
+                    modalMsg.type === 'success'
+                      ? 'bg-[#d1fae5] text-[#065f46]'
+                      : 'bg-[#fee2e2] text-[#991b1b]'
+                  }`}
+                >
+                  {modalMsg.text}
+                </div>
+              )}
 
               {/* Modal Tabs */}
               <div className="flex gap-2 mb-4">
@@ -634,9 +708,10 @@ export default function RecordsPage() {
                   <div className="flex gap-3 mt-4">
                     <button
                       type="submit"
-                      className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-5 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] cursor-pointer"
+                      disabled={savingRecord}
+                      className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-5 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] cursor-pointer disabled:opacity-50"
                     >
-                      Save Changes &amp; Log Timeline
+                      {savingRecord ? 'Saving to Supabase...' : 'Save Changes & Log Timeline'}
                     </button>
                     <button
                       type="button"
@@ -660,7 +735,7 @@ export default function RecordsPage() {
                         <div key={i} className="p-3 bg-white border-2 border-[#0C0C0C] shadow-[2px_2px_0_#0C0C0C] text-[0.8rem]">
                           <div className="flex justify-between font-['DM_Mono',monospace] text-[0.7rem] text-[#666]">
                             <span>Stage: <strong>{h.status}</strong></span>
-                            <span>{new Date(h.created_at).toLocaleString()}</span>
+                            <span suppressHydrationWarning>{h.created_at ? new Date(h.created_at).toLocaleString() : ''}</span>
                           </div>
                           {h.notes && <p className="mt-1 font-['Space_Grotesk'] text-[0.85rem]">{h.notes}</p>}
                         </div>

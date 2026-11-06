@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
@@ -28,6 +30,7 @@ export default function ClientsPage() {
   const [address, setAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     fetchClients();
@@ -52,6 +55,7 @@ export default function ClientsPage() {
     if (!name.trim()) return;
     setSubmitting(true);
     setSuccessMsg('');
+    setErrorMsg('');
     try {
       const newClient = {
         client_code: clientCode.trim(),
@@ -79,7 +83,7 @@ export default function ClientsPage() {
       setAddress('');
       setClientCode(String(parseInt(clientCode, 10) + 1).padStart(3, '0'));
     } catch (err: any) {
-      alert('Error saving client: ' + err.message);
+      setErrorMsg('Error saving client: ' + (err.message || 'Unknown error'));
     } finally {
       setSubmitting(false);
     }
@@ -108,6 +112,11 @@ export default function ClientsPage() {
           {successMsg && (
             <div className="mb-4 p-3 bg-[#d1fae5] text-[#065f46] border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.8rem] font-bold">
               {successMsg}
+            </div>
+          )}
+          {errorMsg && (
+            <div className="mb-4 p-3 bg-[#fee2e2] text-[#991b1b] border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.8rem] font-bold">
+              {errorMsg}
             </div>
           )}
           <form onSubmit={handleAddClient} className="grid grid-cols-1 sm:grid-cols-3 gap-4">

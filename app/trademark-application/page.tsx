@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
@@ -17,9 +19,9 @@ export default function TrademarkApplicationPage() {
   const [selectedClientId, setSelectedClientId] = useState('');
 
   const [classNo, setClassNo] = useState('3');
-  const [classDesc, setClassDesc] = useState('');
-  const [classDescEditable, setClassDescEditable] = useState(false);
   const [classList] = useState(CLASS_DATA);
+  const [classDesc, setClassDesc] = useState(() => CLASS_DATA.find(c => c.n === 3)?.desc || '');
+  const [classDescEditable, setClassDescEditable] = useState(false);
 
   const [conName, setConName] = useState(LAW_FIRM_DEFAULT.name);
   const [conAdd, setConAdd] = useState(LAW_FIRM_DEFAULT.addr);
@@ -59,8 +61,43 @@ export default function TrademarkApplicationPage() {
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
+  const formatDisplayDate = (d: Date) => {
+    const MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    let hh = d.getHours();
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    hh = hh % 12; if (hh === 0) hh = 12;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}-${MONTHS_SHORT[d.getMonth()]}-${d.getFullYear()} ${pad(hh)}:${pad(d.getMinutes())} ${ampm}`;
+  };
+
+  const updateExpiry = React.useCallback((d: Date) => {
+    const expiry = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000);
+    setExpiryDate(formatDisplayDate(expiry));
+  }, []);
+
+  const onClassChange = React.useCallback((val: string) => {
+    setClassNo(val);
+    const item = CLASS_DATA.find(c => c.n === parseInt(val, 10));
+    if (item) {
+      setClassDesc(item.desc);
+    } else {
+      setClassDesc('');
+    }
+  }, []);
+
+  const handleRemoveClassDesc = () => {
+    setClassDesc('');
+  };
+
+  const handleIssueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setIssueDate(val);
+    if (val) {
+      updateExpiry(new Date(val));
+    }
+  };
+
   useEffect(() => {
-    onClassChange('3');
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
     const localStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -95,7 +132,7 @@ export default function TrademarkApplicationPage() {
       } catch {}
     }
     fetchLatestCaseNo();
-  }, []);
+  }, [updateExpiry]);
 
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -107,45 +144,6 @@ export default function TrademarkApplicationPage() {
       if (client.cnic) setAppCnic(client.cnic);
       if (client.address) setAppAdd(client.address);
     }
-  };
-
-  const onClassChange = (val: string) => {
-    setClassNo(val);
-    const item = classList.find(c => c.n === parseInt(val, 10));
-    if (item) {
-      setClassDesc(item.desc);
-    } else {
-      setClassDesc('');
-    }
-  };
-
-  const handleRemoveClassDesc = () => {
-    setClassDesc('');
-  };
-
-  const updateExpiry = (d: Date) => {
-    const expiry = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000);
-    setExpiryDate(formatDisplayDate(expiry));
-  };
-
-  const handleIssueDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setIssueDate(val);
-    if (val) {
-      updateExpiry(new Date(val));
-    }
-  };
-
-  const formatDisplayDate = (d: Date) => {
-    const MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-    let hh = d.getHours();
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    hh = hh % 12; if (hh === 0) hh = 12;
-    const mm = d.getMinutes().toString().padStart(2, '0');
-    const dd = d.getDate().toString().padStart(2, '0');
-    const mon = MONTHS_SHORT[d.getMonth()];
-    const yyyy = d.getFullYear();
-    return `${dd}-${mon}-${yyyy} ${hh.toString().padStart(2, '0')}:${mm} ${ampm}`;
   };
 
   const handleCnicInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -693,6 +691,7 @@ export default function TrademarkApplicationPage() {
                     required
                     value={issueDate}
                     onChange={handleIssueDateChange}
+                    suppressHydrationWarning
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px]"
                   />
                 </div>
@@ -704,6 +703,7 @@ export default function TrademarkApplicationPage() {
                     type="text"
                     readOnly
                     value={expiryDate}
+                    suppressHydrationWarning
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#E8DFC7] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px]"
                   />
                 </div>
