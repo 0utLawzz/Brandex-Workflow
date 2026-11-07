@@ -1,9 +1,8 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { APPS_SCRIPT_URL, SHEET_URL, WORKFLOW_STATUSES } from '@/lib/data';
@@ -84,6 +83,7 @@ export default function RecordsPage() {
         console.warn('Supabase fetch fallback:', err);
       }
 
+      let sheetRecords: RecordItem[] = [];
       try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=getRecords&_=${Date.now()}`, {
           method: 'GET',
@@ -92,7 +92,7 @@ export default function RecordsPage() {
         const text = await res.text();
         const data = JSON.parse(text);
         if (data.ok && Array.isArray(data.records)) {
-          const sheetRecords = data.records.map((r: any) => ({
+          sheetRecords = data.records.map((r: any) => ({
             date: r.date || '',
             folder: r.folder || '',
             tm: r.tm || '',
@@ -107,14 +107,30 @@ export default function RecordsPage() {
             filingProcess: r.filingProcess || '',
             trackingId: r.trackingId || '',
           }));
-          const combined = [...sbData, ...sheetRecords];
-          setAllRecords(combined);
-          setLoading(false);
-          return;
         }
       } catch {}
 
-      setAllRecords(sbData);
+      // Check local storage records
+      let localRecords: RecordItem[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('bx_local_records');
+          if (raw) localRecords = JSON.parse(raw);
+        } catch {}
+      }
+
+      // Combine and deduplicate
+      const map = new Map<string, RecordItem>();
+      [...sbData, ...sheetRecords].forEach(r => {
+        const key = `${r.folder}__${r.tm || ''}`;
+        map.set(key, r);
+      });
+      localRecords.forEach(r => {
+        const key = `${r.folder}__${r.tm || ''}`;
+        map.set(key, { ...map.get(key), ...r });
+      });
+
+      setAllRecords(Array.from(map.values()));
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {
@@ -358,23 +374,58 @@ export default function RecordsPage() {
       }
 
       const updatedRecord = { ...editingRecord, id: recordId };
-      setAllRecords(prev => prev.map(item => {
+      const newAllRecords = allRecords.map(item => {
         if (recordId && item.id === recordId) return updatedRecord;
         if (!item.id && item.folder === editingRecord.folder && item.tm === editingRecord.tm) {
           return updatedRecord;
         }
         return item;
-      }));
+      });
+      setAllRecords(newAllRecords);
+
+      // Persist to local storage
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bx_local_records', JSON.stringify(newAllRecords));
+        } catch {}
+      }
 
       setModalMsg({
         text: 'Record details & status timeline successfully updated in Supabase!',
         type: 'success',
       });
     } catch (err: any) {
-      setModalMsg({
-        text: 'Failed to update record: ' + (err.message || 'Unknown database error'),
-        type: 'error',
+      console.warn('Supabase update error:', err);
+      // Fallback: update in-memory and local storage so user never loses their changes
+      const updatedRecord = { ...editingRecord };
+      const newAllRecords = allRecords.map(item => {
+        if (item.id && item.id === editingRecord.id) return updatedRecord;
+        if (item.folder === editingRecord.folder && item.tm === editingRecord.tm) return updatedRecord;
+        return item;
       });
+      setAllRecords(newAllRecords);
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bx_local_records', JSON.stringify(newAllRecords));
+        } catch {}
+      }
+
+      const isSchemaCacheError = String(err?.message || '').toLowerCase().includes('schema cache') ||
+        String(err?.message || '').toLowerCase().includes('not find the table') ||
+        String(err?.message || '').toLowerCase().includes('relation');
+
+      if (isSchemaCacheError) {
+        setModalMsg({
+          text: `Record saved locally! Note: Table 'trademark_records' has not been created yet in Supabase. Click 'DB SQL SETUP' in the top navbar to copy and run the setup SQL in your Supabase project.`,
+          type: 'success',
+        });
+      } else {
+        setModalMsg({
+          text: 'Saved locally (Supabase sync failed: ' + (err.message || 'database error') + '). Click DB SQL SETUP to verify your database tables.',
+          type: 'success',
+        });
+      }
     } finally {
       setSavingRecord(false);
     }
@@ -545,13 +596,13 @@ export default function RecordsPage() {
                       <tr key={idx} className="hover:bg-[#E8DFC7] border-b border-[#ddd]">
                         <td className="p-2.5">
                           {thumbUrl ? (
-                            <img
+                            <Image
                               src={thumbUrl}
-                              alt=""
-                              className="w-[34px] h-[34px] object-contain border-2 border-[#0C0C0C] bg-white"
-                              loading="lazy"
+                              alt="Thumbnail"
+                              width={34}
+                              height={34}
                               referrerPolicy="no-referrer"
-                              onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                              className="w-[34px] h-[34px] object-contain border-2 border-[#0C0C0C] bg-white"
                             />
                           ) : (
                             <div className="w-[34px] h-[34px] border-2 border-dashed border-[#999] bg-[#f0f0f0] flex items-center justify-center text-[0.5rem] font-['DM_Mono',monospace] text-[#666]">

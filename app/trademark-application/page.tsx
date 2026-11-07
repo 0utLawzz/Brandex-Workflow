@@ -1,9 +1,8 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
@@ -104,14 +103,31 @@ export default function TrademarkApplicationPage() {
     setIssueDate(localStr);
     updateExpiry(now);
 
-    // Fetch saved clients from Supabase
+    // Fetch saved clients from Supabase & localStorage
     async function fetchClients() {
+      let remote: any[] = [];
       try {
         const { data, error } = await supabase.from('clients').select('*').order('id', { ascending: false });
         if (!error && data) {
-          setSavedClients(data);
+          remote = data;
         }
       } catch {}
+
+      let local: any[] = [];
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('bx_local_clients');
+          if (raw) local = JSON.parse(raw);
+        } catch {}
+      }
+
+      const combined = [...remote];
+      local.forEach(l => {
+        if (!combined.some(c => c.client_code === l.client_code || c.name === l.name)) {
+          combined.push(l);
+        }
+      });
+      setSavedClients(combined);
     }
     fetchClients();
 
@@ -305,6 +321,34 @@ export default function TrademarkApplicationPage() {
         }
       } catch (sbErr) {
         console.warn('Supabase insert warning:', sbErr);
+      }
+
+      // Always save copy to local storage cache so it immediately shows in /records
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('bx_local_records');
+          const list = raw ? JSON.parse(raw) : [];
+          list.unshift({
+            id: insertedRecordId || Date.now(),
+            date: payload.issueDate,
+            folder: folder.trim().toUpperCase(),
+            tm: tm.trim().toUpperCase() || 'PENDING',
+            classNo: classNo.trim().toUpperCase(),
+            appName: appName.trim().toUpperCase(),
+            appTrade: appTrade.trim().toUpperCase(),
+            year: year,
+            conName: conName.trim().toUpperCase(),
+            img: payload.imageBase64 || '',
+            noImg: noImg,
+            status: status.toUpperCase(),
+            filingProcess: 'PENDING',
+            trackingId: trackingId.trim().toUpperCase(),
+            selectionMenu: selectionMenu,
+            clientCode: clientCode,
+            caseNo: caseNo,
+          });
+          localStorage.setItem('bx_local_records', JSON.stringify(list));
+        } catch {}
       }
 
       // 2. Insert initial status history in `trademark_history`
@@ -826,7 +870,15 @@ export default function TrademarkApplicationPage() {
                   className="hidden"
                 />
                 {previewSrc && (
-                  <img src={previewSrc} alt="Preview" className="mt-3 max-h-32 mx-auto border-2 border-[#0C0C0C] bg-white object-contain" />
+                  <Image
+                    src={previewSrc}
+                    alt="Preview"
+                    width={128}
+                    height={128}
+                    className="mt-3 max-h-32 mx-auto border-2 border-[#0C0C0C] bg-white object-contain"
+                    referrerPolicy="no-referrer"
+                    unoptimized
+                  />
                 )}
               </div>
 

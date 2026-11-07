@@ -1,7 +1,5 @@
 'use client';
 
-export const dynamic = 'force-dynamic';
-
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
@@ -38,16 +36,33 @@ export default function ClientsPage() {
 
   const fetchClients = async () => {
     setLoading(true);
+    let remoteClients: ClientItem[] = [];
     try {
       const { data, error } = await supabase.from('clients').select('*').order('id', { ascending: false });
       if (!error && data) {
-        setClients(data);
+        remoteClients = data;
       }
     } catch (err) {
       console.warn('Supabase clients fetch error:', err);
-    } finally {
-      setLoading(false);
     }
+
+    let localClients: ClientItem[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('bx_local_clients');
+        if (raw) localClients = JSON.parse(raw);
+      } catch {}
+    }
+
+    const merged = [...remoteClients];
+    localClients.forEach(lc => {
+      if (!merged.some(rc => rc.client_code === lc.client_code || rc.name === lc.name)) {
+        merged.push(lc);
+      }
+    });
+
+    setClients(merged);
+    setLoading(false);
   };
 
   const handleAddClient = async (e: React.FormEvent) => {
@@ -56,35 +71,53 @@ export default function ClientsPage() {
     setSubmitting(true);
     setSuccessMsg('');
     setErrorMsg('');
-    try {
-      const newClient = {
-        client_code: clientCode.trim(),
-        name: name.trim().toUpperCase(),
-        company_name: companyName.trim().toUpperCase(),
-        phone: phone.trim(),
-        cnic: cnic.trim(),
-        address: address.trim().toUpperCase(),
-      };
+    const newClient: ClientItem = {
+      id: Date.now(),
+      client_code: clientCode.trim(),
+      name: name.trim().toUpperCase(),
+      company_name: companyName.trim().toUpperCase(),
+      phone: phone.trim(),
+      cnic: cnic.trim(),
+      address: address.trim().toUpperCase(),
+    };
 
+    try {
       const { data, error } = await supabase.from('clients').insert([newClient]).select();
       if (error) throw error;
 
       if (data && data[0]) {
         setClients([data[0], ...clients]);
       } else {
-        fetchClients();
+        setClients([newClient, ...clients]);
+      }
+      setSuccessMsg('Client profile saved to Supabase successfully!');
+    } catch (err: any) {
+      console.warn('Supabase save client error:', err);
+      // Fallback save to localStorage
+      const updatedClients = [newClient, ...clients];
+      setClients(updatedClients);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('bx_local_clients', JSON.stringify(updatedClients));
+        } catch {}
       }
 
-      setSuccessMsg('Client saved successfully to Supabase!');
+      const isSchemaCacheError = String(err?.message || '').toLowerCase().includes('schema cache') ||
+        String(err?.message || '').toLowerCase().includes('not find the table') ||
+        String(err?.message || '').toLowerCase().includes('relation');
+
+      if (isSchemaCacheError) {
+        setSuccessMsg(`Client saved locally! Note: Table 'clients' has not been created yet in Supabase. Click 'DB SQL SETUP' in the top bar to create the tables in Supabase.`);
+      } else {
+        setSuccessMsg(`Client saved to local profile cache. (Supabase notice: ${err?.message || 'table not synced'})`);
+      }
+    } finally {
       setName('');
       setCompanyName('');
       setPhone('');
       setCnic('');
       setAddress('');
       setClientCode(String(parseInt(clientCode, 10) + 1).padStart(3, '0'));
-    } catch (err: any) {
-      setErrorMsg('Error saving client: ' + (err.message || 'Unknown error'));
-    } finally {
       setSubmitting(false);
     }
   };
