@@ -5,7 +5,7 @@
     "": {
       "name": "brandex-mailmerge",
       "dependencies": {
-        "@supabase/supabase-js": "^2.119.0",
+        "@supabase/supabase-js": "^2.39.8",
         "@tailwindcss/postcss": "^4.0.9",
         "lucide-react": "^0.475.0",
         "motion": "^12.4.7",
