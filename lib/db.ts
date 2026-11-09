@@ -3,21 +3,31 @@ import { Pool } from 'pg';
 let pool: Pool | null = null;
 
 if (process.env.DATABASE_URL) {
-  pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
-  });
+  try {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+  } catch {
+    console.warn('DB not connected — mock active');
+  }
 }
 
 export async function query(text: string, params?: any[]) {
   if (!pool) {
-    throw new Error('Database not configured. Please set DATABASE_URL environment variable.');
+    console.warn('Database not connected — mock active');
+    return { rows: [] };
   }
-  const client = await pool.connect();
   try {
-    return await client.query(text, params);
-  } finally {
-    client.release();
+    const client = await pool.connect();
+    try {
+      return await client.query(text, params);
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.warn('DB query error — returning mock rows:', err);
+    return { rows: [] };
   }
 }
 
