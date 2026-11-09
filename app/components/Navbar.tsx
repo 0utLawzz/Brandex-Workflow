@@ -16,11 +16,11 @@ export default function Navbar() {
       <nav className="navbar relative sticky top-0 z-[1000] h-[60px] bg-[#0C0C0C] border-b-[3px] border-[#C94A00] shadow-[0_5px_0_rgba(0,0,0,.2)] flex items-center justify-between px-5 gap-3">
         <Link href="/" className="nb-brand flex items-center gap-3 text-inherit no-underline shrink-0">
           <Image
-            src="/assets/brandex-logo-15.png"
-            alt="Brandex"
+            src="/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png"
+            alt="Brandex Logo"
             width={40}
             height={40}
-            className="nb-logo rounded-full object-cover border-2 border-[#C94A00] bg-[#FAF6EE]"
+            className="nb-logo rounded-full object-contain p-0.5 border-2 border-[#C94A00] bg-[#FAF6EE]"
             referrerPolicy="no-referrer"
           />
           <div>

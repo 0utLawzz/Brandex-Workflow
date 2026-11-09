@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import Navbar from './components/Navbar';
@@ -21,6 +22,24 @@ import {
   Zap,
   HardDrive
 } from 'lucide-react';
+
+const BRAND_LOGOS = [
+  {
+    id: 'monogram-ring',
+    name: 'bR Monogram (Ring)',
+    src: '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png'
+  },
+  {
+    id: 'monogram-pure',
+    name: 'bR Monogram',
+    src: '/assets/aistudio/Elegant_purple_bR_monogram_40d16f05.png'
+  },
+  {
+    id: 'app-squircle',
+    name: 'Brandex App Icon',
+    src: '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_37_PM_e12d09bd.png'
+  }
+];
 
 interface Slide {
   id: number;
@@ -89,11 +108,14 @@ const SLIDES: Slide[] = [
 export default function HomePage() {
   const router = useRouter();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [selectedLogoIdx, setSelectedLogoIdx] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
   const [wipeTarget, setWipeTarget] = useState('/records');
   const [wipeTitle, setWipeTitle] = useState('RECORDS DASHBOARD');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const activeLogo = BRAND_LOGOS[selectedLogoIdx];
 
   // Audio effect for button click and wipe
   const playSound = (freq = 420, duration = 0.08) => {
@@ -125,14 +147,14 @@ export default function HomePage() {
     };
   }, [isPaused, isWiping]);
 
-  // Screen Wipe Navigation Trigger
+  // Screen Wipe Navigation Trigger with Animated Logo Loading
   const triggerWipeAndNavigate = (targetUrl: string, title = 'RECORDS DASHBOARD') => {
     playSound(540, 0.15);
     setWipeTarget(targetUrl);
     setWipeTitle(title);
     setIsWiping(true);
 
-    // After animation covers the viewport (400ms), push route
+    // After animation displays (700ms), push route
     setTimeout(() => {
       if (targetUrl.startsWith('http')) {
         window.open(targetUrl, '_blank');
@@ -140,7 +162,7 @@ export default function HomePage() {
       } else {
         router.push(targetUrl);
       }
-    }, 450);
+    }, 700);
   };
 
   const handleNext = () => {
@@ -159,7 +181,7 @@ export default function HomePage() {
     <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] relative overflow-x-hidden">
       <Navbar />
 
-      {/* Screen Wipe Transition Overlay */}
+      {/* Screen Wipe Transition Overlay with Animated Brandex Logo */}
       <AnimatePresence>
         {isWiping && (
           <motion.div
@@ -175,19 +197,51 @@ export default function HomePage() {
               style={{ originX: 0 }}
               className="absolute inset-0 bg-[#0C0C0C] z-10 flex flex-col items-center justify-center p-6 text-center"
             >
+              {/* Brandex Animated Logo in Wipe Loading Screen */}
+              <motion.div
+                initial={{ scale: 0.2, rotate: -15, opacity: 0 }}
+                animate={{ scale: [0.2, 1.15, 1], rotate: [-15, 5, 0], opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="relative mb-6"
+              >
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#1A1A1A] border-[3px] border-[#C94A00] p-2.5 flex items-center justify-center relative overflow-hidden shadow-[0_0_40px_rgba(201,74,0,0.6)]">
+                  {/* Rotating decorative accent ring */}
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
+                    className="absolute -inset-2 border-2 border-dashed border-[#D4A800]/50 rounded-2xl pointer-events-none"
+                  />
+                  <Image
+                    src={activeLogo.src}
+                    alt="Brandex Loading Logo"
+                    width={96}
+                    height={96}
+                    className="object-contain w-full h-full drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+                    referrerPolicy="no-referrer"
+                    priority
+                  />
+                </div>
+                {/* Expanding pulse wave */}
+                <motion.div
+                  className="absolute -inset-2 rounded-2xl border-2 border-[#C94A00]"
+                  animate={{ scale: [1, 1.3, 1.5], opacity: [0.8, 0.3, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.2, ease: "easeOut" }}
+                />
+              </motion.div>
+
               <div className="font-['Bebas_Neue'] text-[clamp(2.5rem,8vw,4.5rem)] text-[#FAF6EE] tracking-[4px] leading-tight">
                 LAUNCHING {wipeTitle}...
               </div>
               <div className="font-['DM_Mono',monospace] text-[0.9rem] text-[#D4A800] tracking-[2px] mt-2 flex items-center gap-2">
-                <HardDrive className="w-4 h-4 animate-spin" />
+                <HardDrive className="w-4 h-4 animate-spin text-[#C94A00]" />
                 <span>STANDALONE CMS · LOCAL STORAGE 0ms LATENCY</span>
               </div>
-              <div className="w-64 h-2 bg-[#222] border border-[#FAF6EE] mt-6 overflow-hidden">
+              <div className="w-72 sm:w-80 h-3 bg-[#1A1A1A] border-2 border-[#FAF6EE] mt-6 p-0.5 rounded-[3px] overflow-hidden">
                 <motion.div
-                  className="h-full bg-[#C94A00]"
+                  className="h-full bg-gradient-to-r from-[#C94A00] via-[#D4A800] to-[#0D9970]"
                   initial={{ width: 0 }}
                   animate={{ width: '100%' }}
-                  transition={{ duration: 0.4 }}
+                  transition={{ duration: 0.65, ease: "easeInOut" }}
                 />
               </div>
             </motion.div>
@@ -257,37 +311,109 @@ export default function HomePage() {
             </div>
 
             <div className="p-6 sm:p-8">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[4px] uppercase tracking-[1px] shadow-[2px_2px_0_#0C0C0C] ${activeSlide.bgBadge}`}>
-                  {activeSlide.badge}
-                </span>
-                <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold text-[#666] tracking-[1px]">
-                  {activeSlide.tag}
-                </span>
-              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                {/* Left/Main Column: Slide details */}
+                <div className="lg:col-span-8 flex flex-col justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[4px] uppercase tracking-[1px] shadow-[2px_2px_0_#0C0C0C] ${activeSlide.bgBadge}`}>
+                      {activeSlide.badge}
+                    </span>
+                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold text-[#666] tracking-[1px]">
+                      {activeSlide.tag}
+                    </span>
+                  </div>
 
-              <h2 className="font-['Bebas_Neue'] text-[clamp(1.9rem,5vw,2.8rem)] tracking-[1.5px] leading-[1.05] mb-3 text-[#0C0C0C]">
-                {activeSlide.title}
-              </h2>
+                  <h2 className="font-['Bebas_Neue'] text-[clamp(1.9rem,5vw,2.8rem)] tracking-[1.5px] leading-[1.05] mb-3 text-[#0C0C0C]">
+                    {activeSlide.title}
+                  </h2>
 
-              <p className="font-['DM_Mono',monospace] text-[0.85rem] text-[#333] leading-relaxed max-w-2xl mb-5">
-                {activeSlide.desc}
-              </p>
+                  <p className="font-['DM_Mono',monospace] text-[0.85rem] text-[#333] leading-relaxed max-w-2xl mb-5">
+                    {activeSlide.desc}
+                  </p>
 
-              <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t-2 border-[#0C0C0C]">
-                <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0D9970] bg-[#EBF7F2] border border-[#0D9970] px-3 py-1.5 rounded-[4px]">
-                  ✓ {activeSlide.stat}
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t-2 border-[#0C0C0C]">
+                    <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0D9970] bg-[#EBF7F2] border border-[#0D9970] px-3 py-1.5 rounded-[4px]">
+                      ✓ {activeSlide.stat}
+                    </div>
+
+                    {/* Primary Wipe Button */}
+                    <button
+                      type="button"
+                      onClick={() => triggerWipeAndNavigate(activeSlide.targetUrl, activeSlide.title)}
+                      className="font-['DM_Mono',monospace] text-[0.85rem] font-bold py-3 px-5 sm:px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] shadow-[4px_4px_0_#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0_#0C0C0C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_#0C0C0C] transition-all flex items-center gap-2 cursor-pointer uppercase tracking-[1px]"
+                    >
+                      <span>{activeSlide.btnLabel}</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Primary Wipe Button */}
-                <button
-                  type="button"
-                  onClick={() => triggerWipeAndNavigate(activeSlide.targetUrl, activeSlide.title)}
-                  className="font-['DM_Mono',monospace] text-[0.85rem] font-bold py-3 px-5 sm:px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] shadow-[4px_4px_0_#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0_#0C0C0C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_#0C0C0C] transition-all flex items-center gap-2 cursor-pointer uppercase tracking-[1px]"
-                >
-                  <span>{activeSlide.btnLabel}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {/* Right Column: Animated Brandex Logo Showcase */}
+                <div className="lg:col-span-4 flex flex-col items-center justify-center bg-[#F0E8D0] border-2 border-[#0C0C0C] rounded-[6px] p-4 shadow-[4px_4px_0_#0C0C0C]">
+                  <div className="flex items-center justify-between w-full mb-2">
+                    <span className="font-['DM_Mono',monospace] text-[0.65rem] font-bold tracking-[1px] uppercase text-[#666] flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-[#C94A00]" />
+                      BRANDEX EMBLEM
+                    </span>
+                    <span className="font-['DM_Mono',monospace] text-[0.62rem] font-bold text-[#0D9970] bg-[#FAF6EE] px-1.5 py-0.5 border border-[#0C0C0C] rounded">
+                      STANDALONE
+                    </span>
+                  </div>
+
+                  {/* Animated Emblem Frame with Click-to-Wipe */}
+                  <motion.div
+                    key={activeLogo.id}
+                    animate={{ y: [0, -5, 0] }}
+                    transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+                    onClick={() => triggerWipeAndNavigate(activeSlide.targetUrl, activeSlide.title)}
+                    className="relative group cursor-pointer my-1.5"
+                    title="Click logo to launch Dashboard"
+                  >
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#0C0C0C] border-[2.5px] border-[#0C0C0C] p-3 flex items-center justify-center relative shadow-[5px_5px_0_#C94A00] group-hover:scale-105 group-hover:shadow-[7px_7px_0_#0D9970] transition-all">
+                      {/* Rotating accent dashed perimeter */}
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
+                        className="absolute -inset-1.5 border border-dashed border-[#D4A800]/60 rounded-2xl pointer-events-none"
+                      />
+                      <Image
+                        src={activeLogo.src}
+                        alt={activeLogo.name}
+                        width={112}
+                        height={112}
+                        className="object-contain w-full h-full drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+                        referrerPolicy="no-referrer"
+                        priority
+                      />
+                    </div>
+                  </motion.div>
+
+                  {/* Logo Variant Switcher Tabs */}
+                  <div className="flex items-center gap-1 mt-2.5">
+                    {BRAND_LOGOS.map((logo, idx) => (
+                      <button
+                        key={logo.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playSound(320 + idx * 40);
+                          setSelectedLogoIdx(idx);
+                        }}
+                        className={`font-['DM_Mono',monospace] text-[0.62rem] font-bold px-2 py-0.5 border border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
+                          selectedLogoIdx === idx
+                            ? 'bg-[#C94A00] text-white shadow-[1px_1px_0_#0C0C0C]'
+                            : 'bg-[#FAF6EE] text-[#0C0C0C] hover:bg-white'
+                        }`}
+                        title={logo.name}
+                      >
+                        Logo 0{idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="font-['DM_Mono',monospace] text-[0.62rem] text-[#666] mt-1 text-center font-medium">
+                    {activeLogo.name}
+                  </span>
+                </div>
               </div>
             </div>
 
