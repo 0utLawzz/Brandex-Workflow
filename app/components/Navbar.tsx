@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { Database } from 'lucide-react';
-import SqlSetupModal from './SqlSetupModal';
+import { HardDrive, ShieldCheck } from 'lucide-react';
+import DataBackupModal from './DataBackupModal';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const [showSqlModal, setShowSqlModal] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   return (
     <>
@@ -28,7 +28,7 @@ export default function Navbar() {
               BRANDEX
             </div>
             <div className="nb-brand-sub font-['DM_Mono',monospace] text-[9px] text-[#0D9970] tracking-[2px] uppercase mt-[1px] hidden sm:block">
-              Trademark Application · CMS
+              Trademark Application · Standalone CMS
             </div>
           </div>
         </Link>
@@ -71,16 +71,21 @@ export default function Navbar() {
         <div className="nb-right flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setShowSqlModal(true)}
-            className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#FAF6EE] bg-[#C94A00] border-[1.5px] border-[#0C0C0C] px-2.5 py-1 uppercase rounded-[3px] shadow-[2px_2px_0_#FAF6EE] cursor-pointer hover:bg-[#a33c00]"
+            onClick={() => setShowBackupModal(true)}
+            className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#FAF6EE] bg-[#0C0C0C] hover:bg-[#1f1f1f] border-[1.5px] border-[#0D9970] px-2.5 py-1 uppercase rounded-[3px] shadow-[2px_2px_0_#0D9970] cursor-pointer"
+            title="Standalone Database Backup & Restore"
           >
-            <Database className="w-3 h-3" />
-            <span className="hidden sm:inline">DB SQL SETUP</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-[#0D9970]" />
+            <span className="hidden sm:inline text-[#FAF6EE]">STANDALONE</span>
+            <HardDrive className="w-3 h-3 text-[#D4A800] ml-0.5" />
           </button>
         </div>
       </nav>
 
-      <SqlSetupModal isOpen={showSqlModal} onClose={() => setShowSqlModal(false)} />
+      <DataBackupModal
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+      />
     </>
   );
 }

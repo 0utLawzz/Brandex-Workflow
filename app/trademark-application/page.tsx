@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
-import { supabase } from '@/lib/supabase';
+import { standaloneDB } from '@/lib/standalone-db';
 
 export default function TrademarkApplicationPage() {
   const [selectedCategory, setSelectedCategory] = useState('INITIAL');
@@ -103,49 +103,24 @@ export default function TrademarkApplicationPage() {
     setIssueDate(localStr);
     updateExpiry(now);
 
-    // Fetch saved clients from Supabase & localStorage
-    async function fetchClients() {
-      let remote: any[] = [];
-      try {
-        const { data, error } = await supabase.from('clients').select('*').order('id', { ascending: false });
-        if (!error && data) {
-          remote = data;
-        }
-      } catch {}
-
-      let local: any[] = [];
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem('bx_local_clients');
-          if (raw) local = JSON.parse(raw);
-        } catch {}
-      }
-
-      const combined = [...remote];
-      local.forEach(l => {
-        if (!combined.some(c => c.client_code === l.client_code || c.name === l.name)) {
-          combined.push(l);
-        }
-      });
-      setSavedClients(combined);
+    // Fetch saved clients from Standalone DB
+    function fetchClients() {
+      const clients = standaloneDB.getClients();
+      setSavedClients(clients);
     }
     fetchClients();
 
     // Auto-increment case number
-    async function fetchLatestCaseNo() {
-      try {
-        const { data, error } = await supabase
-          .from('trademark_records')
-          .select('case_no')
-          .order('id', { ascending: false })
-          .limit(1);
-        if (!error && data && data.length > 0 && data[0].case_no) {
-          const lastNum = parseInt(data[0].case_no, 10);
-          if (!isNaN(lastNum)) {
-            setCaseNo(String(lastNum + 1).padStart(3, '0'));
-          }
+    function fetchLatestCaseNo() {
+      const records = standaloneDB.getRecords();
+      let maxCase = 0;
+      records.forEach(r => {
+        if (r.caseNo) {
+          const num = parseInt(r.caseNo, 10);
+          if (!isNaN(num) && num > maxCase) maxCase = num;
         }
-      } catch {}
+      });
+      setCaseNo(String(maxCase + 1).padStart(3, '0'));
     }
     fetchLatestCaseNo();
   }, [updateExpiry]);
@@ -156,9 +131,11 @@ export default function TrademarkApplicationPage() {
     if (client) {
       if (client.client_code) setClientCode(client.client_code);
       if (client.name) setAppName(client.name);
+      if (client.father_name) setAppSo(client.father_name);
       if (client.company_name) setAppTrade(client.company_name);
       if (client.cnic) setAppCnic(client.cnic);
       if (client.address) setAppAdd(client.address);
+      if (client.folder || client.mark_name) setFolder(client.folder || client.mark_name);
     }
   };
 
@@ -286,100 +263,48 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
-      // 1. Insert record into Supabase `trademark_records`
+      // 1. Insert record into Standalone DB
       setProgressPercent(30);
-      setProgressLabel('Exporting record to Supabase');
-      let insertedRecordId = null;
-      try {
-        const { data, error } = await supabase.from('trademark_records').insert([
-          {
-            selection_menu: selectionMenu,
-            client_code: clientCode,
-            case_no: caseNo,
-            trademark_no: tm.trim().toUpperCase() || 'PENDING',
-            category: selectedCategory,
-            mark_name: folder.trim().toUpperCase(),
-            class_no: classNo.trim().toUpperCase(),
-            class_desc: classDesc.trim().toUpperCase(),
-            app_type: appType.toUpperCase(),
-            applicant_name: appName.trim().toUpperCase(),
-            father_name: appSo.trim().toUpperCase(),
-            cnic: appCnic.trim().toUpperCase(),
-            issue_date: payload.issueDate,
-            expiry_date: expiryDate.trim().toUpperCase(),
-            trading_as: appTrade.trim().toUpperCase(),
-            address: appAdd.trim().toUpperCase(),
-            usage_year: year,
-            consultant_name: conName.trim().toUpperCase(),
-            consultant_addr: conAdd.trim().toUpperCase(),
-            status: status.toUpperCase(),
-            tracking_id: trackingId.trim().toUpperCase(),
-          }
-        ]).select();
-        if (!error && data && data[0]) {
-          insertedRecordId = data[0].id;
-        }
-      } catch (sbErr) {
-        console.warn('Supabase insert warning:', sbErr);
-      }
+      setProgressLabel('Saving record to Standalone DB');
+      const newRec = standaloneDB.addRecord({
+        selectionMenu,
+        clientCode,
+        caseNo,
+        tm: tm.trim().toUpperCase() || 'PENDING',
+        folder: folder.trim().toUpperCase(),
+        classNo: classNo.trim().toUpperCase(),
+        appName: appName.trim().toUpperCase(),
+        appTrade: appTrade.trim().toUpperCase(),
+        conName: conName.trim().toUpperCase(),
+        status: status.toUpperCase(),
+        trackingId: trackingId.trim().toUpperCase(),
+        year,
+        date: payload.issueDate,
+        img: payload.imageBase64 || '',
+        noImg,
+        filingProcess: 'PENDING',
+      });
+      const insertedRecordId = newRec.id;
 
-      // Always save copy to local storage cache so it immediately shows in /records
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem('bx_local_records');
-          const list = raw ? JSON.parse(raw) : [];
-          list.unshift({
-            id: insertedRecordId || Date.now(),
-            date: payload.issueDate,
-            folder: folder.trim().toUpperCase(),
-            tm: tm.trim().toUpperCase() || 'PENDING',
-            classNo: classNo.trim().toUpperCase(),
-            appName: appName.trim().toUpperCase(),
-            appTrade: appTrade.trim().toUpperCase(),
-            year: year,
-            conName: conName.trim().toUpperCase(),
-            img: payload.imageBase64 || '',
-            noImg: noImg,
-            status: status.toUpperCase(),
-            filingProcess: 'PENDING',
-            trackingId: trackingId.trim().toUpperCase(),
-            selectionMenu: selectionMenu,
-            clientCode: clientCode,
-            caseNo: caseNo,
-          });
-          localStorage.setItem('bx_local_records', JSON.stringify(list));
-        } catch {}
-      }
+      // 2. Insert initial status history in Standalone DB
+      standaloneDB.addHistory(
+        insertedRecordId,
+        status.toUpperCase(),
+        'Application created & generated.'
+      );
 
-      // 2. Insert initial status history in `trademark_history`
-      if (insertedRecordId) {
-        try {
-          await supabase.from('trademark_history').insert([
-            {
-              record_id: insertedRecordId,
-              status: status.toUpperCase(),
-              notes: 'Application created & generated.',
-            }
-          ]);
-        } catch {}
-      }
-
-      // 3. Upload and associate multiple documents in `trademark_documents`
-      if (insertedRecordId && additionalFiles.length > 0) {
+      // 3. Attach additional documents in Standalone DB
+      if (additionalFiles.length > 0) {
         setProgressPercent(40);
-        setProgressLabel('Uploading additional documents');
+        setProgressLabel('Attaching documents');
         for (const file of additionalFiles) {
-          try {
-            await supabase.from('trademark_documents').insert([
-              {
-                record_id: insertedRecordId,
-                file_name: file.name,
-                file_size: file.size,
-                file_type: file.type || 'application/pdf',
-                storage_url: '#'
-              }
-            ]);
-          } catch {}
+          standaloneDB.addDocument({
+            record_id: insertedRecordId,
+            file_name: file.name,
+            file_size: file.size,
+            file_type: file.type || 'application/pdf',
+            storage_url: '#',
+          });
         }
       }
 
@@ -411,7 +336,7 @@ export default function TrademarkApplicationPage() {
 
         setStatusType('success');
         setStatusMsg(
-          `✅ Success! Documents generated & exported to Supabase.<br>` +
+          `✅ Success! Documents generated & saved to Standalone DB.<br>` +
           `<strong>${payload.folder}</strong> (Client: ${clientCode} · Case #${caseNo})<br>` +
           `Applicant: ${payload.appName} &nbsp;|&nbsp; Status: ${payload.status}<br>` +
           (payload.trackingId ? `Tracking ID: ${payload.trackingId}<br>` : '')
@@ -464,7 +389,7 @@ export default function TrademarkApplicationPage() {
 
       <div className="max-w-[880px] w-full mx-auto p-4 sm:p-7 pb-16 flex-1">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">Trademark Application &amp; Supabase Export</h1>
+          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">Trademark Case Generator (MailMerge)</h1>
           <div className="flex gap-2.5 flex-wrap">
             <Link href="/clients" className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C]">
               Manage Clients
@@ -501,33 +426,48 @@ export default function TrademarkApplicationPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            {/* Card 0: Select Saved Client Profile */}
-            {savedClients.length > 0 && (
-              <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px]">
-                <div className="font-['Bebas_Neue'] text-[1.2rem] tracking-[1px] mb-3 pb-2 border-b-2 border-[#0C0C0C]">
-                  Select Saved Client Profile
+            {/* Card 0: Select Client Profile & Auto-Fetch Case Details */}
+            <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px]">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b-2 border-[#0C0C0C] flex-wrap gap-2">
+                <div className="font-['Bebas_Neue'] text-[1.2rem] tracking-[1px] flex items-center gap-2">
+                  <span>⚡ Select Client Profile &amp; Auto-Fetch Case Details</span>
                 </div>
-                <div>
-                  <select
-                    value={selectedClientId}
-                    onChange={e => handleClientSelect(e.target.value)}
-                    className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] cursor-pointer"
-                  >
-                    <option value="">-- SELECT FROM SAVED CLIENTS (SUPABASE) --</option>
-                    {savedClients.map(c => (
-                      <option key={c.id} value={c.id}>
-                        [{c.client_code}] {c.name} — {c.company_name || c.address}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Link
+                  href="/clients"
+                  className="font-['DM_Mono',monospace] text-[0.7rem] font-bold text-[#C94A00] hover:underline"
+                >
+                  + Add New Client to Directory →
+                </Link>
               </div>
-            )}
+              <div className="flex gap-3 items-center flex-wrap sm:flex-nowrap">
+                <select
+                  value={selectedClientId}
+                  onChange={e => handleClientSelect(e.target.value)}
+                  className="flex-1 p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] cursor-pointer"
+                >
+                  <option value="">-- SELECT CLIENT TO AUTO-FETCH DETAILS --</option>
+                  {savedClients.map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.client_code}] {c.name} — {c.company_name || c.address}
+                    </option>
+                  ))}
+                </select>
+                {selectedClientId && (
+                  <button
+                    type="button"
+                    onClick={() => handleClientSelect(selectedClientId)}
+                    className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2.5 px-4 bg-[#0D9970] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer whitespace-nowrap"
+                  >
+                    ✓ Re-fetch Client Data
+                  </button>
+                )}
+              </div>
+            </div>
 
-            {/* Card 1: Client & Case References */}
+            {/* Card 1: Case References */}
             <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px]">
               <div className="font-['Bebas_Neue'] text-[1.2rem] tracking-[1px] mb-4 pb-2 border-b-2 border-[#0C0C0C]">
-                Client &amp; Case Reference
+                Case Reference &amp; Menu
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
@@ -576,15 +516,15 @@ export default function TrademarkApplicationPage() {
               </div>
             </div>
 
-            {/* Card 2: Basic Information */}
+            {/* Card 2: Case Information */}
             <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px]">
               <div className="font-['Bebas_Neue'] text-[1.2rem] tracking-[1px] mb-4 pb-2 border-b-[2px] border-[#0C0C0C]">
-                Basic Information &amp; Trademark Acknowledgment
+                Case Information &amp; Trademark Acknowledgment
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">
-                    Application / Mark Name <span className="text-[#C94A00]">*</span>
+                    Case / Mark Name <span className="text-[#C94A00]">*</span>
                   </label>
                   <input
                     type="text"
@@ -620,7 +560,7 @@ export default function TrademarkApplicationPage() {
                     <option value="">-- SELECT CLASS (1–45) --</option>
                     {classList.map(c => (
                       <option key={c.n} value={c.n}>
-                        {c.n} — {c.type}
+                        Class {c.n} {c.type !== 'GOODS' ? `(${c.type})` : ''}
                       </option>
                     ))}
                   </select>
@@ -643,7 +583,7 @@ export default function TrademarkApplicationPage() {
                 <div className="sm:col-span-2">
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-['DM_Mono',monospace] text-[0.75rem] font-bold">
-                      Class / Goods &amp; Services Description
+                      Class Description / Specification of Services
                     </label>
                     <div className="flex gap-2">
                       <button
@@ -924,14 +864,14 @@ export default function TrademarkApplicationPage() {
                 disabled={submitting}
                 className="font-['DM_Mono',monospace] text-[0.9rem] font-bold tracking-[1px] uppercase py-3.5 px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[5px_5px_0_#0C0C0C] cursor-pointer hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[7px_7px_0_#0C0C0C] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
               >
-                {submitting ? 'Exporting & Generating...' : 'Export to Supabase & Generate'}
+                {submitting ? 'Saving & Generating Case...' : '⚡ Generate & Save Case Documents'}
               </button>
               <button
                 type="button"
                 onClick={handleReset}
                 className="font-['DM_Mono',monospace] text-[0.9rem] font-bold tracking-[1px] uppercase py-3.5 px-6 bg-[#FAF6EE] text-[#0C0C0C] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[5px_5px_0_#0C0C0C] cursor-pointer hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[7px_7px_0_#0C0C0C] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
               >
-                Reset
+                Reset Case Form
               </button>
             </div>
           </form>
