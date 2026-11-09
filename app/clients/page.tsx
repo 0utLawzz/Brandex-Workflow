@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { standaloneDB, ClientProfile } from '@/lib/standalone-db';
-import { Trash2, Plus, Users, ShieldCheck, Download } from 'lucide-react';
+import { Trash2, Plus, Users, ShieldCheck, Download, Pencil, X } from 'lucide-react';
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -20,6 +20,11 @@ export default function ClientsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Edit Client Modal State
+  const [editingClient, setEditingClient] = useState<ClientProfile | null>(null);
+  const [editFormData, setEditFormData] = useState<Partial<ClientProfile>>({});
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     loadClients();
@@ -38,6 +43,45 @@ export default function ClientsPage() {
       }
     }
     setLoading(false);
+  };
+
+  const handleOpenEdit = (client: ClientProfile) => {
+    setEditingClient(client);
+    setEditFormData({
+      client_code: client.client_code,
+      client_name: client.client_name,
+      father_name: client.father_name || '',
+      trading_as: client.trading_as || '',
+      cnic: client.cnic || '',
+      address: client.address || '',
+      consultant_name: client.consultant_name || 'BRANDEX LAW ASSOCIATES'
+    });
+  };
+
+  const handleSaveEditedClient = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient || !editFormData.client_name?.trim()) return;
+    setEditSaving(true);
+    try {
+      const updated = standaloneDB.updateClient(editingClient.id, {
+        client_code: (editFormData.client_code || '').trim(),
+        client_name: (editFormData.client_name || '').trim().toUpperCase(),
+        father_name: (editFormData.father_name || '').trim().toUpperCase(),
+        trading_as: (editFormData.trading_as || '').trim().toUpperCase(),
+        cnic: (editFormData.cnic || '').trim(),
+        address: (editFormData.address || '').trim().toUpperCase(),
+        consultant_name: (editFormData.consultant_name || '').trim().toUpperCase()
+      });
+      if (updated) {
+        setClients(standaloneDB.getClients());
+        setSuccessMsg(`Client profile for "${updated.client_name}" successfully updated!`);
+        setEditingClient(null);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update client');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleAddClient = (e: React.FormEvent) => {
@@ -331,14 +375,24 @@ export default function ClientsPage() {
                         {c.address || '—'}
                       </td>
                       <td className="p-2.5 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteClient(c.id, c.client_name)}
-                          className="p-1.5 text-[#C94A00] hover:bg-[#fee2e2] rounded border border-transparent hover:border-[#C94A00] cursor-pointer"
-                          title="Delete client profile"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(c)}
+                            className="p-1.5 text-[#0C0C0C] bg-[#FAF6EE] hover:bg-white border border-[#0C0C0C] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                            title="Edit client profile"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteClient(c.id, c.client_name)}
+                            className="p-1.5 text-[#C94A00] hover:bg-[#fee2e2] rounded border border-transparent hover:border-[#C94A00] cursor-pointer"
+                            title="Delete client profile"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -348,6 +402,121 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Client Modal */}
+      {editingClient && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-lg w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-[#C94A00]" />
+                Edit Client Profile (#{editingClient.client_code})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingClient(null)}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Code</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.client_code || ''}
+                    onChange={e => setEditFormData({ ...editFormData, client_code: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Client Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.client_name || ''}
+                    onChange={e => setEditFormData({ ...editFormData, client_name: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Father&apos;s Name</label>
+                  <input
+                    type="text"
+                    value={editFormData.father_name || ''}
+                    onChange={e => setEditFormData({ ...editFormData, father_name: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase"
+                  />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">CNIC No</label>
+                  <input
+                    type="text"
+                    placeholder="35202-1234567-1"
+                    value={editFormData.cnic || ''}
+                    onChange={e => setEditFormData({ ...editFormData, cnic: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Trading As / Business</label>
+                <input
+                  type="text"
+                  value={editFormData.trading_as || ''}
+                  onChange={e => setEditFormData({ ...editFormData, trading_as: e.target.value })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Address</label>
+                <textarea
+                  rows={2}
+                  value={editFormData.address || ''}
+                  onChange={e => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase text-[0.8rem]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Assigned Law Firm / Consultant</label>
+                <input
+                  type="text"
+                  value={editFormData.consultant_name || ''}
+                  onChange={e => setEditFormData({ ...editFormData, consultant_name: e.target.value })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t-2 border-[#0C0C0C] mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingClient(null)}
+                  className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#C94A00] text-white rounded shadow-[2px_2px_0_#0C0C0C] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer"
+                >
+                  {editSaving ? 'Saving Changes...' : 'Save Client Updates'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>

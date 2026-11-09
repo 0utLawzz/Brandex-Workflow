@@ -204,27 +204,27 @@ export default function HomePage() {
                 transition={{ duration: 0.5, ease: "easeOut" }}
                 className="relative mb-6"
               >
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-[#1A1A1A] border-[3px] border-[#C94A00] p-2.5 flex items-center justify-center relative overflow-hidden shadow-[0_0_40px_rgba(201,74,0,0.6)]">
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#1c1611] border-[3px] border-[#C94A00] p-3 flex items-center justify-center relative overflow-hidden shadow-[0_0_50px_rgba(201,74,0,0.85),0_0_20px_rgba(212,168,0,0.6)]">
                   {/* Rotating decorative accent ring */}
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
-                    className="absolute -inset-2 border-2 border-dashed border-[#D4A800]/50 rounded-2xl pointer-events-none"
+                    className="absolute -inset-2 border-2 border-dashed border-[#D4A800]/70 rounded-2xl pointer-events-none"
                   />
                   <Image
                     src={activeLogo.src}
                     alt="Brandex Loading Logo"
-                    width={96}
-                    height={96}
-                    className="object-contain w-full h-full drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)]"
+                    width={104}
+                    height={104}
+                    className="object-contain w-full h-full drop-shadow-[0_0_18px_rgba(201,74,0,0.9)]"
                     referrerPolicy="no-referrer"
                     priority
                   />
                 </div>
                 {/* Expanding pulse wave */}
                 <motion.div
-                  className="absolute -inset-2 rounded-2xl border-2 border-[#C94A00]"
-                  animate={{ scale: [1, 1.3, 1.5], opacity: [0.8, 0.3, 0] }}
+                  className="absolute -inset-3 rounded-2xl border-2 border-[#C94A00]"
+                  animate={{ scale: [1, 1.35, 1.55], opacity: [0.9, 0.4, 0] }}
                   transition={{ repeat: Infinity, duration: 1.2, ease: "easeOut" }}
                 />
               </motion.div>
@@ -369,19 +369,19 @@ export default function HomePage() {
                     className="relative group cursor-pointer my-1.5"
                     title="Click logo to launch Dashboard"
                   >
-                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#0C0C0C] border-[2.5px] border-[#0C0C0C] p-3 flex items-center justify-center relative shadow-[5px_5px_0_#C94A00] group-hover:scale-105 group-hover:shadow-[7px_7px_0_#0D9970] transition-all">
+                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#141210] border-[2.5px] border-[#C94A00] p-3 flex items-center justify-center relative shadow-[0_0_20px_rgba(201,74,0,0.5),5px_5px_0_#0C0C0C] group-hover:scale-105 group-hover:shadow-[0_0_28px_rgba(201,74,0,0.7),7px_7px_0_#0D9970] transition-all">
                       {/* Rotating accent dashed perimeter */}
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
-                        className="absolute -inset-1.5 border border-dashed border-[#D4A800]/60 rounded-2xl pointer-events-none"
+                        className="absolute -inset-1.5 border border-dashed border-[#D4A800]/80 rounded-2xl pointer-events-none"
                       />
                       <Image
                         src={activeLogo.src}
                         alt={activeLogo.name}
                         width={112}
                         height={112}
-                        className="object-contain w-full h-full drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
+                        className="object-contain w-full h-full drop-shadow-[0_0_15px_rgba(201,74,0,0.8)]"
                         referrerPolicy="no-referrer"
                         priority
                       />

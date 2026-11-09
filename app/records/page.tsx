@@ -2,14 +2,36 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { APPS_SCRIPT_URL, SHEET_URL, WORKFLOW_STATUSES } from '@/lib/data';
-import { standaloneDB, RecordItem } from '@/lib/standalone-db';
-import Papa from 'papaparse';
-import { CheckSquare, Square, Download, Upload, Filter, BarChart3, RefreshCw, X, ChevronRight, Layers } from 'lucide-react';
+import { APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
+import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
+import {
+  CheckSquare,
+  Square,
+  Download,
+  Upload,
+  Filter,
+  BarChart3,
+  RefreshCw,
+  X,
+  Plus,
+  ArrowRight,
+  HelpCircle,
+  Settings,
+  Check,
+  Truck,
+  PackageCheck,
+  FileText,
+  UserCheck,
+  Building2,
+  Calendar,
+  Pencil,
+  Trash2
+} from 'lucide-react';
 
-// Highlight search query matches in text
+// Highlight query matches in text
 function HighlightText({ text, query }: { text?: string | number | null; query: string }) {
   if (text === undefined || text === null || text === '') return <span>—</span>;
   const str = String(text);
@@ -35,36 +57,102 @@ function HighlightText({ text, query }: { text?: string | number | null; query: 
   );
 }
 
+// Format short date
+function formatShortDate(d?: string) {
+  if (!d) return '—';
+  const str = String(d).trim();
+  // If in format "Wednesday, 15 October 2026", take last 3 tokens
+  if (str.includes(',')) {
+    const afterComma = str.split(',')[1]?.trim();
+    if (afterComma) return afterComma;
+  }
+  return str;
+}
+
+// Format class number purely as number (1-45)
+function formatClassPure(c?: string | number) {
+  if (!c) return '—';
+  const digits = String(c).replace(/\D/g, '');
+  return digits || String(c);
+}
+
 export default function RecordsPage() {
   const [allRecords, setAllRecords] = useState<RecordItem[]>([]);
+  const [savedClients, setSavedClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Filters & Search
+  // 1. Default status is "PENDING & IN REVIEW"
+  const [filterStatus, setFilterStatus] = useState<string>('PENDING_IN_REVIEW');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
   const [filterYear, setFilterYear] = useState('');
+  const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'mark' | 'status'>('date-desc');
   const [pageSize, setPageSize] = useState<number>(25);
   const [currentPage, setCurrentPage] = useState(1);
   const [showCharts, setShowCharts] = useState(true);
 
-  // Bulk Selection & Update
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [bulkStatus, setBulkStatus] = useState<string>('IN REVIEW');
-  const [bulkUpdating, setBulkUpdating] = useState(false);
+  // Bulk Selection
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [selectedClientForAssign, setSelectedClientForAssign] = useState<string>('');
 
-  // Single Record Edit Modal
+  // Floating Action Button & Modals
+  const [fabOpen, setFabOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+
+  // Workflow Stage Transition Modals
+  // Approved/Rejected modal
+  const [approveRejectModal, setApproveRejectModal] = useState<{
+    open: boolean;
+    record?: RecordItem;
+    isBulk?: boolean;
+    decision: 'APPROVED' | 'REJECTED';
+    notes: string;
+  }>({
+    open: false,
+    decision: 'APPROVED',
+    notes: ''
+  });
+
+  // Dispatch modal
+  const [dispatchModal, setDispatchModal] = useState<{
+    open: boolean;
+    record?: RecordItem;
+    isBulk?: boolean;
+    date: string;
+    note: string;
+    trackingId: string;
+  }>({
+    open: false,
+    date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
+    note: '',
+    trackingId: ''
+  });
+
+  // Delivered modal
+  const [deliveredModal, setDeliveredModal] = useState<{
+    open: boolean;
+    record?: RecordItem;
+    isBulk?: boolean;
+    date: string;
+    receiverName: string;
+    receiptImage: string;
+  }>({
+    open: false,
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+    receiverName: '',
+    receiptImage: ''
+  });
+
+  // Edit Single Record Modal
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
-  const [activeModalTab, setActiveModalTab] = useState<'details' | 'history' | 'docs'>('details');
-  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
-  const [associatedDocs, setAssociatedDocs] = useState<any[]>([]);
-  const [modalMsg, setModalMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [savingRecord, setSavingRecord] = useState(false);
 
-  // File input for JSON import
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // CSV file input ref
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+  const receiptImgInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadAllRecords();
@@ -73,10 +161,11 @@ export default function RecordsPage() {
   const loadAllRecords = async () => {
     setLoading(true);
     try {
-      // 1. Instant load from Standalone DB (zero latency, offline resilient)
       const dbRecords = standaloneDB.getRecords();
+      const clients = standaloneDB.getClients();
+      setSavedClients(clients);
 
-      // 2. Optional background sync from Google Apps Script if reachable
+      // Background sync check with Apps Script
       let sheetRecords: RecordItem[] = [];
       try {
         const res = await fetch(`${APPS_SCRIPT_URL}?action=getRecords&_=${Date.now()}`, {
@@ -86,7 +175,8 @@ export default function RecordsPage() {
         const text = await res.text();
         const data = JSON.parse(text);
         if (data.ok && Array.isArray(data.records)) {
-          sheetRecords = data.records.map((r: any) => ({
+          sheetRecords = data.records.map((r: any, idx: number) => ({
+            id: 1000 + idx,
             date: r.date || '',
             folder: r.folder || '',
             tm: r.tm || '',
@@ -94,7 +184,8 @@ export default function RecordsPage() {
             appName: r.appName || '',
             appTrade: r.appTrade || '',
             year: r.year || '',
-            conName: r.conName || '',
+            conName: r.conName || 'BRANDEX LAW ASSOCIATES',
+            lawFirm: r.conName || 'BRANDEX LAW ASSOCIATES',
             img: r.img || '',
             noImg: r.noImg || '',
             status: r.status || 'PENDING',
@@ -104,64 +195,46 @@ export default function RecordsPage() {
         }
       } catch {}
 
-      // Combine and deduplicate
       const map = new Map<string, RecordItem>();
-      sheetRecords.forEach(r => {
-        const key = `${r.folder}__${r.tm || ''}`;
-        map.set(key, r);
-      });
-      dbRecords.forEach(r => {
-        const key = `${r.folder}__${r.tm || ''}`;
-        map.set(key, { ...(map.get(key) || {}), ...r });
-      });
+      sheetRecords.forEach(r => map.set(`${r.folder}__${r.tm}`, r));
+      dbRecords.forEach(r => map.set(`${r.folder}__${r.tm || r.id}`, r));
 
       setAllRecords(Array.from(map.values()));
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'Failed to load records');
     } finally {
       setLoading(false);
     }
   };
 
-  const parseDate = (d: string) => {
+  // Helper date parser
+  const parseDateForSort = (d: string) => {
     if (!d) return 0;
     const months: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-    const parts = String(d).toUpperCase().trim().split(/[-\/\s]+/);
+    const parts = String(d).toUpperCase().trim().split(/[-\/\s,]+/);
     if (parts.length < 3) return 0;
-    const day = parseInt(parts[0], 10) || 1;
-    const mon = months[parts[1]?.substring(0, 3)] ?? 0;
-    let year = parseInt(parts[2], 10) || 0;
-    if (year < 100) year += 2000;
-    return new Date(year, mon, day).getTime();
-  };
-
-  const parseMonthKey = (d: string) => {
-    if (!d || !String(d).trim()) return null;
-    const s = String(d).toUpperCase().trim();
-    const m1 = s.match(/(\d{1,2})[-\/]([A-Z]{3})[-\/](\d{2,4})/);
-    if (m1) {
-      let y = parseInt(m1[3], 10);
-      if (y < 100) y += 2000;
-      return `${m1[2]} ${y}`;
+    let day = 1;
+    let mon = 0;
+    let year = 0;
+    for (const p of parts) {
+      if (/^\d{4}$/.test(p)) year = parseInt(p, 10);
+      else if (/^\d{1,2}$/.test(p) && !day) day = parseInt(p, 10);
+      else if (months[p.substring(0, 3)] !== undefined) mon = months[p.substring(0, 3)];
     }
-    const dt = new Date(d);
-    if (!isNaN(dt.getTime())) {
-      const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-      return `${months[dt.getMonth()]} ${dt.getFullYear()}`;
-    }
-    return null;
+    return new Date(year || 2026, mon, day || 1).getTime();
   };
 
-  const statusBadgeClass = (status: string) => {
-    const s = String(status || '').toUpperCase();
-    if (s.includes('DELIVERED')) return 'bg-[#0D9970] text-white';
-    if (s.includes('DISPATCHED')) return 'bg-[#7EB8DA] text-[#0C0C0C]';
-    if (s.includes('APPROVED')) return 'bg-[#0D9970] text-white';
-    if (s.includes('REJECT')) return 'bg-[#fee2e2] text-[#991b1b]';
-    if (s.includes('REVIEW')) return 'bg-[#FFE066] text-[#0C0C0C]';
-    return 'bg-[#FAF6EE] text-[#0C0C0C]';
-  };
+  // List of all unique consultants for multi-select filter
+  const allConsultantsList = useMemo(() => {
+    const set = new Set<string>();
+    allRecords.forEach(r => {
+      const c = (r.lawFirm || r.conName || '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort();
+  }, [allRecords]);
 
+  // List of unique years
   const yearsList = useMemo(() => {
     const set = new Set<string>();
     allRecords.forEach(r => {
@@ -170,793 +243,1728 @@ export default function RecordsPage() {
     return Array.from(set).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
   }, [allRecords]);
 
+  // Filtered & Sorted records
   const filteredAndSortedRecords = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
     const st = filterStatus.toUpperCase();
     const y = filterYear.trim();
 
     const filtered = allRecords.filter(r => {
-      if (st && !String(r.status || '').toUpperCase().includes(st)) return false;
+      const recordStatus = String(r.status || '').toUpperCase();
+
+      // Default Status Filter: PENDING & IN REVIEW
+      if (st === 'PENDING_IN_REVIEW') {
+        const isPendingOrReview = recordStatus.includes('PENDING') || recordStatus.includes('REVIEW');
+        if (!isPendingOrReview) return false;
+      } else if (st && st !== 'ALL') {
+        if (!recordStatus.includes(st)) return false;
+      }
+
+      // Year filter
       if (y && String(r.year || '').trim() !== y) return false;
+
+      // Multi-select Legal Consultant filter
+      if (selectedConsultants.length > 0) {
+        const firm = (r.lawFirm || r.conName || '').toUpperCase();
+        const matches = selectedConsultants.some(c => firm.includes(c.toUpperCase()));
+        if (!matches) return false;
+      }
+
+      // Query search
       if (!q) return true;
-      return [r.folder, r.tm, r.appName, r.appTrade, r.conName, r.classNo, r.status, r.trackingId, r.clientCode, r.caseNo, r.date]
-        .some(v => String(v || '').toLowerCase().includes(q));
+      return [
+        r.folder,
+        r.tm,
+        r.appName,
+        r.appTrade,
+        r.lawFirm,
+        r.conName,
+        r.classNo,
+        r.status,
+        r.trackingId,
+        r.clientCode,
+        r.caseNo,
+        r.date,
+        r.dispatchedDate,
+        r.deliveredDate,
+        r.receiverName
+      ].some(v => String(v || '').toLowerCase().includes(q));
     });
 
     return filtered.sort((a, b) => {
-      if (sortBy === 'date-desc') return parseDate(b.date) - parseDate(a.date);
-      if (sortBy === 'date-asc') return parseDate(a.date) - parseDate(b.date);
-      if (sortBy === 'mark') return a.folder.localeCompare(b.folder);
+      if (sortBy === 'date-desc') return parseDateForSort(b.date) - parseDateForSort(a.date);
+      if (sortBy === 'date-asc') return parseDateForSort(a.date) - parseDateForSort(b.date);
+      if (sortBy === 'mark') return (a.folder || '').localeCompare(b.folder || '');
       if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '');
       return 0;
     });
-  }, [allRecords, searchQuery, filterStatus, filterYear, sortBy]);
+  }, [allRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy]);
 
+  // 4 BOX STATISTICS & LAW FIRM WIDGET DATA
   const stats = useMemo(() => {
-    let delivered = 0;
-    let dispatched = 0;
     let pending = 0;
     let inReview = 0;
-    const byMonth: Record<string, number> = {};
-    const byStatus: Record<string, number> = {};
+    let approved = 0;
+    let rejected = 0;
+    let dispatched = 0;
+    let delivered = 0;
+    const byFirm: Record<string, number> = {};
 
-    filteredAndSortedRecords.forEach(r => {
+    allRecords.forEach(r => {
       const st = String(r.status || '').toUpperCase();
       if (st.includes('DELIVERED')) delivered++;
-      if (st.includes('DISPATCHED')) dispatched++;
-      if (st.includes('REVIEW')) inReview++;
-      if (st.includes('PENDING')) pending++;
+      else if (st.includes('DISPATCHED')) dispatched++;
+      else if (st.includes('APPROVED')) approved++;
+      else if (st.includes('REJECT')) rejected++;
+      else if (st.includes('REVIEW')) inReview++;
+      else if (st.includes('PENDING')) pending++;
 
-      const mk = parseMonthKey(r.date);
-      if (mk) byMonth[mk] = (byMonth[mk] || 0) + 1;
-
-      byStatus[st || 'PENDING'] = (byStatus[st || 'PENDING'] || 0) + 1;
+      const firm = (r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES').trim().toUpperCase();
+      byFirm[firm] = (byFirm[firm] || 0) + 1;
     });
 
-    return {
-      total: filteredAndSortedRecords.length,
-      delivered,
-      dispatched,
-      inReview,
-      pending,
-      byMonth: Object.entries(byMonth).sort((a, b) => b[1] - a[1]),
-      byStatus: Object.entries(byStatus).sort((a, b) => b[1] - a[1]),
-    };
-  }, [filteredAndSortedRecords]);
+    const firmsSorted = Object.entries(byFirm).sort((a, b) => b[1] - a[1]);
 
+    return {
+      total: allRecords.length,
+      pending,
+      inReview,
+      pendingInReview: pending + inReview,
+      approved,
+      rejected,
+      approvedRejected: approved + rejected,
+      dispatched,
+      delivered,
+      dispatchedDelivered: dispatched + delivered,
+      byFirm: firmsSorted
+    };
+  }, [allRecords]);
+
+  // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedRecords.length / pageSize));
   const pageRecords = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredAndSortedRecords.slice(start, start + pageSize);
   }, [filteredAndSortedRecords, currentPage, pageSize]);
 
-  // Record Unique Key for bulk selection
-  const getRecordKey = (r: RecordItem) => String(r.id || `${r.folder}__${r.tm || ''}`);
-
-  const isAllCurrentSelected = pageRecords.length > 0 && pageRecords.every(r => selectedKeys.includes(getRecordKey(r)));
+  // Bulk Selection Helpers
+  const isAllCurrentSelected = pageRecords.length > 0 && pageRecords.every(r => selectedIds.includes(r.id));
 
   const toggleSelectAll = () => {
     if (isAllCurrentSelected) {
-      const pageKeys = new Set(pageRecords.map(getRecordKey));
-      setSelectedKeys(prev => prev.filter(k => !pageKeys.has(k)));
+      const pageIdSet = new Set(pageRecords.map(r => r.id));
+      setSelectedIds(prev => prev.filter(id => !pageIdSet.has(id)));
     } else {
-      const newKeys = new Set([...selectedKeys, ...pageRecords.map(getRecordKey)]);
-      setSelectedKeys(Array.from(newKeys));
+      const newIds = Array.from(new Set([...selectedIds, ...pageRecords.map(r => r.id)]));
+      setSelectedIds(newIds);
     }
   };
 
-  const toggleSelectRow = (key: string) => {
-    setSelectedKeys(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
+  const toggleSelectRow = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
-  // Bulk Update Workflow Status
-  const handleBulkStatusUpdate = () => {
-    if (selectedKeys.length === 0 || !bulkStatus) return;
-    setBulkUpdating(true);
-    try {
-      const keySet = new Set(selectedKeys);
-      const updated = allRecords.map(r => {
-        const k = getRecordKey(r);
-        if (keySet.has(k)) {
-          const updatedRec = { ...r, status: bulkStatus };
-          if (r.id) {
-            standaloneDB.updateRecord(r.id, { status: bulkStatus });
-            standaloneDB.addHistory(r.id, 'BULK_UPDATE', `Bulk updated status to ${bulkStatus}`);
-          }
-          return updatedRec;
-        }
-        return r;
-      });
-      setAllRecords(updated);
-      setBulkNotice(`Updated ${selectedKeys.length} cases to "${bulkStatus}"!`);
-      setSelectedKeys([]);
-      setTimeout(() => setBulkNotice(null), 4000);
-    } catch (err: any) {
-      setBulkNotice(`Error during bulk update: ${err.message}`);
-    } finally {
-      setBulkUpdating(false);
-    }
-  };
-
-  // Export CSV
+  // CSV Export & Import Handlers
   const handleExportCSV = () => {
-    const csv = Papa.unparse(filteredAndSortedRecords);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const csvContent = standaloneDB.exportRecordsCSV();
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `brandex_cases_${Date.now()}.csv`);
+    link.setAttribute('download', `Brandex_Records_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setBulkNotice('✓ Exported all records to CSV successfully.');
+    setTimeout(() => setBulkNotice(null), 4000);
   };
 
-  // Export JSON Backup
-  const handleExportJSON = () => {
-    const jsonStr = standaloneDB.exportBackupJSON();
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `brandex_standalone_backup_${Date.now()}.json`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleImportCSVClick = () => {
+    csvFileInputRef.current?.click();
   };
 
-  // Import JSON Backup
-  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCSVFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const content = ev.target?.result as string;
-        const res = standaloneDB.importBackupJSON(content);
-        if (res.success) {
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const result = standaloneDB.importRecordsCSV(content);
+        if (result.success) {
           loadAllRecords();
-          setBulkNotice(`Backup successfully restored (${res.count} cases loaded)!`);
-          setTimeout(() => setBulkNotice(null), 4000);
+          setBulkNotice(`✓ ${result.message}`);
         } else {
-          alert('Import failed: ' + res.message);
+          setErrorMsg(result.message);
         }
-      } catch (err: any) {
-        alert('Invalid JSON file: ' + err.message);
+        setTimeout(() => setBulkNotice(null), 5000);
       }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
-  // Open Edit Modal
-  const openEditModal = async (r: RecordItem) => {
-    setEditingRecord(r);
-    setActiveModalTab('details');
-    setModalMsg(null);
-    setHistoryLogs([]);
-    setAssociatedDocs([]);
+  // Bulk Reassign to Saved Client
+  const handleBulkAssignClient = () => {
+    if (!selectedClientForAssign || selectedIds.length === 0) return;
+    const client = savedClients.find(c => String(c.id) === selectedClientForAssign);
+    if (!client) return;
 
-    if (r.id) {
-      try {
-        const hData = standaloneDB.getHistory(r.id);
-        setHistoryLogs(hData);
-        const dData = standaloneDB.getDocuments(r.id);
-        setAssociatedDocs(dData);
-      } catch (err) {
-        console.warn('Error loading record details:', err);
-      }
+    standaloneDB.bulkAssignClient(selectedIds, client);
+    loadAllRecords();
+    setBulkNotice(`✓ Reassigned ${selectedIds.length} cases to client "${client.client_name}" (#${client.client_code})`);
+    setSelectedIds([]);
+    setTimeout(() => setBulkNotice(null), 4000);
+  };
+
+  // Stage Transition Triggers:
+  // Rules are: Pending / In Review > Approved / Rejected > Dispatched > Delivered
+  const handleOpenStageTransition = (record: RecordItem, targetStage: string) => {
+    const current = (record.status || '').toUpperCase();
+
+    if (targetStage === 'APPROVED_OR_REJECTED') {
+      setApproveRejectModal({
+        open: true,
+        record,
+        decision: 'APPROVED',
+        notes: ''
+      });
+    } else if (targetStage === 'DISPATCHED') {
+      setDispatchModal({
+        open: true,
+        record,
+        date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
+        note: record.dispatchedNote || '',
+        trackingId: record.trackingId || ''
+      });
+    } else if (targetStage === 'DELIVERED') {
+      setDeliveredModal({
+        open: true,
+        record,
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+        receiverName: record.receiverName || '',
+        receiptImage: record.receiptImage || ''
+      });
     }
   };
 
-  // Save Modal Edit
-  const handleSaveEdit = async (e: React.FormEvent) => {
+  // Submit Approved or Rejected Decision
+  const handleSaveApproveReject = () => {
+    if (approveRejectModal.record) {
+      const r = approveRejectModal.record;
+      standaloneDB.updateRecord(r.id, {
+        status: approveRejectModal.decision,
+        filingProcess: approveRejectModal.decision,
+        notes: approveRejectModal.notes ? `${r.notes || ''} [Decision: ${approveRejectModal.notes}]` : r.notes
+      });
+      standaloneDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
+      setBulkNotice(`✓ Case ${r.folder} marked as ${approveRejectModal.decision}`);
+    } else if (approveRejectModal.isBulk && selectedIds.length > 0) {
+      standaloneDB.bulkUpdateStatus(selectedIds, approveRejectModal.decision, approveRejectModal.notes || `Bulk marked as ${approveRejectModal.decision}`);
+      setBulkNotice(`✓ Marked ${selectedIds.length} cases as ${approveRejectModal.decision}`);
+      setSelectedIds([]);
+    }
+    setApproveRejectModal({ open: false, decision: 'APPROVED', notes: '' });
+    loadAllRecords();
+    setTimeout(() => setBulkNotice(null), 4000);
+  };
+
+  // Submit Dispatch Details
+  const handleSaveDispatch = () => {
+    if (dispatchModal.record) {
+      const r = dispatchModal.record;
+      standaloneDB.updateRecord(r.id, {
+        status: 'DISPATCHED',
+        filingProcess: 'DISPATCHED',
+        dispatchedDate: dispatchModal.date,
+        dispatchedNote: dispatchModal.note,
+        trackingId: dispatchModal.trackingId || r.trackingId
+      });
+      standaloneDB.addHistory(r.id, 'DISPATCHED', `Dispatched on ${dispatchModal.date}. ${dispatchModal.note}`);
+      setBulkNotice(`✓ Case ${r.folder} marked as DISPATCHED.`);
+    } else if (dispatchModal.isBulk && selectedIds.length > 0) {
+      standaloneDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
+        dispatchedDate: dispatchModal.date,
+        dispatchedNote: dispatchModal.note
+      });
+      setBulkNotice(`✓ Marked ${selectedIds.length} cases as DISPATCHED.`);
+      setSelectedIds([]);
+    }
+    setDispatchModal({ open: false, date: '', note: '', trackingId: '' });
+    loadAllRecords();
+    setTimeout(() => setBulkNotice(null), 4000);
+  };
+
+  // Submit Delivered Details
+  const handleSaveDelivered = () => {
+    if (deliveredModal.record) {
+      const r = deliveredModal.record;
+      standaloneDB.updateRecord(r.id, {
+        status: 'DELIVERED',
+        filingProcess: 'DELIVERED',
+        deliveredDate: deliveredModal.date,
+        receiverName: deliveredModal.receiverName,
+        receiptImage: deliveredModal.receiptImage
+      });
+      standaloneDB.addHistory(r.id, 'DELIVERED', `Delivered on ${deliveredModal.date} to receiver: ${deliveredModal.receiverName}`);
+      setBulkNotice(`✓ Case ${r.folder} marked as DELIVERED to ${deliveredModal.receiverName}`);
+    } else if (deliveredModal.isBulk && selectedIds.length > 0) {
+      standaloneDB.bulkUpdateStatus(selectedIds, 'DELIVERED', `Bulk delivered on ${deliveredModal.date}. Receiver: ${deliveredModal.receiverName}`, {
+        deliveredDate: deliveredModal.date,
+        receiverName: deliveredModal.receiverName,
+        receiptImage: deliveredModal.receiptImage
+      });
+      setBulkNotice(`✓ Marked ${selectedIds.length} cases as DELIVERED.`);
+      setSelectedIds([]);
+    }
+    setDeliveredModal({ open: false, date: '', receiverName: '', receiptImage: '' });
+    loadAllRecords();
+    setTimeout(() => setBulkNotice(null), 4000);
+  };
+
+  // Handle receipt image upload
+  const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle single record edit save
+  const handleSaveRecord = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
     setSavingRecord(true);
-    setModalMsg(null);
     try {
-      let saved: RecordItem;
-      if (editingRecord.id) {
-        const res = standaloneDB.updateRecord(editingRecord.id, editingRecord);
-        saved = res || editingRecord;
-      } else {
-        saved = standaloneDB.addRecord(editingRecord);
-      }
-
-      // Add timeline history entry
-      standaloneDB.addHistory(
-        saved.id,
-        saved.status,
-        `Stage updated to ${saved.status}${saved.trackingId ? ` · Tracking ID: ${saved.trackingId}` : ''}`
-      );
-
-      // Refresh history in modal
-      setHistoryLogs(standaloneDB.getHistory(saved.id));
-      setEditingRecord(saved);
-
-      // Instant state update
-      setAllRecords(prev =>
-        prev.map(item =>
-          item.id === saved.id || (item.folder === saved.folder && item.tm === saved.tm)
-            ? saved
-            : item
-        )
-      );
-
-      setModalMsg({
-        text: 'Record details & status timeline saved to Standalone DB!',
-        type: 'success',
-      });
+      standaloneDB.updateRecord(editingRecord.id, editingRecord);
+      standaloneDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in Standalone CMS');
+      setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
+      setEditingRecord(null);
+      loadAllRecords();
     } catch (err: any) {
-      setModalMsg({
-        text: 'Error saving record: ' + (err.message || 'database error'),
-        type: 'error',
-      });
+      setErrorMsg(err.message || 'Failed to update record');
     } finally {
       setSavingRecord(false);
+      setTimeout(() => setBulkNotice(null), 4000);
     }
   };
 
-  const renderBars = (entries: [string, number][], colorClass: string) => {
-    if (!entries.length) return <div className="text-[0.68rem] text-[#666]">No data</div>;
-    const max = Math.max(...entries.map(e => e[1]), 1);
-    return entries.slice(0, 6).map(([label, count], idx) => {
-      const pct = Math.round((count / max) * 100);
-      return (
-        <div key={idx} className="flex items-center gap-2 mb-1.5 text-[0.68rem]">
-          <span className="w-[100px] shrink-0 truncate font-['DM_Mono',monospace] text-[0.58rem]" title={label}>{label}</span>
-          <div className="flex-1 h-3.5 bg-[#E8DFC7] border-[1.5px] border-[#0C0C0C]">
-            <div className={`h-full ${colorClass}`} style={{ width: `${pct}%` }} />
-          </div>
-          <span className="w-7 text-right font-['DM_Mono',monospace] text-[0.62rem]">{count}</span>
-        </div>
-      );
-    });
+  const handleDeleteRecord = (id: number, name: string) => {
+    if (confirm(`Are you sure you want to delete case "${name}" from standalone records?`)) {
+      standaloneDB.deleteRecord(id);
+      loadAllRecords();
+      setBulkNotice(`Case "${name}" removed.`);
+      setTimeout(() => setBulkNotice(null), 4000);
+    }
+  };
+
+  const statusBadge = (status: string) => {
+    const s = String(status || '').toUpperCase();
+    if (s.includes('DELIVERED')) return 'bg-[#0D9970] text-white';
+    if (s.includes('DISPATCHED')) return 'bg-[#0284c7] text-white';
+    if (s.includes('APPROVED')) return 'bg-[#15803d] text-white';
+    if (s.includes('REJECT')) return 'bg-[#dc2626] text-white';
+    if (s.includes('REVIEW')) return 'bg-[#d97706] text-white';
+    return 'bg-[#FAF6EE] text-[#0C0C0C]';
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C]">
+    <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] relative">
       <Navbar />
 
-      {/* Hidden file input for JSON import */}
+      {/* Hidden CSV File Input */}
       <input
         type="file"
-        ref={fileInputRef}
-        accept=".json"
-        onChange={handleImportJSON}
+        ref={csvFileInputRef}
+        accept=".csv,text/csv"
+        onChange={handleCSVFileChange}
         className="hidden"
       />
 
-      <div className="max-w-[1400px] w-full mx-auto p-4 sm:p-6 pb-16 flex-1">
-        {/* Header & Quick Action Buttons */}
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+      {/* Hidden Receipt Image File Input */}
+      <input
+        type="file"
+        ref={receiptImgInputRef}
+        accept="image/*"
+        onChange={handleReceiptImgUpload}
+        className="hidden"
+      />
+
+      <div className="w-full max-w-[1350px] mx-auto p-4 sm:p-7 pb-24 flex-1">
+        {/* Header Bar */}
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0D9970] text-white rounded border border-[#0C0C0C]">
+                STANDALONE 0ms
+              </span>
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
+                BRANDEX CMS v2.1
+              </span>
+            </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1.5px] leading-tight">
               Case Records &amp; Workflow Timeline
             </h1>
-            <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#666]">
-              STANDALONE DASHBOARD · ZERO NETWORK DELAY
-            </div>
           </div>
 
-          {/* Import / Export & Navigation Tools */}
-          <div className="flex gap-2 flex-wrap items-center">
-            <Link
-              href="/trademark-application"
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] no-underline font-bold hover:translate-x-[-1px] hover:translate-y-[-1px]"
+          <div className="flex gap-2.5 flex-wrap items-center">
+            {/* CSV Import & Export Tools */}
+            <button
+              onClick={handleImportCSVClick}
+              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
+              title="Import cases from CSV file"
             >
-              + New Case
-            </Link>
+              <Upload className="w-3.5 h-3.5 text-[#C94A00]" /> Import CSV
+            </button>
 
             <button
               onClick={handleExportCSV}
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#0D9970] text-white border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer font-bold flex items-center gap-1.5"
-              title="Export Current Table as CSV"
+              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
+              title="Export all cases to CSV"
             >
-              <Download className="w-3.5 h-3.5" /> CSV
+              <Download className="w-3.5 h-3.5 text-[#0D9970]" /> Export CSV
             </button>
-
-            <button
-              onClick={handleExportJSON}
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FFE066] text-[#0C0C0C] border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer font-bold flex items-center gap-1.5"
-              title="Download Full JSON Backup"
-            >
-              <Download className="w-3.5 h-3.5" /> Backup JSON
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer font-bold flex items-center gap-1.5 hover:bg-white"
-              title="Import JSON Backup file"
-            >
-              <Upload className="w-3.5 h-3.5" /> Import JSON
-            </button>
-
-            <button
-              onClick={() => setShowCharts(!showCharts)}
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#E8DFC7] border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer font-bold flex items-center gap-1"
-            >
-              <BarChart3 className="w-3.5 h-3.5" /> {showCharts ? 'Hide Charts' : 'Show Charts'}
-            </button>
-
-            <a
-              href={SHEET_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C]"
-            >
-              Google Sheet
-            </a>
 
             <Link
-              href="/"
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[5px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C]"
+              href="/trademark-application"
+              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#C94A00] text-white border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] no-underline font-bold flex items-center gap-1"
             >
-              ← CMS Home
+              <Plus className="w-3.5 h-3.5" /> + New Case
             </Link>
-          </div>
-        </div>
 
-        {/* Bulk Action Banner */}
-        {selectedKeys.length > 0 && (
-          <div className="bg-[#0C0C0C] text-[#FAF6EE] p-3.5 mb-4 border-[3px] border-[#C94A00] rounded-[6px] shadow-[5px_5px_0_#C94A00] flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
-            <div className="font-['DM_Mono',monospace] text-[0.82rem] font-bold flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#C94A00] animate-ping" />
-              <span>{selectedKeys.length} CASES SELECTED FOR BULK UPDATE</span>
-            </div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-['DM_Mono',monospace] text-[0.72rem] text-[#aaa]">NEW STAGE:</span>
-              <select
-                value={bulkStatus}
-                onChange={e => setBulkStatus(e.target.value)}
-                className="bg-[#FAF6EE] text-[#0C0C0C] font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1 px-2 border-2 border-[#0C0C0C] rounded-[4px] uppercase"
-              >
-                {WORKFLOW_STATUSES.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <button
-                onClick={handleBulkStatusUpdate}
-                disabled={bulkUpdating}
-                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1.5 px-3.5 bg-[#0D9970] text-white border-2 border-[#FAF6EE] rounded-[4px] shadow-[2px_2px_0_#FAF6EE] cursor-pointer hover:bg-[#0b825f] uppercase"
-              >
-                {bulkUpdating ? 'UPDATING...' : `APPLY TO ${selectedKeys.length} CASES`}
-              </button>
-              <button
-                onClick={() => setSelectedKeys([])}
-                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1.5 px-3 bg-[#333] text-[#FAF6EE] border border-[#777] rounded-[4px] cursor-pointer"
-              >
-                CANCEL
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Feedback Notice */}
-        {bulkNotice && (
-          <div className="mb-4 p-3 bg-[#d1fae5] text-[#065f46] border-[2.5px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] font-['DM_Mono',monospace] text-[0.8rem] font-bold flex items-center justify-between">
-            <span>✓ {bulkNotice}</span>
-            <button onClick={() => setBulkNotice(null)} className="cursor-pointer text-[#065f46]">✕</button>
-          </div>
-        )}
-
-        {/* Stats Grid Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <div className="bg-[#0D9970] text-white border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 text-center rounded-[4px]">
-            <div className="font-['Bebas_Neue'] text-[2.5rem] leading-none tracking-[1px]">{stats.total}</div>
-            <div className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mt-1 opacity-90 uppercase">Total Cases</div>
-          </div>
-          <div className="bg-[#FFE066] text-[#0C0C0C] border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 text-center rounded-[4px]">
-            <div className="font-['Bebas_Neue'] text-[2.5rem] leading-none tracking-[1px]">{stats.pending}</div>
-            <div className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mt-1 uppercase">Pending</div>
-          </div>
-          <div className="bg-[#7EB8DA] text-[#0C0C0C] border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 text-center rounded-[4px]">
-            <div className="font-['Bebas_Neue'] text-[2.5rem] leading-none tracking-[1px]">{stats.dispatched}</div>
-            <div className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mt-1 uppercase">Dispatched</div>
-          </div>
-          <div className="bg-[#FAF6EE] text-[#0C0C0C] border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 text-center rounded-[4px]">
-            <div className="font-['Bebas_Neue'] text-[2.5rem] leading-none tracking-[1px]">{stats.delivered}</div>
-            <div className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mt-1 uppercase">Delivered</div>
-          </div>
-        </div>
-
-        {/* Charts Section (Collapsible) */}
-        {showCharts && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-            <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 rounded-[4px]">
-              <h3 className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mb-2.5 pb-1.5 border-b-2 border-[#0C0C0C] font-bold uppercase">
-                Cases By Month
-              </h3>
-              {renderBars(stats.byMonth, 'bg-[#D4A800]')}
-            </div>
-            <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[3px_3px_0_#0C0C0C] p-3.5 rounded-[4px]">
-              <h3 className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] mb-2.5 pb-1.5 border-b-2 border-[#0C0C0C] font-bold uppercase">
-                Workflow Stage Distribution
-              </h3>
-              {renderBars(stats.byStatus, 'bg-[#0D9970]')}
-            </div>
-          </div>
-        )}
-
-        {/* Short Filter Buttons (Status & Years) */}
-        <div className="bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] p-3 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] mb-4 flex flex-col gap-2.5">
-          {/* Status Quick Filters */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-['DM_Mono',monospace] text-[0.68rem] font-bold tracking-[1px] text-[#666] uppercase mr-1">
-              STATUS:
-            </span>
             <button
-              onClick={() => { setFilterStatus(''); setCurrentPage(1); }}
-              className={`font-['DM_Mono',monospace] text-[0.68rem] tracking-[0.5px] py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[3px] cursor-pointer font-bold ${
-                filterStatus === '' ? 'bg-[#0C0C0C] text-[#FAF6EE]' : 'bg-white hover:bg-[#E8DFC7]'
-              }`}
+              onClick={loadAllRecords}
+              className="p-2 border-[2px] border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
+              title="Refresh Records"
             >
-              ALL ({allRecords.length})
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            {WORKFLOW_STATUSES.map(s => {
-              const count = allRecords.filter(r => String(r.status || '').toUpperCase() === s).length;
-              return (
+          </div>
+        </div>
+
+        {/* Global Notifications */}
+        {bulkNotice && (
+          <div className="p-3 bg-[#EBF7F2] border-2 border-[#0D9970] text-[#0D9970] font-['DM_Mono',monospace] text-[0.8rem] rounded-[4px] font-bold mb-4 shadow-[2px_2px_0_#0D9970]">
+            {bulkNotice}
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="p-3 bg-[#fee2e2] border-2 border-[#ef4444] text-[#991b1b] font-['DM_Mono',monospace] text-[0.8rem] rounded-[4px] font-bold mb-4">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* =========================================================================
+            4 BOX STATISTICS ROW (TOTAL, PENDING/REVIEW, APPROVED/REJECTED, DISPATCHED/DELIVERED)
+           ========================================================================= */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Box 1: Total */}
+          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C]">
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
+              BOX 01 · TOTAL CASES
+            </div>
+            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
+              {stats.total}
+            </div>
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#0D9970] mt-1 font-bold">
+              ✓ Full Case Sovereignty
+            </div>
+          </div>
+
+          {/* Box 2: Pending & In Review (Default) */}
+          <div
+            onClick={() => setFilterStatus('PENDING_IN_REVIEW')}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
+              filterStatus === 'PENDING_IN_REVIEW' ? 'bg-[#FFE066]' : 'bg-[#FAF6EE] hover:bg-[#fff9db]'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#0C0C0C] uppercase">
+                BOX 02 · PENDING / IN REVIEW
+              </span>
+              <span className="font-['DM_Mono',monospace] text-[0.65rem] bg-[#0C0C0C] text-[#FAF6EE] px-1.5 py-0.2 rounded font-bold">
+                DEFAULT
+              </span>
+            </div>
+            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
+              {stats.pendingInReview}
+            </div>
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
+              {stats.pending} Pending · {stats.inReview} In Review
+            </div>
+          </div>
+
+          {/* Box 3: Approved / Rejected */}
+          <div
+            onClick={() => setFilterStatus('APPROVED')}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
+              filterStatus === 'APPROVED' ? 'bg-[#EBF7F2]' : 'bg-[#FAF6EE] hover:bg-[#f0fbf6]'
+            }`}
+          >
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
+              BOX 03 · APPROVED / REJECTED
+            </div>
+            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
+              {stats.approvedRejected}
+            </div>
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
+              <span className="text-[#0D9970]">{stats.approved} Approved</span> ·{' '}
+              <span className="text-[#dc2626]">{stats.rejected} Rejected</span>
+            </div>
+          </div>
+
+          {/* Box 4: Dispatched / Delivered */}
+          <div
+            onClick={() => setFilterStatus('DISPATCHED')}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
+              filterStatus === 'DISPATCHED' ? 'bg-[#e0f2fe]' : 'bg-[#FAF6EE] hover:bg-[#f0f9ff]'
+            }`}
+          >
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
+              BOX 04 · DISPATCHED / DELIVERED
+            </div>
+            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
+              {stats.dispatchedDelivered}
+            </div>
+            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
+              <span className="text-[#0284c7]">{stats.dispatched} Dispatched</span> ·{' '}
+              <span className="text-[#0D9970]">{stats.delivered} Delivered</span>
+            </div>
+          </div>
+        </div>
+
+        {/* =========================================================================
+            LAW FIRM WIDGET (Replaced Workflow Stage Distribution)
+           ========================================================================= */}
+        {showCharts && (
+          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px] mb-6">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-[#C94A00]" />
+                <h2 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px]">
+                  Cases by Law Firm / Legal Consultant
+                </h2>
+              </div>
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
+                Top Practice Portfolios
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {stats.byFirm.slice(0, 6).map(([firmName, count]) => {
+                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+                return (
+                  <div
+                    key={firmName}
+                    onClick={() => {
+                      if (selectedConsultants.includes(firmName)) {
+                        setSelectedConsultants(prev => prev.filter(f => f !== firmName));
+                      } else {
+                        setSelectedConsultants(prev => [...prev, firmName]);
+                      }
+                    }}
+                    className={`p-3 border-2 border-[#0C0C0C] rounded-[4px] cursor-pointer transition-all ${
+                      selectedConsultants.includes(firmName)
+                        ? 'bg-[#C94A00] text-white shadow-[2px_2px_0_#0C0C0C]'
+                        : 'bg-white hover:bg-[#F0E8D0]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold truncate max-w-[200px]" title={firmName}>
+                        {firmName}
+                      </span>
+                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold ml-2">
+                        {count} ({pct}%)
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-[#ddd] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${selectedConsultants.includes(firmName) ? 'bg-[#FFE066]' : 'bg-[#0D9970]'}`}
+                        style={{ width: `${Math.max(8, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            CONTROLS, SHORT FILTER BUTTONS & MULTI-SELECT CONSULTANT
+           ========================================================================= */}
+        <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-4 rounded-[6px] mb-6">
+          <div className="flex flex-col gap-3">
+            {/* Short Filter Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] uppercase text-[#666] flex items-center gap-1">
+                <Filter className="w-3.5 h-3.5" /> Stage:
+              </span>
+
+              {[
+                { label: 'PENDING & IN REVIEW (Default)', value: 'PENDING_IN_REVIEW' },
+                { label: 'ALL', value: 'ALL' },
+                { label: 'APPROVED', value: 'APPROVED' },
+                { label: 'REJECTED', value: 'REJECT' },
+                { label: 'DISPATCHED', value: 'DISPATCHED' },
+                { label: 'DELIVERED', value: 'DELIVERED' }
+              ].map(st => (
                 <button
-                  key={s}
-                  onClick={() => { setFilterStatus(s); setCurrentPage(1); }}
-                  className={`font-['DM_Mono',monospace] text-[0.68rem] tracking-[0.5px] py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[3px] cursor-pointer font-bold ${
-                    filterStatus === s ? 'bg-[#C94A00] text-white shadow-[2px_2px_0_#0C0C0C]' : 'bg-white hover:bg-[#E8DFC7]'
+                  key={st.value}
+                  type="button"
+                  onClick={() => {
+                    setFilterStatus(st.value);
+                    setCurrentPage(1);
+                  }}
+                  className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1.5 px-3 border-[1.5px] border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
+                    filterStatus === st.value
+                      ? 'bg-[#0C0C0C] text-[#FAF6EE] shadow-[2px_2px_0_#C94A00]'
+                      : 'bg-[#FAF6EE] text-[#0C0C0C] hover:bg-white'
                   }`}
                 >
-                  {s} ({count})
+                  {st.label}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* Year Quick Filters & Search Bar */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-['DM_Mono',monospace] text-[0.68rem] font-bold tracking-[1px] text-[#666] uppercase mr-1">
-              YEAR:
-            </span>
-            <button
-              onClick={() => { setFilterYear(''); setCurrentPage(1); }}
-              className={`font-['DM_Mono',monospace] text-[0.68rem] tracking-[0.5px] py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[3px] cursor-pointer font-bold ${
-                filterYear === '' ? 'bg-[#0C0C0C] text-[#FAF6EE]' : 'bg-white hover:bg-[#E8DFC7]'
-              }`}
-            >
-              ALL YEARS
-            </button>
-            {yearsList.map(y => (
-              <button
-                key={y}
-                onClick={() => { setFilterYear(y); setCurrentPage(1); }}
-                className={`font-['DM_Mono',monospace] text-[0.68rem] tracking-[0.5px] py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[3px] cursor-pointer font-bold ${
-                  filterYear === y ? 'bg-[#0D9970] text-white shadow-[2px_2px_0_#0C0C0C]' : 'bg-white hover:bg-[#E8DFC7]'
-                }`}
-              >
-                {y}
-              </button>
-            ))}
-
-            {/* Live Search Input with Highlight Indicator */}
-            <div className="flex-1 min-w-[240px] ml-auto relative">
-              <input
-                type="text"
-                placeholder="Search case name, applicant, tracking ID, TM No…"
-                value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                className="w-full p-2 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.82rem] uppercase rounded-[3px]"
-              />
-              {searchQuery && (
+            {/* Multi-select filter for Legal Consultant / Law Firm */}
+            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[#ddd]">
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] uppercase text-[#666]">
+                Consultant Filter:
+              </span>
+              {allConsultantsList.slice(0, 5).map(cName => {
+                const isSelected = selectedConsultants.includes(cName);
+                return (
+                  <button
+                    key={cName}
+                    type="button"
+                    onClick={() => {
+                      setSelectedConsultants(prev =>
+                        isSelected ? prev.filter(c => c !== cName) : [...prev, cName]
+                      );
+                      setCurrentPage(1);
+                    }}
+                    className={`font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 border border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
+                      isSelected ? 'bg-[#C94A00] text-white' : 'bg-white text-[#0C0C0C] hover:bg-[#F0E8D0]'
+                    }`}
+                  >
+                    {isSelected ? '✓ ' : '+ '}
+                    {cName.length > 22 ? cName.substring(0, 22) + '...' : cName}
+                  </button>
+                );
+              })}
+              {selectedConsultants.length > 0 && (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-2 text-[#999] hover:text-[#0C0C0C] font-bold text-xs"
+                  type="button"
+                  onClick={() => setSelectedConsultants([])}
+                  className="font-['DM_Mono',monospace] text-[0.65rem] text-[#dc2626] underline cursor-pointer"
                 >
-                  ✕
+                  Clear Filters
                 </button>
               )}
             </div>
+
+            {/* Search Input & Sorters */}
+            <div className="flex gap-3 flex-wrap items-center pt-2 border-t border-[#ddd]">
+              <div className="flex-1 min-w-[220px]">
+                <input
+                  type="text"
+                  placeholder="SEARCH CASE NAME, APPLICANT, LAW FIRM, REF, TM NO..."
+                  value={searchQuery}
+                  onChange={e => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full p-2.5 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.85rem] uppercase rounded-[4px]"
+                />
+              </div>
+
+              {/* Year Filter */}
+              <select
+                value={filterYear}
+                onChange={e => {
+                  setFilterYear(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="p-2.5 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.8rem] rounded-[4px] cursor-pointer font-bold"
+              >
+                <option value="">ALL YEARS</option>
+                {yearsList.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+
+              {/* Sort By */}
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="p-2.5 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.8rem] rounded-[4px] cursor-pointer font-bold"
+              >
+                <option value="date-desc">Recent Date (Newest)</option>
+                <option value="date-asc">Oldest Date First</option>
+                <option value="mark">Case Name (A–Z)</option>
+                <option value="status">Workflow Stage</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={() => setShowCharts(!showCharts)}
+                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2.5 px-3 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded-[4px] cursor-pointer"
+              >
+                {showCharts ? 'Hide Firm Widget' : 'Show Firm Widget'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Minimal and Required Records Table */}
-        {loading ? (
-          <div className="p-10 text-center font-['DM_Mono',monospace] text-[0.85rem] border-[3px] border-[#0C0C0C] bg-[#FAF6EE] shadow-[5px_5px_0_#0C0C0C]">
-            Loading records from Standalone Engine (0ms latency)…
+        {/* =========================================================================
+            BULK ACTIONS TOOLBAR (WHEN ROWS ARE CHECKED)
+           ========================================================================= */}
+        {selectedIds.length > 0 && (
+          <div className="bg-[#0C0C0C] text-[#FAF6EE] border-[3px] border-[#C94A00] p-4 rounded-[6px] shadow-[4px_4px_0_#C94A00] mb-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-['DM_Mono',monospace] text-[0.8rem] font-bold text-[#FFE066]">
+                [{selectedIds.length} CASES SELECTED]
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Stage Transition Buttons */}
+              <button
+                type="button"
+                onClick={() => setApproveRejectModal({ open: true, isBulk: true, decision: 'APPROVED', notes: '' })}
+                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-1.5 px-3 bg-[#0D9970] text-white border border-[#FAF6EE] rounded cursor-pointer"
+              >
+                Mark Approved/Reject
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDispatchModal({
+                  open: true,
+                  isBulk: true,
+                  date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
+                  note: '',
+                  trackingId: ''
+                })}
+                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-1.5 px-3 bg-[#0284c7] text-white border border-[#FAF6EE] rounded cursor-pointer"
+              >
+                Mark Dispatched
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeliveredModal({
+                  open: true,
+                  isBulk: true,
+                  date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }),
+                  receiverName: '',
+                  receiptImage: ''
+                })}
+                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-1.5 px-3 bg-[#15803d] text-white border border-[#FAF6EE] rounded cursor-pointer"
+              >
+                Mark Delivered
+              </button>
+
+              {/* Bulk Reassign to Saved Client */}
+              <div className="flex items-center gap-1.5 pl-2 border-l border-white/20">
+                <select
+                  value={selectedClientForAssign}
+                  onChange={e => setSelectedClientForAssign(e.target.value)}
+                  className="p-1.5 bg-[#1f1f1f] text-[#FAF6EE] border border-white/40 font-['DM_Mono',monospace] text-[0.7rem] rounded"
+                >
+                  <option value="">-- Bulk Reassign to Saved Client --</option>
+                  {savedClients.map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.client_code}] {c.client_name}
+                    </option>
+                  ))}
+                </select>
+                {selectedClientForAssign && (
+                  <button
+                    type="button"
+                    onClick={handleBulkAssignClient}
+                    className="font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1.5 px-3 bg-[#C94A00] text-white border border-white rounded cursor-pointer"
+                  >
+                    Assign
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="font-['DM_Mono',monospace] text-[0.7rem] py-1.5 px-2 bg-transparent text-[#999] hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        ) : errorMsg ? (
-          <div className="p-10 text-center font-['DM_Mono',monospace] text-[0.85rem] border-[3px] border-[#0C0C0C] bg-[#fde2e2] text-[#c0392b] shadow-[5px_5px_0_#0C0C0C]">
-            Live fetch failed: {errorMsg}
-          </div>
-        ) : filteredAndSortedRecords.length === 0 ? (
-          <div className="p-10 text-center font-['DM_Mono',monospace] text-[0.85rem] border-[3px] border-[#0C0C0C] bg-[#FAF6EE] shadow-[5px_5px_0_#0C0C0C]">
-            No records found matching your filters.
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] bg-[#FAF6EE] rounded-[4px]">
-              <table className="w-full border-collapse text-[0.82rem]">
-                <thead>
-                  <tr className="bg-[#0C0C0C] text-[#FAF6EE]">
-                    {/* Bulk Selection Checkbox */}
-                    <th className="p-2.5 w-10 text-center border-b-2 border-[#0C0C0C]">
-                      <input
-                        type="checkbox"
-                        checked={isAllCurrentSelected}
-                        onChange={toggleSelectAll}
-                        className="cursor-pointer w-4 h-4 accent-[#C94A00]"
-                        title="Select All on Current Page"
-                      />
-                    </th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">Case Ref</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">Case / Mark Name</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">Class</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">Workflow Stage</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">TM No / Tracking</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-left border-b-2 border-[#0C0C0C]">Applicant</th>
-                    <th className="font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.5px] p-2.5 text-right border-b-2 border-[#0C0C0C]">Actions</th>
+        )}
+
+        {/* =========================================================================
+            RECORDS TABLE WITH SPECIFIED 11 COLUMNS + ACTIONS
+           ========================================================================= */}
+        <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] rounded-[6px] overflow-hidden mb-6">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[0.82rem]">
+              <thead>
+                <tr className="bg-[#0C0C0C] text-[#FAF6EE] border-b-2 border-[#0C0C0C]">
+                  {/* Col 1: Tickmark Col */}
+                  <th className="p-3 text-center w-10">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      className="text-[#FAF6EE] hover:text-[#C94A00] cursor-pointer"
+                      title="Select all on page"
+                    >
+                      {isAllCurrentSelected ? (
+                        <CheckSquare className="w-4 h-4 text-[#C94A00]" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                    </button>
+                  </th>
+
+                  {/* Col 2: Date (Short, sorted by recent date) */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                    Date
+                  </th>
+
+                  {/* Col 3: Case Ref in box of 3 col */}
+                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                    Case Ref [Code | Menu | #]
+                  </th>
+
+                  {/* Col 4: Image Thumbnail */}
+                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase w-14">
+                    Logo
+                  </th>
+
+                  {/* Col 5: Case Name */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Case Name
+                  </th>
+
+                  {/* Col 6: Class (1-45) Just Numbers */}
+                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Class
+                  </th>
+
+                  {/* Col 7: Workflow Stage */}
+                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Workflow Stage
+                  </th>
+
+                  {/* Col 8: Applicant */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Applicant
+                  </th>
+
+                  {/* Col 9: Law Firm Name * */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Law Firm Name *
+                  </th>
+
+                  {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                    Dispatched Date
+                  </th>
+
+                  {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
+                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                    Delivered Date
+                  </th>
+
+                  {/* Actions */}
+                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={12} className="p-12 text-center font-['DM_Mono',monospace]">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C94A00]" />
+                      Loading standalone cases...
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {pageRecords.map((r, idx) => {
-                    const rowKey = getRecordKey(r);
-                    const isSelected = selectedKeys.includes(rowKey);
+                ) : pageRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
+                      No cases match current filter.
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterStatus('ALL');
+                            setSearchQuery('');
+                            setSelectedConsultants([]);
+                          }}
+                          className="font-bold underline text-[#C94A00] cursor-pointer"
+                        >
+                          View All Cases
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  pageRecords.map((r, idx) => {
+                    const isSelected = selectedIds.includes(r.id);
+                    const classPure = formatClassPure(r.classNo);
+                    const shortDate = formatShortDate(r.date);
+                    const lawFirm = r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES';
+
                     return (
                       <tr
-                        key={rowKey || idx}
+                        key={r.id || idx}
                         className={`border-b border-[#ddd] transition-colors ${
-                          isSelected ? 'bg-[#FFE066]/30 hover:bg-[#FFE066]/40' : 'hover:bg-[#E8DFC7]'
-                        }`}
+                          isSelected ? 'bg-[#FFE066]/30' : idx % 2 === 0 ? 'bg-[#FAF6EE]' : 'bg-[#F5EEDC]'
+                        } hover:bg-[#E8DFC7]`}
                       >
-                        {/* Checkbox cell */}
+                        {/* Col 1: Tickmark Checkbox */}
                         <td className="p-2.5 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectRow(rowKey)}
-                            className="cursor-pointer w-4 h-4 accent-[#C94A00]"
-                          />
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectRow(r.id)}
+                            className="cursor-pointer"
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-[#C94A00]" />
+                            ) : (
+                              <Square className="w-4 h-4 text-[#666]" />
+                            )}
+                          </button>
                         </td>
 
-                        {/* Case Ref */}
-                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.75rem] font-bold whitespace-nowrap">
-                          [{r.selectionMenu || 'A'}] <HighlightText text={r.clientCode || '646'} query={searchQuery} /> - #<HighlightText text={r.caseNo || '001'} query={searchQuery} />
+                        {/* Col 2: Date (Short, sorted by recent date) */}
+                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.74rem] font-bold text-[#0C0C0C] whitespace-nowrap">
+                          {shortDate}
                         </td>
 
-                        {/* Case / Mark Name */}
-                        <td className="p-2.5 font-bold" title={r.folder}>
-                          <HighlightText text={r.folder} query={searchQuery} />
+                        {/* Col 3: Case Ref in box of 3 col */}
+                        <td className="p-2.5 text-center">
+                          <div className="inline-flex items-center border-[1.5px] border-[#0C0C0C] rounded-[3px] overflow-hidden bg-white shadow-[1px_1px_0_#0C0C0C] font-['DM_Mono',monospace] text-[0.68rem] font-bold">
+                            <span className="px-1.5 py-0.5 bg-[#FAF6EE] text-[#C94A00] border-r border-[#0C0C0C]">
+                              {r.clientCode || '646'}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-white text-[#0C0C0C] border-r border-[#0C0C0C]">
+                              {r.selectionMenu || 'A'}
+                            </span>
+                            <span className="px-1.5 py-0.5 bg-[#E8DFC7] text-[#0C0C0C]">
+                              {r.caseNo || String(idx + 1).padStart(3, '0')}
+                            </span>
+                          </div>
                         </td>
 
-                        {/* Class */}
-                        <td className="p-2.5 font-['DM_Mono',monospace] font-bold">
-                          Cl. <HighlightText text={r.classNo || '—'} query={searchQuery} />
-                        </td>
-
-                        {/* Workflow Stage */}
-                        <td className="p-2.5">
-                          <span className={`inline-block px-2.5 py-1 border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.68rem] font-bold ${statusBadgeClass(r.status)}`}>
-                            {r.status || 'PENDING'}
-                          </span>
-                        </td>
-
-                        {/* TM / Tracking ID */}
-                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.75rem]">
-                          <div><HighlightText text={r.tm || '—'} query={searchQuery} /></div>
-                          {r.trackingId && (
-                            <div className="text-[0.65rem] text-[#666]">
-                              Trk: <HighlightText text={r.trackingId} query={searchQuery} />
+                        {/* Col 4: Image Thumbnail */}
+                        <td className="p-2.5 text-center">
+                          {r.img && r.img.startsWith('data:image') ? (
+                            <div className="w-9 h-9 border border-[#0C0C0C] rounded bg-white p-0.5 overflow-hidden mx-auto shadow-[1px_1px_0_#0C0C0C]">
+                              <Image
+                                src={r.img}
+                                alt="Logo"
+                                width={36}
+                                height={36}
+                                className="object-contain w-full h-full"
+                                referrerPolicy="no-referrer"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-9 h-9 border border-[#0C0C0C] rounded bg-[#E8DFC7] flex items-center justify-center font-['DM_Mono',monospace] text-[0.6rem] font-bold text-[#666] mx-auto shadow-[1px_1px_0_#0C0C0C]">
+                              TM
                             </div>
                           )}
                         </td>
 
-                        {/* Applicant */}
-                        <td className="p-2.5 truncate max-w-[170px]" title={r.appName}>
-                          <HighlightText text={r.appName} query={searchQuery} />
+                        {/* Col 5: Case Name */}
+                        <td className="p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
+                          <HighlightText text={r.folder} query={searchQuery} />
+                          {r.tm && (
+                            <div className="text-[0.68rem] text-[#666] font-normal font-['DM_Mono',monospace]">
+                              TM #{r.tm}
+                            </div>
+                          )}
                         </td>
 
-                        {/* Actions */}
-                        <td className="p-2.5 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => openEditModal(r)}
-                            className="px-2.5 py-1 border-2 border-[#0C0C0C] bg-[#FAF6EE] font-['DM_Mono',monospace] text-[0.68rem] cursor-pointer hover:bg-white font-bold rounded-[3px] shadow-[2px_2px_0_#0C0C0C] active:translate-x-[1px] active:translate-y-[1px]"
-                          >
-                            Edit &amp; Timeline
-                          </button>
+                        {/* Col 6: Class (1-45) Just Numbers */}
+                        <td className="p-2.5 text-center font-['Bebas_Neue'] text-[1.2rem] text-[#C94A00]">
+                          {classPure}
+                        </td>
+
+                        {/* Col 7: Workflow Stage */}
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <span className={`inline-block font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 rounded-[3px] border border-[#0C0C0C] shadow-[1px_1px_0_#0C0C0C] uppercase ${statusBadge(r.status)}`}>
+                            {r.status || 'PENDING'}
+                          </span>
+                        </td>
+
+                        {/* Col 8: Applicant */}
+                        <td className="p-2.5 text-[0.78rem]">
+                          <div className="font-bold">
+                            <HighlightText text={r.appName} query={searchQuery} />
+                          </div>
+                          {r.appTrade && (
+                            <div className="text-[0.68rem] text-[#666] font-['DM_Mono',monospace] truncate max-w-[160px]" title={r.appTrade}>
+                              {r.appTrade}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Col 9: Law Firm Name * */}
+                        <td className="p-2.5 text-[0.76rem] font-medium font-['DM_Mono',monospace] max-w-[180px] truncate" title={lawFirm}>
+                          <HighlightText text={lawFirm} query={searchQuery} />
+                        </td>
+
+                        {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) */}
+                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.72rem] text-[#0C0C0C] whitespace-nowrap">
+                          {r.dispatchedDate ? (
+                            <div>
+                              <div className="font-bold text-[#0284c7]">{r.dispatchedDate}</div>
+                              {r.trackingId && (
+                                <div className="text-[0.65rem] text-[#666]">Trk: {r.trackingId}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[#999]">—</span>
+                          )}
+                        </td>
+
+                        {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
+                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.72rem] whitespace-nowrap">
+                          {r.deliveredDate ? (
+                            <div>
+                              <span className="font-bold text-[#0D9970]">{r.deliveredDate}</span>
+                              {r.receiverName && (
+                                <span className="text-[0.65rem] text-[#333] ml-1 font-normal">
+                                  ({r.receiverName})
+                                </span>
+                              )}
+                              {r.receiptImage && (
+                                <span className="ml-1 text-[0.65rem] text-[#C94A00] font-bold" title="Receipt Attached">
+                                  [Receipt ✓]
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[#999]">—</span>
+                          )}
+                        </td>
+
+                        {/* Col 12: Actions */}
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            {/* Workflow Stage Advancers */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStageTransition(r, 'APPROVED_OR_REJECTED')}
+                              className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#FFE066] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                              title="Advance: Approve or Reject"
+                            >
+                              <Check className="w-3.5 h-3.5 text-[#0D9970]" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStageTransition(r, 'DISPATCHED')}
+                              className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#e0f2fe] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                              title="Advance: Mark Dispatched"
+                            >
+                              <Truck className="w-3.5 h-3.5 text-[#0284c7]" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStageTransition(r, 'DELIVERED')}
+                              className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#EBF7F2] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                              title="Advance: Mark Delivered"
+                            >
+                              <PackageCheck className="w-3.5 h-3.5 text-[#15803d]" />
+                            </button>
+
+                            {/* Edit Case details */}
+                            <button
+                              type="button"
+                              onClick={() => setEditingRecord({ ...r })}
+                              className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                              title="Edit Case Details"
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-[#0C0C0C]" />
+                            </button>
+
+                            {/* Delete Case */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRecord(r.id, r.folder)}
+                              className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#fee2e2] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
+                              title="Delete Case"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-[#dc2626]" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="bg-[#E8DFC7] border-t-2 border-[#0C0C0C] p-3 flex items-center justify-between flex-wrap gap-2">
+            <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#333]">
+              Showing {filteredAndSortedRecords.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to{' '}
+              {Math.min(currentPage * pageSize, filteredAndSortedRecords.length)} of {filteredAndSortedRecords.length} filtered cases
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
-                <div className="font-['DM_Mono',monospace] text-[0.75rem] text-[#666]">
-                  Showing {pageRecords.length} of {filteredAndSortedRecords.length} records
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-1.5 px-3 bg-[#FAF6EE] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    ← Back
-                  </button>
-                  <span className="font-['DM_Mono',monospace] text-[0.72rem] py-1.5 px-3 bg-[#0C0C0C] text-[#FAF6EE] border-[2px] border-[#0C0C0C] rounded-[4px]">
-                    {currentPage} / {totalPages}
-                  </span>
-                  <button
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-1.5 px-3 bg-[#FAF6EE] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Details, Timeline & Edit Modal */}
-        {editingRecord && (
-          <div className="fixed inset-0 z-[2000] bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] p-6 max-w-xl w-full rounded-[6px] max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-[#0C0C0C]">
-                <h2 className="font-['Bebas_Neue'] text-[1.5rem]">Case: {editingRecord.folder}</h2>
-                <button
-                  onClick={() => setEditingRecord(null)}
-                  className="font-['DM_Mono',monospace] text-[0.8rem] font-bold px-2 py-1 bg-[#fee2e2] border-2 border-[#0C0C0C] cursor-pointer"
-                >
-                  ✕ Close
-                </button>
-              </div>
-
-              {modalMsg && (
-                <div
-                  className={`mb-4 p-3 border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.75rem] font-bold ${
-                    modalMsg.type === 'success'
-                      ? 'bg-[#d1fae5] text-[#065f46]'
-                      : 'bg-[#fee2e2] text-[#991b1b]'
-                  }`}
-                >
-                  {modalMsg.text}
-                </div>
-              )}
-
-              {/* Modal Tabs */}
-              <div className="flex gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setActiveModalTab('details')}
-                  className={`font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1.5 px-3 border-2 border-[#0C0C0C] cursor-pointer ${activeModalTab === 'details' ? 'bg-[#C94A00] text-white' : 'bg-[#FAF6EE]'}`}
-                >
-                  Edit Details
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveModalTab('history')}
-                  className={`font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1.5 px-3 border-2 border-[#0C0C0C] cursor-pointer ${activeModalTab === 'history' ? 'bg-[#C94A00] text-white' : 'bg-[#FAF6EE]'}`}
-                >
-                  Timeline / History ({historyLogs.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveModalTab('docs')}
-                  className={`font-['DM_Mono',monospace] text-[0.75rem] font-bold py-1.5 px-3 border-2 border-[#0C0C0C] cursor-pointer ${activeModalTab === 'docs' ? 'bg-[#C94A00] text-white' : 'bg-[#FAF6EE]'}`}
-                >
-                  Documents ({associatedDocs.length})
-                </button>
-              </div>
-
-              {activeModalTab === 'details' && (
-                <form onSubmit={handleSaveEdit} className="flex flex-col gap-4">
-                  <div>
-                    <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">Case / Mark Name</label>
-                    <input
-                      type="text"
-                      value={editingRecord.folder}
-                      onChange={e => setEditingRecord({ ...editingRecord, folder: e.target.value.toUpperCase() })}
-                      className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">Workflow Stage</label>
-                    <select
-                      value={editingRecord.status}
-                      onChange={e => setEditingRecord({ ...editingRecord, status: e.target.value })}
-                      className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]"
-                    >
-                      {WORKFLOW_STATUSES.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">Trademark Number (Acknowledgment)</label>
-                    <input
-                      type="text"
-                      value={editingRecord.tm}
-                      onChange={e => setEditingRecord({ ...editingRecord, tm: e.target.value.toUpperCase() })}
-                      className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">Tracking ID</label>
-                    <input
-                      type="text"
-                      value={editingRecord.trackingId}
-                      onChange={e => setEditingRecord({ ...editingRecord, trackingId: e.target.value.toUpperCase() })}
-                      className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]"
-                    />
-                  </div>
-                  <div className="flex gap-3 mt-4">
-                    <button
-                      type="submit"
-                      disabled={savingRecord}
-                      className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-5 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] cursor-pointer disabled:opacity-50"
-                    >
-                      {savingRecord ? 'Saving...' : 'Save Changes & Log Timeline'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditingRecord(null)}
-                      className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-5 bg-[#FAF6EE] text-[#0C0C0C] border-[2.5px] border-[#0C0C0C] rounded-[4px] cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {activeModalTab === 'history' && (
-                <div className="flex flex-col gap-3">
-                  <h3 className="font-['DM_Mono',monospace] text-[0.8rem] font-bold">Status Change Timeline</h3>
-                  {historyLogs.length === 0 ? (
-                    <div className="p-4 bg-white border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.75rem]">No history logs recorded yet.</div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {historyLogs.map((h, i) => (
-                        <div key={i} className="p-3 bg-white border-2 border-[#0C0C0C] shadow-[2px_2px_0_#0C0C0C] text-[0.8rem]">
-                          <div className="flex justify-between font-['DM_Mono',monospace] text-[0.7rem] text-[#666]">
-                            <span>Stage: <strong>{h.status || h.action}</strong></span>
-                            <span suppressHydrationWarning>{h.created_at ? new Date(h.created_at).toLocaleString() : ''}</span>
-                          </div>
-                          {h.notes && <p className="mt-1 font-['Space_Grotesk'] text-[0.85rem]">{h.notes}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeModalTab === 'docs' && (
-                <div className="flex flex-col gap-3">
-                  <h3 className="font-['DM_Mono',monospace] text-[0.8rem] font-bold">Associated Documents (PDFs, Scans)</h3>
-                  {associatedDocs.length === 0 ? (
-                    <div className="p-4 bg-white border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.75rem]">No additional documents attached to this case.</div>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {associatedDocs.map((d, i) => (
-                        <div key={i} className="p-3 bg-white border-2 border-[#0C0C0C] shadow-[2px_2px_0_#0C0C0C] flex justify-between items-center text-[0.8rem]">
-                          <div>
-                            <div className="font-bold">{d.file_name}</div>
-                            <div className="font-['DM_Mono',monospace] text-[0.65rem] text-[#666]">{(d.file_size / 1024).toFixed(1)} KB · {d.file_type}</div>
-                          </div>
-                          <span className="font-['DM_Mono',monospace] text-[0.7rem] bg-[#0D9970] text-white px-2 py-1 border border-[#0C0C0C]">
-                            Saved in Standalone DB
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2.5 py-1 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded disabled:opacity-40 cursor-pointer"
+              >
+                Prev
+              </button>
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2.5 py-1 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded disabled:opacity-40 cursor-pointer"
+              >
+                Next
+              </button>
             </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* =========================================================================
+          FLOATING ACTION BUTTON (FAB)
+          Quick access to Import CSV, Open Help, and Toggle Settings
+         ========================================================================= */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        {fabOpen && (
+          <div className="mb-3 flex flex-col items-end gap-2 bg-[#FAF6EE] border-[3px] border-[#0C0C0C] p-3 rounded-[6px] shadow-[6px_6px_0_#0C0C0C] min-w-[210px] animate-in fade-in slide-in-from-bottom-2">
+            <div className="font-['DM_Mono',monospace] text-[0.68rem] font-bold tracking-[1px] uppercase text-[#666] pb-1 border-b border-[#ddd] w-full text-left">
+              Quick Actions
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFabOpen(false);
+                handleImportCSVClick();
+              }}
+              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
+            >
+              <Upload className="w-4 h-4 text-[#C94A00]" />
+              <span>Import CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFabOpen(false);
+                handleExportCSV();
+              }}
+              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
+            >
+              <Download className="w-4 h-4 text-[#0D9970]" />
+              <span>Export CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFabOpen(false);
+                setHelpModalOpen(true);
+              }}
+              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4 text-[#0284c7]" />
+              <span>Open Help &amp; Rules</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFabOpen(false);
+                setSettingsModalOpen(true);
+              }}
+              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-[#666]" />
+              <span>Toggle Settings</span>
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setFabOpen(!fabOpen)}
+          className="w-13 h-13 rounded-full bg-[#C94A00] text-white border-[3px] border-[#0C0C0C] flex items-center justify-center shadow-[4px_4px_0_#0C0C0C] hover:scale-105 active:scale-95 transition-all cursor-pointer font-bold"
+          title="Quick CMS Actions (FAB)"
+        >
+          {fabOpen ? <X className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* =========================================================================
+          DIALOG 1: APPROVED OR REJECTED MODAL
+         ========================================================================= */}
+      {approveRejectModal.open && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-md w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <Check className="w-5 h-5 text-[#0D9970]" />
+                Stage Decision: Approved or Rejected?
+              </h3>
+              <button
+                type="button"
+                onClick={() => setApproveRejectModal({ open: false, decision: 'APPROVED', notes: '' })}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="font-['Space_Grotesk'] text-[0.85rem] text-[#333] mb-4">
+              Please specify whether this case ({approveRejectModal.record ? approveRejectModal.record.folder : `${selectedIds.length} selected cases`}) has been officially <strong>APPROVED</strong> or <strong>REJECTED</strong> by the IPO Examiner.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => setApproveRejectModal(prev => ({ ...prev, decision: 'APPROVED' }))}
+                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${
+                  approveRejectModal.decision === 'APPROVED'
+                    ? 'bg-[#0D9970] text-white shadow-[3px_3px_0_#0C0C0C]'
+                    : 'bg-white text-[#0C0C0C]'
+                }`}
+              >
+                ✓ Approve Case
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setApproveRejectModal(prev => ({ ...prev, decision: 'REJECTED' }))}
+                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${
+                  approveRejectModal.decision === 'REJECTED'
+                    ? 'bg-[#dc2626] text-white shadow-[3px_3px_0_#0C0C0C]'
+                    : 'bg-white text-[#0C0C0C]'
+                }`}
+              >
+                ✕ Reject Case
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                Official Examination Note / Reason:
+              </label>
+              <textarea
+                rows={3}
+                placeholder="E.g., Granted IPO Acknowledgment receipt / Objection under Section 14"
+                value={approveRejectModal.notes}
+                onChange={e => setApproveRejectModal(prev => ({ ...prev, notes: e.target.value }))}
+                className="w-full p-2.5 border-2 border-[#0C0C0C] bg-white rounded text-[0.82rem] font-['Space_Grotesk'] uppercase"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t-2 border-[#0C0C0C]">
+              <button
+                type="button"
+                onClick={() => setApproveRejectModal({ open: false, decision: 'APPROVED', notes: '' })}
+                className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveApproveReject}
+                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#C94A00] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
+              >
+                Save Decision
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 2: DISPATCH MODAL (Date, Note, Tracking ID)
+         ========================================================================= */}
+      {dispatchModal.open && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-md w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <Truck className="w-5 h-5 text-[#0284c7]" />
+                Dispatch Shipment Details
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDispatchModal({ open: false, date: '', note: '', trackingId: '' })}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Dispatched Date (ddd DD-MMM-YYYY) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dispatchModal.date}
+                  onChange={e => setDispatchModal(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Courier Tracking ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="E.g., TCS-TRK-99120488 or LCS-881920"
+                  value={dispatchModal.trackingId}
+                  onChange={e => setDispatchModal(prev => ({ ...prev, trackingId: e.target.value.toUpperCase() }))}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Dispatch Note / Shipping Manifest
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="E.g., Hardcopy TM-1 & TM-48 documents dispatched via Leopard Courier."
+                  value={dispatchModal.note}
+                  onChange={e => setDispatchModal(prev => ({ ...prev, note: e.target.value }))}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase text-[0.8rem]"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t-2 border-[#0C0C0C] mt-4">
+              <button
+                type="button"
+                onClick={() => setDispatchModal({ open: false, date: '', note: '', trackingId: '' })}
+                className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDispatch}
+                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
+              >
+                Save Dispatch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 3: DELIVERED MODAL (Date, Receiver Name, Upload Image Receipt)
+         ========================================================================= */}
+      {deliveredModal.open && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-md w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <PackageCheck className="w-5 h-5 text-[#15803d]" />
+                Delivery Confirmation &amp; Receipt
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDeliveredModal({ open: false, date: '', receiverName: '', receiptImage: '' })}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Delivered Date (DD-MMM-YY) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={deliveredModal.date}
+                  onChange={e => setDeliveredModal(prev => ({ ...prev, date: e.target.value }))}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Name of Receiver *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="E.g., Abdul Razzaq (Manager)"
+                  value={deliveredModal.receiverName}
+                  onChange={e => setDeliveredModal(prev => ({ ...prev, receiverName: e.target.value.toUpperCase() }))}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">
+                  Upload Delivery Receipt Image
+                </label>
+                <div
+                  onClick={() => receiptImgInputRef.current?.click()}
+                  className="border-2 border-dashed border-[#0C0C0C] p-4 text-center bg-[#E8DFC7] cursor-pointer hover:bg-[#dfd7bf] rounded"
+                >
+                  {deliveredModal.receiptImage ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-20 h-20 border border-[#0C0C0C] rounded overflow-hidden">
+                        <Image
+                          src={deliveredModal.receiptImage}
+                          alt="Receipt Preview"
+                          width={80}
+                          height={80}
+                          className="object-contain w-full h-full"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <span className="font-['DM_Mono',monospace] text-[0.65rem] text-[#0D9970] font-bold">
+                        ✓ Receipt Image Uploaded (Click to replace)
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="w-5 h-5 mx-auto mb-1 text-[#666]" />
+                      <span className="font-['DM_Mono',monospace] text-[0.72rem] font-bold">
+                        Click to select delivery receipt photo
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t-2 border-[#0C0C0C] mt-4">
+              <button
+                type="button"
+                onClick={() => setDeliveredModal({ open: false, date: '', receiverName: '', receiptImage: '' })}
+                className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDelivered}
+                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#15803d] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
+              >
+                Confirm Delivery
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 4: EDIT CASE DETAILS MODAL
+         ========================================================================= */}
+      {editingRecord && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-lg w-full p-6 relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-[#C94A00]" />
+                Edit Case ({editingRecord.folder})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingRecord(null)}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingRecord.folder || ''}
+                  onChange={e => setEditingRecord({ ...editingRecord, folder: e.target.value.toUpperCase() })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Class (1–45)</label>
+                  <input
+                    type="text"
+                    value={editingRecord.classNo || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, classNo: e.target.value.replace(/\D/g, '') })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">TM Number</label>
+                  <input
+                    type="text"
+                    value={editingRecord.tm || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, tm: e.target.value.toUpperCase() })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold uppercase"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Law Firm Name *</label>
+                <input
+                  type="text"
+                  value={editingRecord.lawFirm || editingRecord.conName || ''}
+                  onChange={e => setEditingRecord({ ...editingRecord, lawFirm: e.target.value.toUpperCase(), conName: e.target.value.toUpperCase() })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Applicant Name</label>
+                <input
+                  type="text"
+                  value={editingRecord.appName || ''}
+                  onChange={e => setEditingRecord({ ...editingRecord, appName: e.target.value.toUpperCase() })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Trading As / Business</label>
+                <input
+                  type="text"
+                  value={editingRecord.appTrade || ''}
+                  onChange={e => setEditingRecord({ ...editingRecord, appTrade: e.target.value.toUpperCase() })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Dispatched Date</label>
+                  <input
+                    type="text"
+                    placeholder="ddd DD-MMM-YYYY"
+                    value={editingRecord.dispatchedDate || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, dispatchedDate: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Tracking ID</label>
+                  <input
+                    type="text"
+                    value={editingRecord.trackingId || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, trackingId: e.target.value.toUpperCase() })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Delivered Date</label>
+                  <input
+                    type="text"
+                    placeholder="DD-MMM-YY"
+                    value={editingRecord.deliveredDate || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, deliveredDate: e.target.value })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Receiver Name</label>
+                  <input
+                    type="text"
+                    value={editingRecord.receiverName || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, receiverName: e.target.value.toUpperCase() })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Internal Notes</label>
+                <textarea
+                  rows={2}
+                  value={editingRecord.notes || ''}
+                  onChange={e => setEditingRecord({ ...editingRecord, notes: e.target.value })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded text-[0.8rem]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t-2 border-[#0C0C0C] mt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingRecord(null)}
+                  className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRecord}
+                  className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#C94A00] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
+                >
+                  {savingRecord ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 5: HELP & WORKFLOW RULES MODAL
+         ========================================================================= */}
+      {helpModalOpen && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-lg w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-[#0284c7]" />
+                CMS Workflow Rules &amp; Guide
+              </h3>
+              <button
+                type="button"
+                onClick={() => setHelpModalOpen(false)}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 font-['Space_Grotesk'] text-[0.85rem] text-[#333]">
+              <div className="p-3 bg-[#FFE066]/30 border-2 border-[#0C0C0C] rounded">
+                <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0C0C0C] mb-1">
+                  1. WORKFLOW SEQUENCE
+                </div>
+                <div>Pending / In Review → Approved / Rejected → Dispatched → Delivered</div>
+              </div>
+
+              <div className="p-3 bg-[#EBF7F2] border-2 border-[#0C0C0C] rounded">
+                <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0D9970] mb-1">
+                  2. CSV IMPORT &amp; EXPORT
+                </div>
+                <div>You can download all cases at any time as CSV or import cases directly with zero network latency.</div>
+              </div>
+
+              <div className="p-3 bg-white border-2 border-[#0C0C0C] rounded">
+                <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00] mb-1">
+                  3. BULK REASSIGNMENT
+                </div>
+                <div>Select any number of rows with checkboxes to bulk update their status or reassign them to an existing saved client.</div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t-2 border-[#0C0C0C] mt-4">
+              <button
+                type="button"
+                onClick={() => setHelpModalOpen(false)}
+                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0C0C0C] text-[#FAF6EE] rounded cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 6: SETTINGS MODAL
+         ========================================================================= */}
+      {settingsModalOpen && (
+        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-sm w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
+                <Settings className="w-5 h-5 text-[#666]" />
+                CMS Preferences
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="flex items-center justify-between">
+                <span>Show Law Firm Widget:</span>
+                <input
+                  type="checkbox"
+                  checked={showCharts}
+                  onChange={e => setShowCharts(e.target.checked)}
+                  className="w-4 h-4 cursor-pointer"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span>Page Size:</span>
+                <select
+                  value={pageSize}
+                  onChange={e => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="p-1 border border-[#0C0C0C] bg-white rounded font-bold font-['DM_Mono',monospace] text-[0.75rem]"
+                >
+                  <option value={10}>10 rows</option>
+                  <option value={25}>25 rows</option>
+                  <option value={50}>50 rows</option>
+                  <option value={100}>100 rows</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t-2 border-[#0C0C0C] mt-5">
+              <button
+                type="button"
+                onClick={() => setSettingsModalOpen(false)}
+                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0C0C0C] text-[#FAF6EE] rounded cursor-pointer"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Footer />
     </div>
