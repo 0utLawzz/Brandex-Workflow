@@ -1,5 +1,9 @@
-export const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyUMRVcdasDxGIaaPKbSzhEVbkKyMyYLNv4-NQ8pyGJEjWOukRPzS3Pt5Da6_CdNmP33Q/exec";
-export const SHEET_URL = "https://docs.google.com/spreadsheets/d/1u7oYu63G28y54byhOw-2KS3nlt7GrpmbkT3uKMX2b8M/edit?gid=1496727423#gid=1496727423";
+export const APPS_SCRIPT_URL =
+  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APPS_SCRIPT_URL) ||
+  "https://script.google.com/macros/s/AKfycbyUMRVcdasDxGIaaPKbSzhEVbkKyMyYLNv4-NQ8pyGJEjWOukRPzS3Pt5Da6_CdNmP33Q/exec";
+export const SHEET_URL =
+  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SHEET_URL) ||
+  "https://docs.google.com/spreadsheets/d/1u7oYu63G28y54byhOw-2KS3nlt7GrpmbkT3uKMX2b8M/edit?gid=1496727423#gid=1496727423";
 
 export const WORKFLOW_STATUSES = [
   "PENDING",

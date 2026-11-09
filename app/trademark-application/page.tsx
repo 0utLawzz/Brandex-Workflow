@@ -7,6 +7,7 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
 import { standaloneDB } from '@/lib/standalone-db';
+import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
   const [selectedCategory, setSelectedCategory] = useState('INITIAL');
@@ -54,6 +55,13 @@ export default function TrademarkApplicationPage() {
   const [statusMsg, setStatusMsg] = useState('');
   const [statusType, setStatusType] = useState<'success' | 'error' | 'info' | ''>('');
   const [statusLinks, setStatusLinks] = useState<{ folderUrl?: string; tm1Url?: string; tm48Url?: string } | null>(null);
+
+  // Google Apps Script Permission Guide Modal State
+  const [permissionErrorModalOpen, setPermissionErrorModalOpen] = useState(false);
+  const [copiedManifest, setCopiedManifest] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [lastSavedCaseId, setLastSavedCaseId] = useState<number | null>(null);
+  const [lastSavedFolder, setLastSavedFolder] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +293,8 @@ export default function TrademarkApplicationPage() {
         filingProcess: 'PENDING',
       });
       const insertedRecordId = newRec.id;
+      setLastSavedCaseId(insertedRecordId);
+      setLastSavedFolder(payload.folder);
 
       // 2. Insert initial status history in Standalone DB
       standaloneDB.addHistory(
@@ -353,9 +363,27 @@ export default function TrademarkApplicationPage() {
     } catch (err: any) {
       clearInterval(progressTimerRef.current as NodeJS.Timeout);
       setProgressPercent(100);
-      setStatusType('error');
-      setStatusMsg('❌ Request failed: ' + err.message);
-      notifyResult(false, err.message);
+
+      const errText = String(err?.message || err || '');
+      const isDocPermissionError =
+        errText.includes('DocumentApp') ||
+        errText.includes('permissions are not sufficient') ||
+        errText.includes('auth/documents');
+
+      if (isDocPermissionError) {
+        setStatusType('info');
+        setPermissionErrorModalOpen(true);
+        setStatusMsg(
+          `⚠️ <strong>CASE SAVED IN STANDALONE DATABASE!</strong><br />` +
+          `Record <strong>${folder || 'Trademark Case'}</strong> (Client: ${clientCode} · Case #${caseNo}) was successfully registered in your local ledger.<br />` +
+          `<span class="text-[#991b1b] font-bold">Google Docs Note:</span> Apps Script requires Google Docs permission authorization to call <code>DocumentApp.openById</code>.`
+        );
+        notifyResult(false, 'Case saved locally. Apps Script requires Google Docs authorization.');
+      } else {
+        setStatusType('error');
+        setStatusMsg('❌ Request failed: ' + errText);
+        notifyResult(false, errText);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -905,6 +933,25 @@ export default function TrademarkApplicationPage() {
             }`}
           >
             <div dangerouslySetInnerHTML={{ __html: statusMsg }} />
+            {statusType === 'info' && (
+              <div className="mt-4 pt-3 border-t-2 border-[#0C0C0C]/20 flex flex-wrap gap-2.5 items-center">
+                <button
+                  type="button"
+                  onClick={() => setPermissionErrorModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.78rem] font-bold py-2 px-3.5 bg-[#C94A00] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-[#b54000] cursor-pointer"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Fix Apps Script Permissions (2-Min Guide)
+                </button>
+                <Link
+                  href="/records"
+                  className="inline-flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.78rem] font-bold py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-2 border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white"
+                >
+                  <ArrowRight className="w-3.5 h-3.5 text-[#0D9970]" />
+                  View Case #{caseNo} in Records Dashboard
+                </Link>
+              </div>
+            )}
             {statusLinks && (
               <div className="mt-3 pt-3 border-t border-[#0C0C0C]/25 flex flex-wrap gap-3 font-['DM_Mono',monospace] text-[0.8rem]">
                 {statusLinks.folderUrl && (
@@ -927,6 +974,164 @@ export default function TrademarkApplicationPage() {
                 </Link>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Apps Script Permission Authorization Guide Modal */}
+        {permissionErrorModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 text-[#0C0C0C]">
+              {/* Header */}
+              <div className="flex items-start justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
+                <div>
+                  <div className="inline-flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#FFE066] border border-[#0C0C0C] rounded-[3px] mb-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-[#C94A00]" />
+                    ACTION REQUIRED: GOOGLE DOCS SCOPE
+                  </div>
+                  <h3 className="font-['Bebas_Neue'] text-[1.8rem] tracking-[1px] leading-tight">
+                    Authorize Google Apps Script Permissions
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPermissionErrorModalOpen(false)}
+                  className="p-1 border-2 border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#F0E8D0] rounded-[4px] cursor-pointer shadow-[2px_2px_0_#0C0C0C]"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Status Note */}
+              <div className="bg-[#d1fae5] border-2 border-[#0C0C0C] p-3 rounded-[4px] mb-4 text-[0.85rem] font-['Space_Grotesk']">
+                <strong className="text-[#065f46] font-bold">Good news:</strong> Your case <strong>{lastSavedFolder || folder || 'Trademark Case'}</strong> (Client {clientCode} · Case #{caseNo}) has already been safely saved in the <strong>Standalone Database</strong>! You can view and manage it right away in the Records Dashboard.
+              </div>
+
+              <p className="text-[0.88rem] mb-4 font-['Space_Grotesk'] leading-relaxed">
+                To auto-generate live <strong>TM-1</strong> and <strong>TM-48</strong> Google Docs in your Drive folder, Google requires you to grant the <code className="bg-[#E8DFC7] px-1 py-0.5 rounded border border-[#0C0C0C] text-[0.8rem] font-mono">https://www.googleapis.com/auth/documents</code> OAuth permission to your Apps Script deployment.
+              </p>
+
+              {/* 4 Steps */}
+              <div className="space-y-4 mb-6">
+                {/* Step 1 */}
+                <div className="p-3.5 bg-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold px-2 py-0.5 bg-[#C94A00] text-white rounded">
+                      STEP 1
+                    </span>
+                    <a
+                      href="https://script.google.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-['DM_Mono',monospace] text-[0.72rem] underline font-bold flex items-center gap-1 text-[#C94A00]"
+                    >
+                      Open Google Apps Script <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <p className="text-[0.85rem] font-bold mb-1">Open your Apps Script Project</p>
+                  <p className="text-[0.8rem] text-[#444]">
+                    Open your Brandex mailmerge project at script.google.com. On the left sidebar, click <strong>Project Settings (⚙️)</strong> and check <strong>&quot;Show &apos;appsscript.json&apos; manifest file in editor&quot;</strong>.
+                  </p>
+                </div>
+
+                {/* Step 2 */}
+                <div className="p-3.5 bg-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold px-2 py-0.5 bg-[#0D9970] text-white rounded">
+                      STEP 2
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const manifestContent = JSON.stringify({
+                          timeZone: "Asia/Karachi",
+                          dependencies: {},
+                          exceptionLogging: "STACKDRIVER",
+                          runtimeVersion: "V8",
+                          oauthScopes: [
+                            "https://www.googleapis.com/auth/documents",
+                            "https://www.googleapis.com/auth/spreadsheets",
+                            "https://www.googleapis.com/auth/drive"
+                          ]
+                        }, null, 2);
+                        navigator.clipboard.writeText(manifestContent);
+                        setCopiedManifest(true);
+                        setTimeout(() => setCopiedManifest(false), 2000);
+                      }}
+                      className="font-['DM_Mono',monospace] text-[0.72rem] py-1 px-2.5 bg-[#FAF6EE] border border-[#0C0C0C] rounded font-bold cursor-pointer hover:bg-white flex items-center gap-1"
+                    >
+                      {copiedManifest ? <Check className="w-3 h-3 text-[#0D9970]" /> : <Copy className="w-3 h-3" />}
+                      {copiedManifest ? 'Copied Manifest!' : 'Copy appsscript.json'}
+                    </button>
+                  </div>
+                  <p className="text-[0.85rem] font-bold mb-1">Verify appsscript.json Manifest</p>
+                  <p className="text-[0.8rem] text-[#444]">
+                    Switch to the Editor tab (<code className="font-mono text-xs">&lt; &gt;</code>), click <strong>appsscript.json</strong>, and ensure <code className="font-mono text-xs">&quot;https://www.googleapis.com/auth/documents&quot;</code> is listed in <code className="font-mono text-xs">oauthScopes</code>.
+                  </p>
+                </div>
+
+                {/* Step 3 */}
+                <div className="p-3.5 bg-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold px-2 py-0.5 bg-[#D4A800] text-[#0C0C0C] rounded">
+                      STEP 3
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snippet = `function authorizeScript() {\n  var doc = DocumentApp.create("Brandex_Permission_Check_Temp");\n  DriveApp.getFileById(doc.getId()).setTrashed(true);\n  Logger.log("✅ Google Docs authorized!");\n}`;
+                        navigator.clipboard.writeText(snippet);
+                        setCopiedScript(true);
+                        setTimeout(() => setCopiedScript(false), 2000);
+                      }}
+                      className="font-['DM_Mono',monospace] text-[0.72rem] py-1 px-2.5 bg-[#FAF6EE] border border-[#0C0C0C] rounded font-bold cursor-pointer hover:bg-white flex items-center gap-1"
+                    >
+                      {copiedScript ? <Check className="w-3 h-3 text-[#0D9970]" /> : <Copy className="w-3 h-3" />}
+                      {copiedScript ? 'Copied Function!' : 'Copy authorizeScript'}
+                    </button>
+                  </div>
+                  <p className="text-[0.85rem] font-bold mb-1">Run authorizeScript to Grant Google Permission</p>
+                  <p className="text-[0.8rem] text-[#444]">
+                    In <strong>Code.gs</strong>, select <strong>authorizeScript</strong> in the toolbar dropdown and click <strong>Run</strong>. When Google prompts &quot;Authorization required&quot;, click:
+                    <br />
+                    <span className="font-semibold text-[#0C0C0C]">Review permissions → Select Google Account → Advanced → Go to Brandex (unsafe) → Allow</span>.
+                  </p>
+                </div>
+
+                {/* Step 4 */}
+                <div className="p-3.5 bg-[#fff8e1] border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold px-2 py-0.5 bg-[#0C0C0C] text-white rounded">
+                      STEP 4 · CRITICAL
+                    </span>
+                  </div>
+                  <p className="text-[0.85rem] font-bold mb-1">Deploy as a &quot;New Version&quot;</p>
+                  <p className="text-[0.8rem] text-[#444]">
+                    In Google Apps Script, web app permissions only update when a new version is created:
+                    <br />
+                    Click <strong>Deploy → Manage deployments → ✏️ Edit icon</strong>.
+                    <br />
+                    Change the Version dropdown to <strong>&quot;New version&quot;</strong> and click <strong>Deploy</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex flex-wrap gap-3 justify-end pt-3 border-t-2 border-[#0C0C0C]">
+                <Link
+                  href="/records"
+                  className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#0D9970] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-[#0b805d] flex items-center gap-1.5"
+                >
+                  <ArrowRight className="w-4 h-4" /> Go to Records Dashboard
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setPermissionErrorModalOpen(false)}
+                  className="font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#FAF6EE] text-[#0C0C0C] border-2 border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer"
+                >
+                  Close &amp; Continue
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -2,14 +2,43 @@
 // BRANDEX LAW ASSOCIATES — FULL MAILMERGE + WEB FORM HANDLER
 // Single Consolidated Code.gs — Complete Backend Script
 // 
-// PERMISSION FIX:
-// Notice: "/** @OnlyCurrentDoc */" has been REMOVED so DocumentApp.openById
-// has the required "https://www.googleapis.com/auth/documents" scope.
-// When deploying in Apps Script:
-// 1. Paste this ENTIRE file into Code.gs
-// 2. Deploy -> Manage deployments -> Edit (pencil icon)
-// 3. Select "New version" -> Deploy -> Authorize Access (Grant Docs + Drive)
+// HOW TO FIX: "Specified permissions are not sufficient to call DocumentApp.openById"
+// 1. In Apps Script Editor, go to Project Settings (⚙️) on the left.
+//    Check "Show 'appsscript.json' manifest file in editor".
+// 2. Click the editor (< >) and make sure "appsscript.json" has:
+//    "oauthScopes": [
+//      "https://www.googleapis.com/auth/documents",
+//      "https://www.googleapis.com/auth/spreadsheets",
+//      "https://www.googleapis.com/auth/drive"
+//    ]
+// 3. Select function "authorizeScript" in the toolbar dropdown and click "Run".
+//    Google will prompt "Authorization required". Click:
+//    Review permissions -> Select account -> Advanced -> Go to ... (unsafe) -> Allow.
+// 4. CRITICAL: Deploy -> Manage deployments -> Click the Edit (pencil) icon.
+//    Under Version, select "New version" -> Click "Deploy".
+//    (If you do not select "New version", the old deployment without permissions remains active!)
 // ═════════════════════════════════════════════════════════════════════
+
+/**
+ * Run this function directly inside the Apps Script editor to trigger
+ * the Google OAuth authorization prompt for DocumentApp, DriveApp, and SpreadsheetApp.
+ */
+function authorizeScript() {
+  Logger.log("Testing permissions for DocumentApp, DriveApp, and SpreadsheetApp...");
+  try {
+    var user = Session.getActiveUser().getEmail();
+    Logger.log("Active User: " + user);
+    var doc = DocumentApp.create("Brandex_Permission_Check_Temp");
+    var docId = doc.getId();
+    doc.getBody().setText("Brandex Law Associates Permission Authorization Test OK");
+    doc.saveAndClose();
+    DriveApp.getFileById(docId).setTrashed(true);
+    Logger.log("✅ DocumentApp & DriveApp permissions authorized successfully!");
+  } catch (err) {
+    Logger.log("❌ Error during authorization check: " + err.message);
+    throw err;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // 🌐 WEB APP ENDPOINTS (doGet & doPost)
