@@ -1,7 +1,0 @@
-{
-  "name": "Brandex Law Associates CMS",
-  "description": "Trademark Application Generator, Document MailMerge and Records CMS for Brandex Law Associates",
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

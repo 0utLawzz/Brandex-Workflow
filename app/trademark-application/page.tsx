@@ -157,6 +157,19 @@ export default function TrademarkApplicationPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (!['image/png', 'image/jpeg'].includes(file.type)) {
+        e.target.value = '';
+        setStatusType('error');
+        setStatusMsg('Choose a PNG or JPEG image.');
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        e.target.value = '';
+        setStatusType('error');
+        setStatusMsg('Logo images must be 2 MB or smaller.');
+        return;
+      }
+
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -344,10 +357,10 @@ export default function TrademarkApplicationPage() {
 
         setStatusType('success');
         setStatusMsg(
-          `✅ Success! Documents generated; a copy of the case is saved in this browser.<br>` +
-          `<strong>${payload.folder}</strong> (Client: ${clientCode} · Case #${caseNo})<br>` +
-          `Applicant: ${payload.appName} &nbsp;|&nbsp; Status: ${payload.status}<br>` +
-          (payload.trackingId ? `Tracking ID: ${payload.trackingId}<br>` : '')
+          `✅ Success! Documents generated; a copy of the case is saved in this browser.\n` +
+          `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
+          `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
+          (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
         );
         setStatusLinks({
           folderUrl: data.folderUrl,
@@ -356,7 +369,9 @@ export default function TrademarkApplicationPage() {
         });
         notifyResult(true, `${payload.folder} — documents generated and exported successfully.`);
       } else {
-        throw new Error(data.error || `Google Apps Script request failed (HTTP ${res.status}). The case remains saved in this browser.`);
+        const error = new Error(data.error || `Google Apps Script request failed (HTTP ${res.status}). The case remains saved in this browser.`);
+        (error as Error & { code?: string }).code = data.code;
+        throw error;
       }
     } catch (err: any) {
       clearInterval(progressTimerRef.current as NodeJS.Timeout);
@@ -364,6 +379,7 @@ export default function TrademarkApplicationPage() {
 
       const errText = String(err?.message || err || '');
       const isDocPermissionError =
+        err?.code === 'GOOGLE_DOCS_PERMISSION_REQUIRED' ||
         errText.includes('DocumentApp') ||
         errText.includes('permissions are not sufficient') ||
         errText.includes('auth/documents');
@@ -372,11 +388,11 @@ export default function TrademarkApplicationPage() {
         setStatusType('info');
         setPermissionErrorModalOpen(true);
         setStatusMsg(
-          `⚠️ <strong>CASE SAVED IN STANDALONE DATABASE!</strong><br />` +
-          `Record <strong>${folder || 'Trademark Case'}</strong> (Client: ${clientCode} · Case #${caseNo}) was successfully registered in your local ledger.<br />` +
-          `<span class="text-[#991b1b] font-bold">Google Docs Note:</span> Apps Script requires Google Docs permission authorization to call <code>DocumentApp.openById</code>.`
+          `⚠️ CASE COPY SAVED IN THIS BROWSER!\n` +
+          `Record ${folder || 'Trademark Case'} (Client: ${clientCode} · Case #${caseNo}) remains in this browser's local ledger.\n` +
+          'Google Docs Note: Apps Script requires Google Docs permission authorization to call DocumentApp.openById.'
         );
-        notifyResult(false, 'Case saved locally. Apps Script requires Google Docs authorization.');
+        notifyResult(false, 'Case copy saved in this browser. Apps Script needs Google Docs authorization.');
       } else {
         setStatusType('error');
         setStatusMsg('❌ Request failed: ' + errText);
@@ -826,11 +842,11 @@ export default function TrademarkApplicationPage() {
                 className="border-2 border-dashed border-[#0C0C0C] p-6 text-center bg-[#E8DFC7] cursor-pointer hover:bg-[#dfd7bf] transition-colors rounded-[4px] mb-4"
               >
                 <p className="font-['DM_Mono',monospace] text-[0.85rem] font-bold">Click or Drag &amp; Drop Logo Image Here</p>
-                <p className="font-['DM_Mono',monospace] text-[0.65rem] text-[#666] mt-1">PNG, JPG, JPEG • Max Recommended 2MB</p>
+                <p className="font-['DM_Mono',monospace] text-[0.65rem] text-[#666] mt-1">PNG or JPEG · Maximum 2 MB</p>
                 <input
                   type="file"
                   ref={fileInputRef}
-                  accept="image/*"
+                  accept="image/png,image/jpeg"
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -928,7 +944,7 @@ export default function TrademarkApplicationPage() {
                 : 'bg-[#fef3c7] text-[#92400e]'
               }`}
           >
-            <div dangerouslySetInnerHTML={{ __html: statusMsg }} />
+            <div className="whitespace-pre-line">{statusMsg}</div>
             {statusType === 'info' && (
               <div className="mt-4 pt-3 border-t-2 border-[#0C0C0C]/20 flex flex-wrap gap-2.5 items-center">
                 <button

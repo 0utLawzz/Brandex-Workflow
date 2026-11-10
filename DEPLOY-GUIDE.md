@@ -9,7 +9,10 @@ All pages and application logic are **100% self-contained inside this repository
 ```
 Brandex-Workflow2/
 ├── app/
-│   ├── page.tsx                     # CMS Home (Automatic Slider + Screen Wipe Transition)
+│   ├── api/
+│   │   ├── applications/route.ts    # Authenticated application proxy
+│   │   └── records/route.ts         # Authenticated records proxy
+│   ├── page.tsx                     # CMS Home
 │   ├── records/
 │   │   └── page.tsx                 # Trademark Records & Timeline Dashboard
 │   ├── trademark-application/
@@ -23,8 +26,11 @@ Brandex-Workflow2/
 │   ├── layout.tsx                   # Root HTML Layout & Meta Tags
 │   └── globals.css                  # Tailwind CSS Styles
 ├── lib/
-│   ├── standalone-db.ts             # In-App Standalone Engine (Zero Latency & 100% Offline)
-│   └── data.ts                      # Nic-Classes & Govt Portals Configuration
+│   ├── apps-script-proxy.ts         # Server-only token proxy
+│   ├── standalone-db.ts             # Browser localStorage store
+│   └── data.ts                      # Classes, statuses, and endpoint config
+├── middleware.ts                    # Production Basic Auth gate
+├── Code.gs                          # Google Apps Script backend source
 ├── public/                          # Static Assets & Thumbnails
 ├── package.json                     # Next.js 15 & Dependencies
 ├── next.config.ts                   # Next.js Configuration
@@ -47,9 +53,9 @@ When importing `Brandex-Workflow2` into Vercel:
 
 ### Hostinger Node.js Upload
 
-For Hostinger plans with Node.js app support, upload a source archive rooted at the project files. Use the `Next.js` preset, Node.js `22.x`, root directory `./`, build command `npm run build`, and output directory `.next`. The start script runs the standalone server and uses the port assigned by the hosting platform.
+For Hostinger plans with Node.js app support, upload a source archive rooted at the project files. Use Node.js `22.x`, root directory `./`, install command `npm ci`, build command `npm run build`, and start command `npm start`. The standalone server uses the port assigned by the hosting platform.
 
-Include `app/`, `lib/`, `public/`, `middleware.ts`, `package.json`, the lockfile, and the Next.js configuration files. Do not include `.env`, `.git/`, `.next-dev/`, or `node_modules/`. Set `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN` as Hostinger runtime environment variables; never expose the token with a `NEXT_PUBLIC_` prefix. Optionally set `NEXT_PUBLIC_APPS_SCRIPT_URL` before building to override the built-in Apps Script endpoint. Use HTTPS.
+Include `app/`, `lib/`, `public/`, `middleware.ts`, `package.json`, `package-lock.json`, and the Next.js configuration files. Do not include `.env*`, `.git/`, `.next/`, `.next-dev/`, or `node_modules/`. Set `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN` as Hostinger runtime environment variables; never expose the token with a `NEXT_PUBLIC_` prefix. Optionally set `NEXT_PUBLIC_APPS_SCRIPT_URL` before building to override the built-in Apps Script endpoint. Use HTTPS.
 
 Before enabling production access, open the Apps Script project settings and add the Script Property `RECORDS_ACCESS_TOKEN` with the exact same secret as `APPS_SCRIPT_RECORDS_TOKEN`. Deploy a new web-app version after updating `Code.gs`. The Records page and application form now call same-origin Next.js API routes; those routes attach the secret server-side. The Apps Script `getRecords` GET action and all POST actions reject requests without that secret. A live deployment is not protected until the property and new script version are in place.
 
@@ -83,7 +89,7 @@ Hostinger runtime variables do not replace browser storage behavior. If you over
 
 ### Supabase migration status
 
-`supabase_schema.sql` and the setup modal describe an earlier proposed schema, but the running app does not use it. The schema does not cover all CMS fields. Its previously included example policies granted unrestricted access to anyone with the public anon key; those policies have been removed here, and the current draft leaves RLS enabled with access denied until reviewed policies are added. Do not run it as a production migration. A safe migration needs an agreed field mapping, an authentication and access policy design, and a one-time import plan for existing Sheet and browser-local records. No live data was migrated by this repository review.
+`supabase_schema.sql` describes an earlier proposed schema, but the running app does not use it. The schema does not cover all CMS fields and leaves RLS enabled with access denied until reviewed policies are added. Do not run it as a production migration. A safe migration needs an agreed field mapping, an authentication and access policy design, and a one-time import plan for existing Sheet and browser-local records. No live data was migrated by this repository review.
 
 ---
 

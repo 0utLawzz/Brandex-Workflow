@@ -1,9 +1,6 @@
 import type { NextConfig } from "next";
 
-const isProd = process.env.NODE_ENV === "production";
-
 const nextConfig: NextConfig = {
-  distDir: isProd ? ".next" : ".next-dev",
   output: "standalone",
   reactStrictMode: true,
   eslint: {

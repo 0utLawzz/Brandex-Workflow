@@ -1,5 +1,7 @@
 # Brandex MailMerge v1.3.0
 
+> Historical notes for the original static-site release (17 September 2026). The GitHub Pages URLs and deployment steps below are retired and do not describe the current Next.js application. Use [README.md](./README.md) and [DEPLOY-GUIDE.md](./DEPLOY-GUIDE.md) for current setup and deployment steps. New GitHub releases are generated from the matching version section in `CHANGELOG.md`.
+
 **Neo-Brutalism chrome · Form defaults · Records dashboard · Deploy docs**
 
 Release date: **17 September 2026**

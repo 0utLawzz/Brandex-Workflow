@@ -18,18 +18,15 @@ jobs:
       - name: Resolve notes
         id: notes
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          if [ -f RELEASE_NOTES.md ]; then
-            BODY=$(cat RELEASE_NOTES.md)
-          elif [ -f CHANGELOG.md ]; then
-            BODY=$(awk -v tag="${TAG#v}" '
-              BEGIN { p=0 }
-              $0 ~ "^## \\[" tag "\\]" { p=1; print; next }
-              p && $0 ~ /^## \[/ { exit }
-              p { print }
-            ' CHANGELOG.md)
-          else
-            BODY="Release ${TAG}"
+          TAG="${GITHUB_REF_NAME#v}"
+          BODY=$(awk -v tag="$TAG" '
+            $0 ~ "^## \\[" tag "\\]" { p=1; print; next }
+            p && /^## \\[/ { exit }
+            p { print }
+          ' CHANGELOG.md)
+          if [ -z "$BODY" ]; then
+            echo "::error::No matching CHANGELOG.md section for v${TAG}"
+            exit 1
           fi
           {
             echo "body<<EOF"
@@ -41,7 +38,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }} — Brandex MailMerge
+          name: ${{ github.ref_name }} — Brandex Workflow
           body: ${{ steps.notes.outputs.body }}
           draft: false
           prerelease: false

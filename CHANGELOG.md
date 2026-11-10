@@ -6,6 +6,26 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Security
+- Render application status as escaped React text instead of injecting HTML.
+- Require authenticated, non-cacheable app responses and proxy Apps Script access with a server-only token.
+- Remove legacy Supabase/Postgres helpers, including an unused SQL modal with permissive example policies.
+- Stop bundling sample client and case data with CNIC-like values; new stores now start empty.
+- Enforce PNG/JPEG-only logo uploads with a 2 MB maximum.
+
+### Fixed
+- Correct the browser data reset action so it clearly clears local records, clients, history, and documents.
+- Map the Sheet date and image fields from their actual columns in the Apps Script Records feed.
+- Make release notes resolve from the matching changelog version instead of reusing a stale release note.
+
+### Maintenance
+- Ignore and remove tracked Next.js development output and remove duplicate/invalid unused assets.
+- Use a committed npm lockfile and `npm ci` in CI and deployment instructions.
+- Pin patched PostCSS and safe TypeScript ESLint peer dependencies; add `npm audit` to CI.
+- Update contributor, deployment, and security documentation for the current Next.js app.
+
 ## [1.3.0] — 2026-09-17
 
 ### Summary

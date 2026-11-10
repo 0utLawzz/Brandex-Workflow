@@ -9,7 +9,7 @@ Brandex Workflow is a Next.js app for preparing trademark applications, tracking
 - The Records page combines records returned by Apps Script with records in the current browser.
 - Supabase is **not** used for application persistence. `supabase_schema.sql` is an incomplete schema draft; see the migration and security notes in [DEPLOY-GUIDE.md](./DEPLOY-GUIDE.md). Do not run it as a production migration.
 
-This means browser-only changes are not shared with other users and are not written back to the Sheet. A successful application submission is written by Apps Script to the Sheet, while its local copy remains in that browser.
+This means browser-only changes are not shared with other users and are not written back to the Sheet. A successful application submission is written by Apps Script to the Sheet, while its local copy remains in that browser. New browser profiles start with empty records and clients; use **Import JSON Backup** to restore data.
 
 ## Pages
 
@@ -22,10 +22,10 @@ This means browser-only changes are not shared with other users and are not writ
 
 ## Run locally
 
-Use Node.js 20 or 22 and npm:
+Use Node.js 20 or 22 and npm. `package-lock.json` is the canonical dependency lockfile:
 
 ```text
-npm install --no-package-lock
+npm ci
 npm run dev
 ```
 

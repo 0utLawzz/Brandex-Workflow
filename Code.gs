@@ -335,14 +335,15 @@ function getRecordsForView() {
       status: row[0] || "",
       folder: row[4] || "",
       tm: row[3] || "",
+      date: row[5] || "",
       classNo: row[6] || "",
       appName: row[9] || "",
       appTrade: row[14] || "",
       year: row[16] || "",
       conName: row[17] || "",
+      img: row[19] || "",
       noImg: row[20] || "",
-      filingProcess: row[21] || "",
-      date: row[12] || ""
+      filingProcess: row[21] || ""
     });
   }
 

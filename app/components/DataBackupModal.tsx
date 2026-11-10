@@ -66,9 +66,9 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   };
 
   const handleReset = () => {
-    if (confirm('Reset standalone database to initial sample records & clients?')) {
-      standaloneDB.resetToFactoryDefaults();
-      setStatusMsg({ text: 'Database reset to initial sample data.', type: 'success' });
+    if (confirm('Delete all records, clients, history, and documents saved in this browser? Export a backup first; this cannot be undone.')) {
+      standaloneDB.clearAllData();
+      setStatusMsg({ text: 'All browser data was cleared.', type: 'success' });
       if (onDataChanged) onDataChanged();
     }
   };
@@ -143,12 +143,12 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
           </div>
         </div>
 
-        {/* Reset to Factory Defaults */}
+        {/* Clear Browser Data */}
         <div className="p-4 border-2 border-[#0C0C0C] bg-[#FAF6EE] rounded-[4px] flex items-center justify-between">
           <div>
-            <div className="font-['Bebas_Neue'] text-[1.15rem]">Reset Sample Data</div>
+            <div className="font-['Bebas_Neue'] text-[1.15rem]">Clear Browser Data</div>
             <div className="text-[0.7rem] font-['DM_Mono',monospace] text-[#666]">
-              Restore initial Brandex case records &amp; client directory.
+              Remove all records, clients, history, and documents from this browser.
             </div>
           </div>
           <button

@@ -11,12 +11,18 @@ function constantTimeEqual(left: string, right: string) {
     return difference === 0;
 }
 
+function authenticatedResponse() {
+    const response = NextResponse.next();
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0');
+    return response;
+}
+
 export function middleware(request: NextRequest) {
     const username = process.env.APP_ACCESS_USER;
     const password = process.env.APP_ACCESS_PASSWORD;
 
     if (!username || !password) {
-        if (process.env.NODE_ENV !== 'production') return NextResponse.next();
+        if (process.env.NODE_ENV !== 'production') return authenticatedResponse();
         return new NextResponse('Application access is not configured.', {
             status: 503,
             headers: { 'Cache-Control': 'no-store' },
@@ -34,7 +40,7 @@ export function middleware(request: NextRequest) {
             const providedPassword = separator < 0 ? '' : credentials.slice(separator + 1);
 
             if (constantTimeEqual(providedUsername, username) && constantTimeEqual(providedPassword, password)) {
-                return NextResponse.next();
+                return authenticatedResponse();
             }
         } catch {
             // Treat malformed Basic credentials as unauthorized.

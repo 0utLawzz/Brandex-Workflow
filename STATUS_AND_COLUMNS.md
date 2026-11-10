@@ -1,49 +1,38 @@
-# Status values & column labels (sync Sheet + Apps Script + UI)
+# Google Sheets Columns and Statuses
 
-## Column A — STATUS (simple values)
+`Code.gs` is the source of truth for the `Sheet1` header row and validation lists. Keep the 22 columns in this order; `getRecordsForView()` maps these positions into the Records page.
 
-Use **only** these in the Sheet and Apps Script:
+| Column | Header | Records feed / behavior |
+| --- | --- | --- |
+| A | `STATUS` | `START ‼`, `GENERATING`, `DONE`, or `ERROR` |
+| B | `STAGE` | `STAGE 1`; paired with `START ‼` for manual processing actions |
+| C | `SR NO` | Generated serial number |
+| D | `TM-NO` | Trademark number |
+| E | `NAME` | Record folder / mark name |
+| F | `DATE L` | Date shown as `date` in Records |
+| G | `CLASS` | Nice class number |
+| H | `CLASS-DESC` | Class goods/services description |
+| I | `APP-TYPE` | Applicant type |
+| J | `APP-NAME` | Applicant name |
+| K | `APP-SO` | Applicant father/representative field |
+| L | `APP-CNIC` | CNIC |
+| M | `ISSUE-DATE` | Issue date; not the Records `date` field |
+| N | `EXPIRY-DATE` | Expiry date |
+| O | `APP-TRADE` | Trading-as name |
+| P | `APP-ADD` | Applicant address |
+| Q | `YEAR` | Usage year |
+| R | `CON-NAME` | Consultant name |
+| S | `CON-ADD` | Consultant address |
+| T | `IMG` | Uploaded Drive image ID; exposed as `img` |
+| U | `NO-IMG` | Fallback image text |
+| V | `FILING PROCESS` | Filing status dropdown |
 
-| Value | When |
-|-------|------|
-| `START` | New row / waiting to process |
-| `PROCESSING` | Documents being generated |
-| `DONE` | Finished successfully |
-| `ERROR` | Failed (optional) |
+## Processing status
 
-### Apps Script replacements (in Code.gs)
+The form writes a row with `START ‼` and `STAGE 1`, then processes it immediately. Column A changes to `GENERATING`, then `DONE` or `ERROR`. The one-row and bulk Sheet menu actions only select rows whose Column A is `START ‼` and Column B is `STAGE 1`.
 
-```js
-// Old → New
-"START 💫"     → "START"
-"ON IT 👉"     → "PROCESSING"
-"DONE ✅"      → "DONE"
-"ERROR ❌"     → "ERROR"
-```
+The filing-process dropdown in Column V is maintained separately: `PENDING`, `IN REVIEW`, `APPROVED`, `REJECTED`, `DISPATCHED`, and `DELIVERED`.
 
-Update:
-- `processFormSubmission` / row writes
-- `processOneApplication` / bulk process
-- `setupDropdowns` validation list: `["START", "PROCESSING", "DONE", "ERROR"]`
-- Conditional formatting formulas if any
+## Nice classes
 
-Record View already maps old emoji statuses to START / PROCESSING / DONE tags.
-
-## Column header renames (UI)
-
-| Old UI label | New UI label |
-|--------------|--------------|
-| Mark Text | Name |
-| Date | Filing Date |
-| TM No | Trademark Number |
-| Img | Logo |
-
-Sheet header row can stay technical; UI uses the new names.
-
-## Filing date display
-
-Format: `DD-MMM-YY hh:mm AM/PM` (e.g. `19-SEP-26 02:45 PM`)
-
-## Class dropdown (Application form)
-
-Show plain numbers only: `1`, `2`, `3`, … `45` (description still auto-fills in the description field).
+Column G's dropdown is generated from `CLASS_DATA` in `Code.gs` (classes 1–45). When its value changes, `onEdit` fills the matching description into Column H.

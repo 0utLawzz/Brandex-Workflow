@@ -20,8 +20,16 @@ export async function proxyAppsScript(payload: Record<string, unknown>) {
         const data = await upstream.json();
 
         if (!upstream.ok || !data || data.ok !== true) {
+            const upstreamError = typeof data?.error === 'string' ? data.error : '';
+            const docsPermissionMissing = /DocumentApp|permissions are not sufficient|auth\/documents/i.test(upstreamError);
             return Response.json(
-                { ok: false, error: 'Apps Script request failed.' },
+                {
+                    ok: false,
+                    ...(docsPermissionMissing ? { code: 'GOOGLE_DOCS_PERMISSION_REQUIRED' } : {}),
+                    error: docsPermissionMissing
+                        ? 'Google Docs authorization is required. Follow the permission setup instructions.'
+                        : 'Apps Script request failed.',
+                },
                 { status: 502, headers: { 'Cache-Control': 'no-store' } },
             );
         }
