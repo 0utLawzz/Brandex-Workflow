@@ -111,7 +111,7 @@ export default function TrademarkApplicationPage() {
     setIssueDate(localStr);
     updateExpiry(now);
 
-    // Fetch saved clients from Standalone DB
+    // Fetch client profiles saved in this browser
     function fetchClients() {
       const clients = standaloneDB.getClients();
       setSavedClients(clients);
@@ -138,12 +138,11 @@ export default function TrademarkApplicationPage() {
     const client = savedClients.find(c => String(c.id) === clientId);
     if (client) {
       if (client.client_code) setClientCode(client.client_code);
-      if (client.name) setAppName(client.name);
+      if (client.client_name) setAppName(client.client_name);
       if (client.father_name) setAppSo(client.father_name);
-      if (client.company_name) setAppTrade(client.company_name);
+      if (client.trading_as) setAppTrade(client.trading_as);
       if (client.cnic) setAppCnic(client.cnic);
       if (client.address) setAppAdd(client.address);
-      if (client.folder || client.mark_name) setFolder(client.folder || client.mark_name);
     }
   };
 
@@ -223,7 +222,7 @@ export default function TrademarkApplicationPage() {
     setProgressPercent(10);
     setProgressLabel('Preparing request');
     setStatusType('info');
-    setStatusMsg('Processing and syncing with Supabase & Google Apps Script...');
+    setStatusMsg('Saving a local browser copy and sending the application to Google Apps Script...');
     setStatusLinks(null);
 
     progressTimerRef.current = setInterval(() => {
@@ -271,9 +270,9 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
-      // 1. Insert record into Standalone DB
+      // 1. Save a local browser copy before sending the application to Apps Script.
       setProgressPercent(30);
-      setProgressLabel('Saving record to Standalone DB');
+      setProgressLabel('Saving record in this browser');
       const newRec = standaloneDB.addRecord({
         selectionMenu,
         clientCode,
@@ -296,14 +295,14 @@ export default function TrademarkApplicationPage() {
       setLastSavedCaseId(insertedRecordId);
       setLastSavedFolder(payload.folder);
 
-      // 2. Insert initial status history in Standalone DB
+      // 2. Add initial status history to this browser's local copy.
       standaloneDB.addHistory(
         insertedRecordId,
         status.toUpperCase(),
         'Application created & generated.'
       );
 
-      // 3. Attach additional documents in Standalone DB
+      // 3. Add attachment metadata to this browser's local copy.
       if (additionalFiles.length > 0) {
         setProgressPercent(40);
         setProgressLabel('Attaching documents');
@@ -319,7 +318,7 @@ export default function TrademarkApplicationPage() {
       }
 
       setProgressPercent(60);
-      setProgressLabel('Sending to Apps Script Backend');
+      setProgressLabel('Sending application to Google Apps Script');
 
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
@@ -332,21 +331,21 @@ export default function TrademarkApplicationPage() {
       setProgressLabel('Processing response');
 
       const text = await res.text();
-      let data;
+      let data: any;
       try {
         data = JSON.parse(text);
       } catch {
-        data = { ok: true, serialNo: 'LOCAL-' + caseNo };
+        throw new Error('Google Apps Script returned an unreadable response. The case remains saved in this browser.');
       }
 
-      if (data.ok !== false) {
+      if (res.ok && data.ok === true) {
         clearInterval(progressTimerRef.current as NodeJS.Timeout);
         setProgressPercent(100);
         setProgressLabel('Completed');
 
         setStatusType('success');
         setStatusMsg(
-          `✅ Success! Documents generated & saved to Standalone DB.<br>` +
+          `✅ Success! Documents generated; a copy of the case is saved in this browser.<br>` +
           `<strong>${payload.folder}</strong> (Client: ${clientCode} · Case #${caseNo})<br>` +
           `Applicant: ${payload.appName} &nbsp;|&nbsp; Status: ${payload.status}<br>` +
           (payload.trackingId ? `Tracking ID: ${payload.trackingId}<br>` : '')
@@ -358,7 +357,7 @@ export default function TrademarkApplicationPage() {
         });
         notifyResult(true, `${payload.folder} — documents generated and exported successfully.`);
       } else {
-        throw new Error(data.error || 'Unknown server error');
+        throw new Error(data.error || `Google Apps Script request failed (HTTP ${res.status}). The case remains saved in this browser.`);
       }
     } catch (err: any) {
       clearInterval(progressTimerRef.current as NodeJS.Timeout);
@@ -1003,7 +1002,7 @@ export default function TrademarkApplicationPage() {
 
               {/* Status Note */}
               <div className="bg-[#d1fae5] border-2 border-[#0C0C0C] p-3 rounded-[4px] mb-4 text-[0.85rem] font-['Space_Grotesk']">
-                <strong className="text-[#065f46] font-bold">Good news:</strong> Your case <strong>{lastSavedFolder || folder || 'Trademark Case'}</strong> (Client {clientCode} · Case #{caseNo}) has already been safely saved in the <strong>Standalone Database</strong>! You can view and manage it right away in the Records Dashboard.
+                <strong className="text-[#065f46] font-bold">Good news:</strong> Your case <strong>{lastSavedFolder || folder || 'Trademark Case'}</strong> (Client {clientCode} · Case #{caseNo}) has a copy saved in this browser. You can view it in this browser&apos;s Records Dashboard.
               </div>
 
               <p className="text-[0.88rem] mb-4 font-['Space_Grotesk'] leading-relaxed">

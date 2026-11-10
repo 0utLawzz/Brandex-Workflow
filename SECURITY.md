@@ -2,37 +2,15 @@
 
 ## Scope
 
-This project is an internal tool for Brandex Law Associates. It handles
-client trademark filing data (names, CNIC numbers, addresses, and unfiled
-trademark logo images), so security issues here can expose confidential,
-not-yet-filed client information.
+This project handles trademark client names, CNICs, addresses, case details, and unfiled logo images. Security issues may expose confidential client information.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-If you find a security issue — for example, a way to access another
-client's folder, documents, or images without authorization, or a way to
-make the Apps Script backend leak data it shouldn't — please report it
-privately rather than opening a public GitHub issue:
+Please report security issues privately to the repository owner rather than opening a public issue. Include what you found, why it is a security issue, steps to reproduce it, and any suggested fix.
 
-- Open a private conversation with the repository owner ([@0utlawzz](https://github.com/0utlawzz)), or
-- Email the maintainer directly if you have their contact details.
+## Current design risks
 
-Please include:
-1. What you found and why it's a security issue.
-2. Steps to reproduce it.
-3. Any suggested fix, if you have one.
-
-We'll acknowledge reports as soon as possible and fix confirmed issues
-promptly, given this handles real client data.
-
-## Known Design Notes (not vulnerabilities, but worth knowing)
-
-- Uploaded trademark logo images are **intentionally never made public**
-  ("anyone with link") — they are embedded directly into the generated
-  Google Docs only. See `README.md` → *Image behavior*.
-- The Apps Script backend uses `/** @OnlyCurrentDoc */` to keep its
-  authorization scope as narrow as Apps Script allows for a bound script.
-- The web app URL (`APPS_SCRIPT_URL` in `trademark-application.html`) is
-  a public endpoint by necessity (the form is public-facing). It only
-  accepts a fixed `action: "generateFromForm"` payload shape — it does not
-  expose arbitrary Drive or Sheet access.
+- Client profiles and most case edits are stored in browser `localStorage`. This is not shared across users or devices and has no server-side access controls.
+- The browser calls a Google Apps Script web-app URL. Its `getRecords` action returns Sheet records without an authentication check. Anyone who can reach that endpoint may be able to read the returned client and case information. Restrict access before using it with confidential live data.
+- The Supabase schema file is a draft. It does not provide application authentication or persistence. RLS is enabled without public policies in this branch.
+- Trademark logo images are embedded into generated Google Docs; review Apps Script and Drive sharing settings for those documents.

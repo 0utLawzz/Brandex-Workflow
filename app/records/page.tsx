@@ -213,7 +213,7 @@ export default function RecordsPage() {
     const months: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
     const parts = String(d).toUpperCase().trim().split(/[-\/\s,]+/);
     if (parts.length < 3) return 0;
-    let day = 1;
+    let day = 0;
     let mon = 0;
     let year = 0;
     for (const p of parts) {

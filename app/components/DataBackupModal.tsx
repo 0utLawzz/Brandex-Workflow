@@ -94,7 +94,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-4 p-3 bg-[#EBF7F2] border-2 border-[#0D9970] rounded-[4px] flex items-center gap-2.5">
           <ShieldCheck className="w-5 h-5 text-[#0D9970] shrink-0" />
           <div className="text-[0.78rem] font-['DM_Mono',monospace] text-[#0C0C0C]">
-            <span className="font-bold">100% Standalone Mode Active:</span> All records and client profiles are securely stored locally in your browser with 0ms network latency.
+            <span className="font-bold">Browser storage active:</span> Records and client profiles are stored in this browser only. They are not shared across users or devices.
           </div>
         </div>
 

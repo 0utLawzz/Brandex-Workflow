@@ -105,7 +105,7 @@ export default function ClientsPage() {
       });
 
       setClients(standaloneDB.getClients());
-      setSuccessMsg(`Client profile for "${added.client_name}" saved to Standalone Database!`);
+      setSuccessMsg(`Client profile for "${added.client_name}" saved in this browser.`);
 
       // Reset form
       setClientName('');
@@ -332,7 +332,7 @@ export default function ClientsPage() {
               Saved Client Directory ({clients.length})
             </h2>
             <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#0D9970] font-bold">
-              ✓ 100% Standalone In-Memory &amp; Local Persistence
+              ✓ Saved in this browser
             </div>
           </div>
 

@@ -262,7 +262,7 @@ class StandaloneDB {
         return INITIAL_RECORDS;
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
       this.saveRecords(INITIAL_RECORDS);
@@ -348,7 +348,7 @@ class StandaloneDB {
         return INITIAL_CLIENTS;
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
       this.saveClients(INITIAL_CLIENTS);

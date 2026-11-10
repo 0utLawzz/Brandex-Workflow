@@ -43,22 +43,26 @@ When importing `Brandex-Workflow2` into Vercel:
 | **Output Directory** | `.next` | Default Next.js output |
 | **Node.js Version** | `20.x` or `22.x` | Recommended |
 
-### Environment Variables on Vercel:
-Because the app is **100% Standalone**, **NO database keys or Supabase secrets are required**. 
-Everything runs with zero network lag, zero latency, and zero risk of database credential exposure.
+### Hostinger Node.js Upload
 
-*Optional*:
-- `NEXT_PUBLIC_APPS_SCRIPT_URL`: *(Optional)* If you connect Google Apps Script to auto-generate TM-1/TM-48 Google Docs in Google Drive. If omitted, the app uses the built-in default Apps Script URL in `lib/data.ts`.
+For Hostinger plans with Node.js app support, upload a source archive rooted at the project files. Use the `Next.js` preset, Node.js `22.x`, root directory `./`, build command `npm run build`, and output directory `.next`. The start script runs the standalone server and uses the port assigned by the hosting platform.
+
+Include `app/`, `lib/`, `public/`, `package.json`, the lockfile, and the Next.js configuration files. Do not include `.env`, `.git/`, `.next-dev/`, or `node_modules/`. The build does not need database variables. The form uses its built-in Google Apps Script URL unless `NEXT_PUBLIC_APPS_SCRIPT_URL` is set in Hostinger before building.
+
+### Current data storage and environment variables
+This app is **not connected to Supabase for persistence**. Client profiles and CMS changes are saved in the current browser's `localStorage`; each browser/device has a separate copy. Initial application submissions also call Google Apps Script, which writes to the configured Google Sheet and generates Drive documents. The Records page reads that Apps Script feed and combines it with the current browser's local records.
+
+Hostinger runtime variables do not replace these browser storage behaviors. If you override `NEXT_PUBLIC_APPS_SCRIPT_URL`, set it in the build environment because `NEXT_PUBLIC_` values are embedded in the client bundle. `NEXT_PUBLIC_SHEET_URL` is not currently used by the page links, which still point to the configured Sheet directly.
+
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `DATABASE_URL` are not currently used by the app's persistence flow. Setting them will not move records to Supabase. Never put a Supabase service-role key or database password in a `NEXT_PUBLIC_` variable or browser bundle.
 
 ---
 
 ## 3. Security & Speed Optimizations
 
-1. **Zero Database Credential Leaks**:
-   - The app has been audited to remove external database round-trips. No anon keys, service roles, or database passwords can be intercepted or abused.
-2. **Instant 0ms Page Load**:
-   - Client and trademark records are loaded instantly from the embedded Standalone DB engine (`lib/standalone-db.ts`) with zero network latency.
-3. **Data Portability & 1-Click Backups**:
+1. **Browser-local data**:
+   - `lib/standalone-db.ts` uses browser `localStorage`. It is not a shared server database and can be cleared with browser data.
+2. **Data Portability & 1-Click Backups**:
    - Click **STANDALONE** in the top navbar or **Backup JSON** on the Records page to download a timestamped full JSON backup of all clients, records, timelines, and documents.
    - Restore or migrate your data on any device anytime using the **Import JSON Backup** feature.
    - Export filtered tables to standard CSV format anytime.
@@ -71,6 +75,9 @@ Everything runs with zero network lag, zero latency, and zero risk of database c
 - **Screen Wipe Transition**: High-impact Neo-Brutalism wipe animation when launching the Records Dashboard from the Home Page.
 - **Record Management & Timelines**: Full tracking of trademark filings, stages (DELIVERED, DISPATCHED, APPROVED, REVIEW, PENDING), and case history.
 - **Client Directory**: Manage client codes, CNICs, addresses, and instant auto-fill into applications.
+
+### Supabase migration status
+`supabase_schema.sql` and the setup modal describe an earlier proposed schema, but the running app does not use it. The schema does not cover all CMS fields. Its previously included example policies granted unrestricted access to anyone with the public anon key; those policies have been removed here, and the current draft leaves RLS enabled with access denied until reviewed policies are added. Do not run it as a production migration. A safe migration needs an agreed field mapping, an authentication and access policy design, and a one-time import plan for existing Sheet and browser-local records. No live data was migrated by this repository review.
 
 ---
 
@@ -118,4 +125,3 @@ This occurs because your deployed Google Apps Script Web App was deployed withou
 3. In the **Version** dropdown, change from the existing number to **"New version"**.
 4. Click **Deploy**.
 5. Done! The web application can now create and mailmerge Google Docs seamlessly.
-

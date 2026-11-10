@@ -65,14 +65,10 @@ CREATE TABLE IF NOT EXISTS public.clients (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable Row Level Security (RLS)
+-- Enable Row Level Security (RLS). No policies are created here, so API
+-- access remains denied until application authentication and role-specific
+-- policies have been designed and reviewed.
 ALTER TABLE public.trademark_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trademark_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trademark_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
-
--- Allow public access for anon key
-CREATE POLICY "Allow public all on trademark_records" ON public.trademark_records FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public all on trademark_history" ON public.trademark_history FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public all on trademark_documents" ON public.trademark_documents FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public all on clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
