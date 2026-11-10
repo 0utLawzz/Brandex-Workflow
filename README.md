@@ -44,6 +44,8 @@ See [DEPLOY-GUIDE.md](./DEPLOY-GUIDE.md) for Hostinger settings, environment-var
 
 ## Security
 
-This app handles client names, CNICs, addresses, and case details. The current browser-local store has no multi-user access control. The Apps Script `getRecords` action returns Sheet records through a public web-app endpoint, so treat that endpoint as exposing its returned data to anyone who can reach it. Review access controls before using it with confidential production records.
+This app handles client names, CNICs, addresses, and case details. In production, set `APP_ACCESS_USER` and `APP_ACCESS_PASSWORD` to enable the app's Basic Auth gate, and set `APPS_SCRIPT_RECORDS_TOKEN` as a server-only variable. Configure the matching Apps Script project property `RECORDS_ACCESS_TOKEN` and deploy the updated script. The app proxies record reads and form submissions server-side; direct Apps Script reads and writes are rejected without the token. Use HTTPS and do not expose the token through a `NEXT_PUBLIC_` variable.
+
+The current browser-local store still has no per-user data isolation, and localStorage remains accessible to anyone using an authenticated browser session. Review Google Drive sharing settings for generated documents. Existing Apps Script deployments remain exposed until the updated `Code.gs` is deployed with the matching Script Property.
 
 Never commit `.env` files, service-role keys, database passwords, or other secrets. The Supabase draft enables RLS without permissive policies in this branch; it does not implement application authentication or persistence.

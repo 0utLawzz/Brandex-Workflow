@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
+import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, SHEET_URL } from '@/lib/data';
 import { standaloneDB } from '@/lib/standalone-db';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2 } from 'lucide-react';
 
@@ -69,7 +69,7 @@ export default function TrademarkApplicationPage() {
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const formatDisplayDate = (d: Date) => {
-    const MONTHS_SHORT = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    const MONTHS_SHORT = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     let hh = d.getHours();
     const ampm = hh >= 12 ? 'PM' : 'AM';
     hh = hh % 12; if (hh === 0) hh = 12;
@@ -179,7 +179,7 @@ export default function TrademarkApplicationPage() {
       const AudioCtxRef = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!audioCtxRef.current) audioCtxRef.current = new AudioCtxRef();
       if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
-    } catch {}
+    } catch { }
   };
 
   const notifyResult = (success: boolean, message: string) => {
@@ -205,7 +205,7 @@ export default function TrademarkApplicationPage() {
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(success ? 'Documents Generated' : 'Document Error', { body: message });
       }
-    } catch {}
+    } catch { }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -320,11 +320,10 @@ export default function TrademarkApplicationPage() {
       setProgressPercent(60);
       setProgressLabel('Sending application to Google Apps Script');
 
-      const res = await fetch(APPS_SCRIPT_URL, {
+      const res = await fetch('/api/applications', {
         method: 'POST',
         body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        redirect: 'follow'
+        headers: { 'Content-Type': 'application/json' },
       });
 
       setProgressPercent(85);
@@ -437,9 +436,8 @@ export default function TrademarkApplicationPage() {
               key={cat.id}
               type="button"
               onClick={() => setSelectedCategory(cat.id)}
-              className={`font-['DM_Mono',monospace] text-[0.75rem] font-bold tracking-[1px] py-2.5 px-4 border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer uppercase ${
-                selectedCategory === cat.id ? 'bg-[#C94A00] text-white' : 'bg-[#FAF6EE] text-[#0C0C0C]'
-              }`}
+              className={`font-['DM_Mono',monospace] text-[0.75rem] font-bold tracking-[1px] py-2.5 px-4 border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] cursor-pointer uppercase ${selectedCategory === cat.id ? 'bg-[#C94A00] text-white' : 'bg-[#FAF6EE] text-[#0C0C0C]'
+                }`}
             >
               {cat.name} {cat.placeholder ? '(Soon)' : ''}
             </button>
@@ -923,13 +921,12 @@ export default function TrademarkApplicationPage() {
         {/* Status box */}
         {statusMsg && (
           <div
-            className={`mt-6 p-5 border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] rounded-[6px] font-['Space_Grotesk'] text-[0.95rem] ${
-              statusType === 'success'
-                ? 'bg-[#d1fae5] text-[#065f46]'
-                : statusType === 'error'
+            className={`mt-6 p-5 border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] rounded-[6px] font-['Space_Grotesk'] text-[0.95rem] ${statusType === 'success'
+              ? 'bg-[#d1fae5] text-[#065f46]'
+              : statusType === 'error'
                 ? 'bg-[#fee2e2] text-[#991b1b]'
                 : 'bg-[#fef3c7] text-[#92400e]'
-            }`}
+              }`}
           >
             <div dangerouslySetInnerHTML={{ __html: statusMsg }} />
             {statusType === 'info' && (

@@ -48,11 +48,11 @@ function doGet(e) {
   try {
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
     if (action === "getRecords") {
-      return jsonResponse({ ok: true, records: getRecordsForView() });
+      return jsonResponse({ ok: false, error: "Authentication required" });
     }
     return jsonResponse({
       ok: true,
-      message: "Brandex MailMerge backend is live. Use ?action=getRecords or POST generateFromForm."
+      message: "Brandex MailMerge backend is live."
     });
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err.message || err) });
@@ -62,6 +62,10 @@ function doGet(e) {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents || "{}");
+
+    if (!isAuthorizedBackendRequest(body)) {
+      return jsonResponse({ ok: false, error: "Authentication required" });
+    }
 
     if (body.action === "generateFromForm") {
       var result = processFormSubmission(body);
@@ -88,6 +92,11 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err.message || err) });
   }
+}
+
+function isAuthorizedBackendRequest(body) {
+  var expectedToken = PropertiesService.getScriptProperties().getProperty("RECORDS_ACCESS_TOKEN");
+  return Boolean(expectedToken && body && body.accessToken && body.accessToken === expectedToken);
 }
 
 function jsonResponse(obj) {

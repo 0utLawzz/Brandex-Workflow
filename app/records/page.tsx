@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { APPS_SCRIPT_URL, SHEET_URL } from '@/lib/data';
+import { SHEET_URL } from '@/lib/data';
 import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import {
   CheckSquare,
@@ -168,9 +168,9 @@ export default function RecordsPage() {
       // Background sync check with Apps Script
       let sheetRecords: RecordItem[] = [];
       try {
-        const res = await fetch(`${APPS_SCRIPT_URL}?action=getRecords&_=${Date.now()}`, {
+        const res = await fetch('/api/records', {
           method: 'GET',
-          redirect: 'follow',
+          cache: 'no-store',
         });
         const text = await res.text();
         const data = JSON.parse(text);
@@ -193,7 +193,7 @@ export default function RecordsPage() {
             trackingId: r.trackingId || '',
           }));
         }
-      } catch {}
+      } catch { }
 
       const map = new Map<string, RecordItem>();
       sheetRecords.forEach(r => map.set(`${r.folder}__${r.tm}`, r));
@@ -680,9 +680,8 @@ export default function RecordsPage() {
           {/* Box 2: Pending & In Review (Default) */}
           <div
             onClick={() => setFilterStatus('PENDING_IN_REVIEW')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
-              filterStatus === 'PENDING_IN_REVIEW' ? 'bg-[#FFE066]' : 'bg-[#FAF6EE] hover:bg-[#fff9db]'
-            }`}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'PENDING_IN_REVIEW' ? 'bg-[#FFE066]' : 'bg-[#FAF6EE] hover:bg-[#fff9db]'
+              }`}
           >
             <div className="flex items-center justify-between mb-1">
               <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#0C0C0C] uppercase">
@@ -703,9 +702,8 @@ export default function RecordsPage() {
           {/* Box 3: Approved / Rejected */}
           <div
             onClick={() => setFilterStatus('APPROVED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
-              filterStatus === 'APPROVED' ? 'bg-[#EBF7F2]' : 'bg-[#FAF6EE] hover:bg-[#f0fbf6]'
-            }`}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'APPROVED' ? 'bg-[#EBF7F2]' : 'bg-[#FAF6EE] hover:bg-[#f0fbf6]'
+              }`}
           >
             <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
               BOX 03 · APPROVED / REJECTED
@@ -722,9 +720,8 @@ export default function RecordsPage() {
           {/* Box 4: Dispatched / Delivered */}
           <div
             onClick={() => setFilterStatus('DISPATCHED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${
-              filterStatus === 'DISPATCHED' ? 'bg-[#e0f2fe]' : 'bg-[#FAF6EE] hover:bg-[#f0f9ff]'
-            }`}
+            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'DISPATCHED' ? 'bg-[#e0f2fe]' : 'bg-[#FAF6EE] hover:bg-[#f0f9ff]'
+              }`}
           >
             <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
               BOX 04 · DISPATCHED / DELIVERED
@@ -769,11 +766,10 @@ export default function RecordsPage() {
                         setSelectedConsultants(prev => [...prev, firmName]);
                       }
                     }}
-                    className={`p-3 border-2 border-[#0C0C0C] rounded-[4px] cursor-pointer transition-all ${
-                      selectedConsultants.includes(firmName)
+                    className={`p-3 border-2 border-[#0C0C0C] rounded-[4px] cursor-pointer transition-all ${selectedConsultants.includes(firmName)
                         ? 'bg-[#C94A00] text-white shadow-[2px_2px_0_#0C0C0C]'
                         : 'bg-white hover:bg-[#F0E8D0]'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold truncate max-w-[200px]" title={firmName}>
@@ -822,11 +818,10 @@ export default function RecordsPage() {
                     setFilterStatus(st.value);
                     setCurrentPage(1);
                   }}
-                  className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1.5 px-3 border-[1.5px] border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
-                    filterStatus === st.value
+                  className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1.5 px-3 border-[1.5px] border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${filterStatus === st.value
                       ? 'bg-[#0C0C0C] text-[#FAF6EE] shadow-[2px_2px_0_#C94A00]'
                       : 'bg-[#FAF6EE] text-[#0C0C0C] hover:bg-white'
-                  }`}
+                    }`}
                 >
                   {st.label}
                 </button>
@@ -850,9 +845,8 @@ export default function RecordsPage() {
                       );
                       setCurrentPage(1);
                     }}
-                    className={`font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 border border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
-                      isSelected ? 'bg-[#C94A00] text-white' : 'bg-white text-[#0C0C0C] hover:bg-[#F0E8D0]'
-                    }`}
+                    className={`font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 border border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${isSelected ? 'bg-[#C94A00] text-white' : 'bg-white text-[#0C0C0C] hover:bg-[#F0E8D0]'
+                      }`}
                   >
                     {isSelected ? '✓ ' : '+ '}
                     {cName.length > 22 ? cName.substring(0, 22) + '...' : cName}
@@ -1126,9 +1120,8 @@ export default function RecordsPage() {
                     return (
                       <tr
                         key={r.id || idx}
-                        className={`border-b border-[#ddd] transition-colors ${
-                          isSelected ? 'bg-[#FFE066]/30' : idx % 2 === 0 ? 'bg-[#FAF6EE]' : 'bg-[#F5EEDC]'
-                        } hover:bg-[#E8DFC7]`}
+                        className={`border-b border-[#ddd] transition-colors ${isSelected ? 'bg-[#FFE066]/30' : idx % 2 === 0 ? 'bg-[#FAF6EE]' : 'bg-[#F5EEDC]'
+                          } hover:bg-[#E8DFC7]`}
                       >
                         {/* Col 1: Tickmark Checkbox */}
                         <td className="p-2.5 text-center">
@@ -1450,11 +1443,10 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={() => setApproveRejectModal(prev => ({ ...prev, decision: 'APPROVED' }))}
-                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${
-                  approveRejectModal.decision === 'APPROVED'
+                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${approveRejectModal.decision === 'APPROVED'
                     ? 'bg-[#0D9970] text-white shadow-[3px_3px_0_#0C0C0C]'
                     : 'bg-white text-[#0C0C0C]'
-                }`}
+                  }`}
               >
                 ✓ Approve Case
               </button>
@@ -1462,11 +1454,10 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={() => setApproveRejectModal(prev => ({ ...prev, decision: 'REJECTED' }))}
-                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${
-                  approveRejectModal.decision === 'REJECTED'
+                className={`py-3 px-4 border-[2.5px] border-[#0C0C0C] rounded-[4px] font-['DM_Mono',monospace] text-[0.85rem] font-bold cursor-pointer transition-all ${approveRejectModal.decision === 'REJECTED'
                     ? 'bg-[#dc2626] text-white shadow-[3px_3px_0_#0C0C0C]'
                     : 'bg-white text-[#0C0C0C]'
-                }`}
+                  }`}
               >
                 ✕ Reject Case
               </button>
