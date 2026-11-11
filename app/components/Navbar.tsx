@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { HardDrive, ShieldCheck, Database } from 'lucide-react';
+import { HardDrive, ShieldCheck, Database, LogOut } from 'lucide-react';
 import DataBackupModal from './DataBackupModal';
 import SqlSetupModal from './SqlSetupModal';
 
@@ -12,6 +12,13 @@ export default function Navbar() {
   const pathname = usePathname();
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [showSqlModal, setShowSqlModal] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    window.location.href = '/login';
+  };
 
   return (
     <>
@@ -88,6 +95,15 @@ export default function Navbar() {
           >
             <ShieldCheck className="w-3.5 h-3.5 text-[#D4A800]" />
             <HardDrive className="w-3 h-3 text-[#D4A800] hidden sm:inline" />
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1 font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#FAF6EE] bg-[#0C0C0C] hover:bg-[#2b1818] border-[1.5px] border-[#DC2626] px-2 py-1 uppercase rounded-[3px] shadow-[2px_2px_0_#DC2626] cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-3 h-3 text-[#DC2626]" />
+            <span className="hidden md:inline text-[#FAF6EE]">EXIT</span>
           </button>
         </div>
       </nav>

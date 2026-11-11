@@ -18,13 +18,28 @@ function authenticatedResponse() {
 }
 
 export function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl;
+
+    // Public auth routes
+    if (pathname.startsWith('/login') || pathname.startsWith('/api/auth')) {
+        return NextResponse.next();
+    }
+
     const username = process.env.APP_ACCESS_USER;
     const password = process.env.APP_ACCESS_PASSWORD;
 
+    // If credentials are not configured, allow access
     if (!username || !password) {
         return authenticatedResponse();
     }
 
+    // Check cookie session (works perfectly inside iframes)
+    const sessionCookie = request.cookies.get('brandex_auth')?.value;
+    if (sessionCookie === '1' || sessionCookie === 'authenticated') {
+        return authenticatedResponse();
+    }
+
+    // Check HTTP Basic Auth header
     const authorization = request.headers.get('authorization') || '';
     const match = authorization.match(/^Basic\s+(.+)$/i);
 
@@ -43,15 +58,24 @@ export function middleware(request: NextRequest) {
         }
     }
 
-    return new NextResponse('Authentication required.', {
-        status: 401,
-        headers: {
-            'Cache-Control': 'no-store',
-            'WWW-Authenticate': 'Basic realm="Brandex Workflow", charset="UTF-8"',
-        },
-    });
+    // For API requests, return 401
+    if (pathname.startsWith('/api/')) {
+        return new NextResponse(JSON.stringify({ ok: false, error: 'Authentication required' }), {
+            status: 401,
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store',
+                'WWW-Authenticate': 'Basic realm="Brandex Workflow", charset="UTF-8"',
+            },
+        });
+    }
+
+    // For page requests, redirect to /login so the user can easily log in inside the iframe
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('from', pathname);
+    return NextResponse.redirect(loginUrl);
 }
 
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|assets|brandex-mark.svg).*)'],
 };
