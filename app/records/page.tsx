@@ -31,7 +31,11 @@ import {
   Calendar,
   Pencil,
   Trash2,
-  Database
+  Database,
+  Receipt,
+  Eye,
+  Paperclip,
+  ExternalLink
 } from 'lucide-react';
 
 // Highlight query matches in text
@@ -129,11 +133,17 @@ export default function RecordsPage() {
     date: string;
     note: string;
     trackingId: string;
+    dispatchedImage?: string;
+    dispatchedDocName?: string;
+    dispatchedDocType?: string;
   }>({
     open: false,
     date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
     note: '',
-    trackingId: ''
+    trackingId: '',
+    dispatchedImage: '',
+    dispatchedDocName: '',
+    dispatchedDocType: ''
   });
 
   // Delivered modal
@@ -151,13 +161,27 @@ export default function RecordsPage() {
     receiptImage: ''
   });
 
+  // Receipt & Proof Viewer Modal (for full-size viewing of dispatch receipt or delivery receipt)
+  const [proofModal, setProofModal] = useState<{
+    open: boolean;
+    title: string;
+    url: string;
+    docName?: string;
+    docType?: string;
+  }>({
+    open: false,
+    title: '',
+    url: ''
+  });
+
   // Edit Single Record Modal
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
   const [savingRecord, setSavingRecord] = useState(false);
 
-  // CSV file input ref
+  // File input refs
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
+  const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadAllRecords();
@@ -444,7 +468,10 @@ export default function RecordsPage() {
         record,
         date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
         note: record.dispatchedNote || '',
-        trackingId: record.trackingId || ''
+        trackingId: record.trackingId || '',
+        dispatchedImage: record.dispatchedImage || '',
+        dispatchedDocName: record.dispatchedDocName || '',
+        dispatchedDocType: record.dispatchedDocType || ''
       });
     } else if (targetStage === 'DELIVERED') {
       setDeliveredModal({
@@ -478,7 +505,7 @@ export default function RecordsPage() {
     setTimeout(() => setBulkNotice(null), 4000);
   };
 
-  // Submit Dispatch Details
+  // Submit Dispatch Details (Including courier tracking and proof of sending)
   const handleSaveDispatch = async () => {
     if (dispatchModal.record) {
       const r = dispatchModal.record;
@@ -487,19 +514,37 @@ export default function RecordsPage() {
         filingProcess: 'DISPATCHED',
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note,
-        trackingId: dispatchModal.trackingId || r.trackingId
+        trackingId: dispatchModal.trackingId || r.trackingId,
+        dispatchedImage: dispatchModal.dispatchedImage,
+        dispatchedDocName: dispatchModal.dispatchedDocName,
+        dispatchedDocType: dispatchModal.dispatchedDocType
       });
-      await supabaseDB.addHistory(r.id, 'DISPATCHED', `Dispatched on ${dispatchModal.date}. ${dispatchModal.note}`);
+      await supabaseDB.addHistory(
+        r.id,
+        'DISPATCHED',
+        `Dispatched on ${dispatchModal.date}. Trk: ${dispatchModal.trackingId || 'N/A'}. ${dispatchModal.note || ''}${dispatchModal.dispatchedImage ? ' [Receipt / Proof of Sending Attached]' : ''}`
+      );
       setBulkNotice(`✓ Case ${r.folder} marked as DISPATCHED.`);
     } else if (dispatchModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
         dispatchedDate: dispatchModal.date,
-        dispatchedNote: dispatchModal.note
+        dispatchedNote: dispatchModal.note,
+        dispatchedImage: dispatchModal.dispatchedImage,
+        dispatchedDocName: dispatchModal.dispatchedDocName,
+        dispatchedDocType: dispatchModal.dispatchedDocType
       });
       setBulkNotice(`✓ Marked ${selectedIds.length} cases as DISPATCHED.`);
       setSelectedIds([]);
     }
-    setDispatchModal({ open: false, date: '', note: '', trackingId: '' });
+    setDispatchModal({
+      open: false,
+      date: '',
+      note: '',
+      trackingId: '',
+      dispatchedImage: '',
+      dispatchedDocName: '',
+      dispatchedDocType: ''
+    });
     loadAllRecords();
     setTimeout(() => setBulkNotice(null), 4000);
   };
@@ -531,7 +576,7 @@ export default function RecordsPage() {
     setTimeout(() => setBulkNotice(null), 4000);
   };
 
-  // Handle receipt image upload
+  // Handle receipt image upload for Delivery confirmation
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -540,6 +585,31 @@ export default function RecordsPage() {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
     };
     reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Handle Proof of Sending (Receipt / Doc / Waybill) upload for Dispatch
+  const handleDispatchFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 12 * 1024 * 1024) {
+      alert('Proof file size exceeds 12MB limit.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setDispatchModal(prev => ({
+        ...prev,
+        dispatchedImage: result,
+        dispatchedDocName: file.name,
+        dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+      }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   // Handle single record edit save
@@ -599,6 +669,15 @@ export default function RecordsPage() {
         ref={receiptImgInputRef}
         accept="image/*"
         onChange={handleReceiptImgUpload}
+        className="hidden"
+      />
+
+      {/* Hidden Dispatch Receipt / Doc File Input (Images & PDFs) */}
+      <input
+        type="file"
+        ref={dispatchDocInputRef}
+        accept="image/*,application/pdf"
+        onChange={handleDispatchFileUpload}
         className="hidden"
       />
 
@@ -959,7 +1038,10 @@ export default function RecordsPage() {
                   isBulk: true,
                   date: new Date().toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }),
                   note: '',
-                  trackingId: ''
+                  trackingId: '',
+                  dispatchedImage: '',
+                  dispatchedDocName: '',
+                  dispatchedDocType: ''
                 })}
                 className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-1.5 px-3 bg-[#0284c7] text-white border border-[#FAF6EE] rounded cursor-pointer"
               >
@@ -1231,13 +1313,30 @@ export default function RecordsPage() {
                           <HighlightText text={lawFirm} query={searchQuery} />
                         </td>
 
-                        {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) */}
+                        {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) & Proof of Sending */}
                         <td className="p-2.5 font-['DM_Mono',monospace] text-[0.72rem] text-[#0C0C0C] whitespace-nowrap">
                           {r.dispatchedDate ? (
                             <div>
                               <div className="font-bold text-[#0284c7]">{r.dispatchedDate}</div>
                               {r.trackingId && (
                                 <div className="text-[0.65rem] text-[#666]">Trk: {r.trackingId}</div>
+                              )}
+                              {r.dispatchedImage && (
+                                <button
+                                  type="button"
+                                  onClick={() => setProofModal({
+                                    open: true,
+                                    title: `Dispatch Proof / Receipt - Case ${r.folder} (${r.tm || 'No TM'})`,
+                                    url: r.dispatchedImage!,
+                                    docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`,
+                                    docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg')
+                                  })}
+                                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.65rem] font-bold bg-[#e0f2fe] text-[#0369a1] border border-[#0284c7] rounded hover:bg-[#bae6fd] cursor-pointer"
+                                  title="View Dispatch Receipt / Proof of Sending"
+                                >
+                                  <Receipt className="w-3 h-3 text-[#0284c7]" />
+                                  <span>Receipt Proof ✓</span>
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -1256,9 +1355,21 @@ export default function RecordsPage() {
                                 </span>
                               )}
                               {r.receiptImage && (
-                                <span className="ml-1 text-[0.65rem] text-[#C94A00] font-bold" title="Receipt Attached">
-                                  [Receipt ✓]
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setProofModal({
+                                    open: true,
+                                    title: `Delivery Receipt - Case ${r.folder}`,
+                                    url: r.receiptImage!,
+                                    docName: `delivery_receipt_${r.folder}`,
+                                    docType: 'image/jpeg'
+                                  })}
+                                  className="ml-1 inline-flex items-center gap-0.5 text-[0.65rem] text-[#15803d] font-bold bg-[#dcfce7] border border-[#16a34a] px-1 py-0.5 rounded hover:bg-[#bbf7d0] cursor-pointer"
+                                  title="View Delivery Receipt"
+                                >
+                                  <FileText className="w-2.5 h-2.5" />
+                                  <span>Receipt ✓</span>
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -1562,19 +1673,88 @@ export default function RecordsPage() {
                   Dispatch Note / Shipping Manifest
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="E.g., Hardcopy TM-1 & TM-48 documents dispatched via Leopard Courier."
                   value={dispatchModal.note}
                   onChange={e => setDispatchModal(prev => ({ ...prev, note: e.target.value }))}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase text-[0.8rem]"
                 />
               </div>
+
+              {/* Courier Receipt & Proof of Sending Upload */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-['DM_Mono',monospace] text-[0.7rem] font-bold flex items-center gap-1.5 text-[#0C0C0C]">
+                    <Receipt className="w-3.5 h-3.5 text-[#0284c7]" />
+                    Proof of Sending (Courier Receipt / Waybill / Slip)
+                  </label>
+                  {dispatchModal.dispatchedImage && (
+                    <button
+                      type="button"
+                      onClick={() => setDispatchModal(prev => ({ ...prev, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' }))}
+                      className="text-[0.65rem] text-[#dc2626] font-bold hover:underline cursor-pointer"
+                    >
+                      Remove Slip
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  onClick={() => dispatchDocInputRef.current?.click()}
+                  className="border-2 border-dashed border-[#0C0C0C] p-3 text-center bg-[#E8DFC7] cursor-pointer hover:bg-[#dfd7bf] rounded transition-colors"
+                >
+                  {dispatchModal.dispatchedImage ? (
+                    <div className="flex items-center justify-between gap-2.5 text-left bg-white p-2 border border-[#0C0C0C] rounded shadow-[2px_2px_0_#0C0C0C]">
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        {dispatchModal.dispatchedDocType?.includes('pdf') || dispatchModal.dispatchedImage.startsWith('data:application/pdf') ? (
+                          <div className="w-10 h-10 bg-[#fee2e2] border border-[#ef4444] rounded flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-[#b91c1c]" />
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 border border-[#0C0C0C] rounded overflow-hidden shrink-0 bg-[#FAF6EE]">
+                            <Image
+                              src={dispatchModal.dispatchedImage}
+                              alt="Receipt Slip"
+                              width={40}
+                              height={40}
+                              className="object-cover w-full h-full"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        )}
+                        <div className="overflow-hidden">
+                          <p className="font-['DM_Mono',monospace] text-[0.72rem] font-bold truncate text-[#0C0C0C]">
+                            {dispatchModal.dispatchedDocName || 'Courier_Booking_Receipt'}
+                          </p>
+                          <span className="font-['DM_Mono',monospace] text-[0.65rem] text-[#0D9970] font-bold flex items-center gap-1">
+                            <Check className="w-3 h-3 text-[#0D9970]" />
+                            Receipt attached (Click to change)
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[0.68rem] font-['DM_Mono',monospace] px-2 py-1 bg-[#FAF6EE] border border-[#0C0C0C] rounded font-bold shrink-0">
+                        Replace
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="py-2">
+                      <Upload className="w-5 h-5 mx-auto mb-1 text-[#0284c7]" />
+                      <p className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0C0C0C]">
+                        Click to upload Courier Booking Receipt or Airway Bill
+                      </p>
+                      <p className="font-['Space_Grotesk'] text-[0.65rem] text-[#666] mt-0.5">
+                        Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 12MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-3 border-t-2 border-[#0C0C0C] mt-4">
               <button
                 type="button"
-                onClick={() => setDispatchModal({ open: false, date: '', note: '', trackingId: '' })}
+                onClick={() => setDispatchModal({ open: false, date: '', note: '', trackingId: '', dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
                 className="font-['DM_Mono',monospace] text-[0.75rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
               >
                 Cancel
@@ -1800,6 +1980,86 @@ export default function RecordsPage() {
                 </div>
               </div>
 
+              {/* Dispatch Proof of Sending / Receipt in Edit Modal */}
+              <div className="p-2.5 bg-[#FAF6EE] border-2 border-[#0C0C0C] rounded">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold flex items-center gap-1.5 text-[#0284c7]">
+                    <Receipt className="w-3.5 h-3.5" />
+                    Dispatch Proof of Sending:
+                  </span>
+                  {editingRecord.dispatchedImage && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingRecord({ ...editingRecord, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
+                      className="text-[0.65rem] text-[#dc2626] font-bold hover:underline cursor-pointer"
+                    >
+                      Remove Slip
+                    </button>
+                  )}
+                </div>
+                {editingRecord.dispatchedImage ? (
+                  <div className="flex items-center justify-between gap-2 bg-white p-2 border border-[#0C0C0C] rounded shadow-[1px_1px_0_#0C0C0C]">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {editingRecord.dispatchedDocType?.includes('pdf') || editingRecord.dispatchedImage.startsWith('data:application/pdf') ? (
+                        <FileText className="w-4 h-4 text-[#b91c1c] shrink-0" />
+                      ) : (
+                        <div className="w-6 h-6 border border-[#0C0C0C] rounded overflow-hidden shrink-0">
+                          <Image
+                            src={editingRecord.dispatchedImage}
+                            alt="Slip"
+                            width={24}
+                            height={24}
+                            className="object-cover w-full h-full"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold truncate">
+                        {editingRecord.dispatchedDocName || 'Dispatch_Receipt_Attached'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProofModal({
+                        open: true,
+                        title: `Dispatch Proof - ${editingRecord.folder}`,
+                        url: editingRecord.dispatchedImage!,
+                        docName: editingRecord.dispatchedDocName || 'Dispatch_Receipt',
+                        docType: editingRecord.dispatchedDocType
+                      })}
+                      className="font-['DM_Mono',monospace] text-[0.68rem] font-bold px-2 py-0.5 bg-[#e0f2fe] text-[#0369a1] border border-[#0284c7] rounded hover:bg-[#bae6fd] cursor-pointer flex items-center gap-1 shrink-0"
+                    >
+                      <Eye className="w-3 h-3" />
+                      View
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-1.5 py-2 px-3 border border-dashed border-[#0C0C0C] bg-white rounded cursor-pointer hover:bg-[#F0E8D0] font-['DM_Mono',monospace] text-[0.7rem] font-bold text-[#555]">
+                    <Upload className="w-3.5 h-3.5 text-[#0284c7]" />
+                    <span>Upload Dispatch Receipt / Slip</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setEditingRecord(prev => prev ? ({
+                            ...prev,
+                            dispatchedImage: ev.target?.result as string,
+                            dispatchedDocName: file.name,
+                            dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+                          }) : null);
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Delivered Date</label>
@@ -1966,6 +2226,82 @@ export default function RecordsPage() {
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          DIALOG 6: PROOF OF SENDING / RECEIPT VIEWER MODAL
+         ========================================================================= */}
+      {proofModal.open && (
+        <div className="fixed inset-0 z-[1300] bg-black/75 flex items-center justify-center p-3 sm:p-5 backdrop-blur-[2px]">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-2xl w-full max-h-[92vh] flex flex-col relative overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b-2 border-[#0C0C0C] bg-[#FAF6EE]">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Receipt className="w-5 h-5 text-[#0284c7] shrink-0" />
+                <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] truncate">
+                  {proofModal.title || 'Proof of Sending / Receipt'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProofModal({ open: false, title: '', url: '' })}
+                className="p-1 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto bg-[#F0E8D0] flex flex-col items-center justify-center min-h-[300px]">
+              {proofModal.url.startsWith('data:application/pdf') || proofModal.docType?.includes('pdf') || proofModal.docName?.toLowerCase().endsWith('.pdf') ? (
+                <div className="w-full h-[500px] flex flex-col bg-white border-2 border-[#0C0C0C] rounded overflow-hidden">
+                  <div className="p-2 bg-[#E8DFC7] border-b border-[#0C0C0C] flex items-center justify-between text-xs font-['DM_Mono',monospace]">
+                    <span className="font-bold truncate flex items-center gap-1.5 text-[#b91c1c]">
+                      <FileText className="w-4 h-4" />
+                      {proofModal.docName || 'Dispatch_Document.pdf'}
+                    </span>
+                    <span className="text-[#666]">PDF Document</span>
+                  </div>
+                  <iframe
+                    src={proofModal.url}
+                    className="w-full flex-1 border-none"
+                    title="Proof PDF Viewer"
+                  />
+                </div>
+              ) : (
+                <div className="relative max-h-[550px] w-full flex items-center justify-center p-2 bg-white border-2 border-[#0C0C0C] rounded shadow-[3px_3px_0_#0C0C0C]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={proofModal.url}
+                    alt={proofModal.title}
+                    className="max-h-[500px] max-w-full object-contain rounded"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="p-3.5 bg-[#FAF6EE] border-t-2 border-[#0C0C0C] flex items-center justify-between gap-3">
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] truncate max-w-[280px]">
+                {proofModal.docName || 'Receipt_Verification_Proof'}
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={proofModal.url}
+                  download={proofModal.docName || 'Brandex_Dispatch_Proof'}
+                  className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2 px-4 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] flex items-center gap-1.5 hover:bg-[#0369a1] cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Download File
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setProofModal({ open: false, title: '', url: '' })}
+                  className="font-['DM_Mono',monospace] text-[0.72rem] py-2 px-4 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

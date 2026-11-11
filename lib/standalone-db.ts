@@ -31,6 +31,9 @@ export interface RecordItem {
   notes?: string;
   dispatchedDate?: string;
   dispatchedNote?: string;
+  dispatchedImage?: string;
+  dispatchedDocName?: string;
+  dispatchedDocType?: string;
   deliveredDate?: string;
   receiverName?: string;
   receiptImage?: string;
@@ -219,7 +222,16 @@ class StandaloneDB {
     ids: number[],
     newStatus: string,
     auditNote?: string,
-    meta?: { dispatchedDate?: string; dispatchedNote?: string; deliveredDate?: string; receiverName?: string; receiptImage?: string }
+    meta?: {
+      dispatchedDate?: string;
+      dispatchedNote?: string;
+      dispatchedImage?: string;
+      dispatchedDocName?: string;
+      dispatchedDocType?: string;
+      deliveredDate?: string;
+      receiverName?: string;
+      receiptImage?: string;
+    }
   ): void {
     const records = this.getRecords();
     const idSet = new Set(ids);
@@ -232,6 +244,9 @@ class StandaloneDB {
           updatedAt: new Date().toISOString(),
           ...(meta?.dispatchedDate ? { dispatchedDate: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatchedNote: meta.dispatchedNote } : {}),
+          ...(meta?.dispatchedImage ? { dispatchedImage: meta.dispatchedImage } : {}),
+          ...(meta?.dispatchedDocName ? { dispatchedDocName: meta.dispatchedDocName } : {}),
+          ...(meta?.dispatchedDocType ? { dispatchedDocType: meta.dispatchedDocType } : {}),
           ...(meta?.deliveredDate ? { deliveredDate: meta.deliveredDate } : {}),
           ...(meta?.receiverName ? { receiverName: meta.receiverName } : {}),
           ...(meta?.receiptImage ? { receiptImage: meta.receiptImage } : {})

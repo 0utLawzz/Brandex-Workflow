@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS public.trademark_records (
   case_no TEXT DEFAULT '001',
   dispatched_date TEXT,
   dispatched_note TEXT,
+  dispatched_image TEXT,
+  dispatched_doc_name TEXT,
+  dispatched_doc_type TEXT,
   delivered_date TEXT,
   receiver_name TEXT,
   receipt_image TEXT,
@@ -44,6 +47,9 @@ CREATE TABLE IF NOT EXISTS public.trademark_records (
 -- Ensure all columns exist if table was already created
 ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS dispatched_date TEXT;
 ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS dispatched_note TEXT;
+ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS dispatched_image TEXT;
+ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS dispatched_doc_name TEXT;
+ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS dispatched_doc_type TEXT;
 ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS delivered_date TEXT;
 ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS receiver_name TEXT;
 ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS receipt_image TEXT;

@@ -28,6 +28,9 @@ export function mapRowToRecord(row: any): RecordItem {
     notes: row.notes || '',
     dispatchedDate: row.dispatched_date || row.dispatchedDate || '',
     dispatchedNote: row.dispatched_note || row.dispatchedNote || '',
+    dispatchedImage: row.dispatched_image || row.dispatch_receipt || row.dispatchedImage || '',
+    dispatchedDocName: row.dispatched_doc_name || row.dispatchedDocName || '',
+    dispatchedDocType: row.dispatched_doc_type || row.dispatchedDocType || '',
     deliveredDate: row.delivered_date || row.deliveredDate || '',
     receiverName: row.receiver_name || row.receiverName || '',
     receiptImage: row.receipt_image || row.receiptImage || '',
@@ -61,6 +64,9 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.img !== undefined) row.logo_url = record.img;
   if (record.dispatchedDate !== undefined) row.dispatched_date = record.dispatchedDate;
   if (record.dispatchedNote !== undefined) row.dispatched_note = record.dispatchedNote;
+  if (record.dispatchedImage !== undefined) row.dispatched_image = record.dispatchedImage;
+  if (record.dispatchedDocName !== undefined) row.dispatched_doc_name = record.dispatchedDocName;
+  if (record.dispatchedDocType !== undefined) row.dispatched_doc_type = record.dispatchedDocType;
   if (record.deliveredDate !== undefined) row.delivered_date = record.deliveredDate;
   if (record.receiverName !== undefined) row.receiver_name = record.receiverName;
   if (record.receiptImage !== undefined) row.receipt_image = record.receiptImage;
@@ -239,10 +245,33 @@ class SupabaseDBService {
         const client = getSupabaseClient();
         const row = mapRecordToRow(updates);
 
-        await client
+        // If a dispatch document/image is provided, save in trademark_documents table
+        if (updates.dispatchedImage) {
+          try {
+            await client.from('trademark_documents').insert([{
+              record_id: id,
+              file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
+              file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
+              file_url: updates.dispatchedImage,
+              created_at: new Date().toISOString()
+            }]);
+          } catch (docErr) {
+            console.warn('[SupabaseDB] Failed to insert dispatch doc:', docErr);
+          }
+        }
+
+        const { error } = await client
           .from('trademark_records')
           .update(row)
           .eq('id', id);
+
+        if (error && error.message.includes('dispatched_image')) {
+          // Fallback if column not yet added to trademark_records: save without that column
+          delete row.dispatched_image;
+          delete row.dispatched_doc_name;
+          delete row.dispatched_doc_type;
+          await client.from('trademark_records').update(row).eq('id', id);
+        }
       } catch (err) {
         console.warn('[SupabaseDB] Error updating record on Supabase:', err);
       }
@@ -274,7 +303,16 @@ class SupabaseDBService {
     ids: number[],
     newStatus: string,
     auditNote?: string,
-    meta?: { dispatchedDate?: string; dispatchedNote?: string; deliveredDate?: string; receiverName?: string; receiptImage?: string }
+    meta?: {
+      dispatchedDate?: string;
+      dispatchedNote?: string;
+      dispatchedImage?: string;
+      dispatchedDocName?: string;
+      dispatchedDocType?: string;
+      deliveredDate?: string;
+      receiverName?: string;
+      receiptImage?: string;
+    }
   ): Promise<void> {
     standaloneDB.bulkUpdateStatus(ids, newStatus, auditNote, meta);
 
@@ -288,15 +326,37 @@ class SupabaseDBService {
           updated_at: new Date().toISOString(),
           ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),
+          ...(meta?.dispatchedImage ? { dispatched_image: meta.dispatchedImage } : {}),
+          ...(meta?.dispatchedDocName ? { dispatched_doc_name: meta.dispatchedDocName } : {}),
+          ...(meta?.dispatchedDocType ? { dispatched_doc_type: meta.dispatchedDocType } : {}),
           ...(meta?.deliveredDate ? { delivered_date: meta.deliveredDate } : {}),
           ...(meta?.receiverName ? { receiver_name: meta.receiverName } : {}),
           ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
         };
 
-        await client
+        const { error } = await client
           .from('trademark_records')
           .update(updatePayload)
           .in('id', ids);
+
+        if (error && error.message.includes('dispatched_image')) {
+          delete updatePayload.dispatched_image;
+          delete updatePayload.dispatched_doc_name;
+          delete updatePayload.dispatched_doc_type;
+          await client.from('trademark_records').update(updatePayload).in('id', ids);
+        }
+
+        // Also save to trademark_documents if dispatch receipt was attached
+        if (meta?.dispatchedImage) {
+          const docRows = ids.map(id => ({
+            record_id: id,
+            file_name: meta.dispatchedDocName || `Dispatch_Receipt_${id}`,
+            file_type: meta.dispatchedDocType || (meta.dispatchedImage!.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
+            file_url: meta.dispatchedImage,
+            created_at: new Date().toISOString()
+          }));
+          await client.from('trademark_documents').insert(docRows);
+        }
 
         // Record history entries
         const historyRows = ids.map(id => ({
