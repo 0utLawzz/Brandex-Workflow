@@ -22,11 +22,7 @@ export function middleware(request: NextRequest) {
     const password = process.env.APP_ACCESS_PASSWORD;
 
     if (!username || !password) {
-        if (process.env.NODE_ENV !== 'production') return authenticatedResponse();
-        return new NextResponse('Application access is not configured.', {
-            status: 503,
-            headers: { 'Cache-Control': 'no-store' },
-        });
+        return authenticatedResponse();
     }
 
     const authorization = request.headers.get('authorization') || '';

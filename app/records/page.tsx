@@ -7,6 +7,8 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { SHEET_URL } from '@/lib/data';
 import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
+import { supabaseDB } from '@/lib/supabase-db';
+import SqlSetupModal from '@/app/components/SqlSetupModal';
 import {
   CheckSquare,
   Square,
@@ -28,7 +30,8 @@ import {
   Building2,
   Calendar,
   Pencil,
-  Trash2
+  Trash2,
+  Database
 } from 'lucide-react';
 
 // Highlight query matches in text
@@ -81,6 +84,8 @@ export default function RecordsPage() {
   const [savedClients, setSavedClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [dbSource, setDbSource] = useState<'supabase' | 'local'>('supabase');
+  const [sqlModalOpen, setSqlModalOpen] = useState(false);
 
   // 1. Default status is "PENDING & IN REVIEW"
   const [filterStatus, setFilterStatus] = useState<string>('PENDING_IN_REVIEW');
@@ -161,9 +166,10 @@ export default function RecordsPage() {
   const loadAllRecords = async () => {
     setLoading(true);
     try {
-      const dbRecords = standaloneDB.getRecords();
-      const clients = standaloneDB.getClients();
-      setSavedClients(clients);
+      const recordsResult = await supabaseDB.getRecords();
+      const clientsResult = await supabaseDB.getClients();
+      setSavedClients(clientsResult.clients);
+      setDbSource(recordsResult.source);
 
       // Background sync check with Apps Script
       let sheetRecords: RecordItem[] = [];
@@ -172,32 +178,33 @@ export default function RecordsPage() {
           method: 'GET',
           cache: 'no-store',
         });
-        const text = await res.text();
-        const data = JSON.parse(text);
-        if (data.ok && Array.isArray(data.records)) {
-          sheetRecords = data.records.map((r: any, idx: number) => ({
-            id: 1000 + idx,
-            date: r.date || '',
-            folder: r.folder || '',
-            tm: r.tm || '',
-            classNo: r.classNo || '',
-            appName: r.appName || '',
-            appTrade: r.appTrade || '',
-            year: r.year || '',
-            conName: r.conName || 'BRANDEX LAW ASSOCIATES',
-            lawFirm: r.conName || 'BRANDEX LAW ASSOCIATES',
-            img: r.img || '',
-            noImg: r.noImg || '',
-            status: r.status || 'PENDING',
-            filingProcess: r.filingProcess || '',
-            trackingId: r.trackingId || '',
-          }));
+        if (res.ok) {
+          const data = await res.json();
+          if (data.ok && Array.isArray(data.records)) {
+            sheetRecords = data.records.map((r: any, idx: number) => ({
+              id: 1000 + idx,
+              date: r.date || '',
+              folder: r.folder || '',
+              tm: r.tm || '',
+              classNo: r.classNo || '',
+              appName: r.appName || '',
+              appTrade: r.appTrade || '',
+              year: r.year || '',
+              conName: r.conName || 'BRANDEX LAW ASSOCIATES',
+              lawFirm: r.conName || 'BRANDEX LAW ASSOCIATES',
+              img: r.img || '',
+              noImg: r.noImg || '',
+              status: r.status || 'PENDING',
+              filingProcess: r.filingProcess || '',
+              trackingId: r.trackingId || '',
+            }));
+          }
         }
       } catch { }
 
       const map = new Map<string, RecordItem>();
       sheetRecords.forEach(r => map.set(`${r.folder}__${r.tm}`, r));
-      dbRecords.forEach(r => map.set(`${r.folder}__${r.tm || r.id}`, r));
+      recordsResult.records.forEach(r => map.set(`${r.folder}__${r.tm || r.id}`, r));
 
       setAllRecords(Array.from(map.values()));
     } catch (err: any) {
@@ -407,12 +414,12 @@ export default function RecordsPage() {
   };
 
   // Bulk Reassign to Saved Client
-  const handleBulkAssignClient = () => {
+  const handleBulkAssignClient = async () => {
     if (!selectedClientForAssign || selectedIds.length === 0) return;
     const client = savedClients.find(c => String(c.id) === selectedClientForAssign);
     if (!client) return;
 
-    standaloneDB.bulkAssignClient(selectedIds, client);
+    await supabaseDB.bulkAssignClient(selectedIds, client);
     loadAllRecords();
     setBulkNotice(`✓ Reassigned ${selectedIds.length} cases to client "${client.client_name}" (#${client.client_code})`);
     setSelectedIds([]);
@@ -451,18 +458,18 @@ export default function RecordsPage() {
   };
 
   // Submit Approved or Rejected Decision
-  const handleSaveApproveReject = () => {
+  const handleSaveApproveReject = async () => {
     if (approveRejectModal.record) {
       const r = approveRejectModal.record;
-      standaloneDB.updateRecord(r.id, {
+      await supabaseDB.updateRecord(r.id, {
         status: approveRejectModal.decision,
         filingProcess: approveRejectModal.decision,
         notes: approveRejectModal.notes ? `${r.notes || ''} [Decision: ${approveRejectModal.notes}]` : r.notes
       });
-      standaloneDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
+      await supabaseDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
       setBulkNotice(`✓ Case ${r.folder} marked as ${approveRejectModal.decision}`);
     } else if (approveRejectModal.isBulk && selectedIds.length > 0) {
-      standaloneDB.bulkUpdateStatus(selectedIds, approveRejectModal.decision, approveRejectModal.notes || `Bulk marked as ${approveRejectModal.decision}`);
+      await supabaseDB.bulkUpdateStatus(selectedIds, approveRejectModal.decision, approveRejectModal.notes || `Bulk marked as ${approveRejectModal.decision}`);
       setBulkNotice(`✓ Marked ${selectedIds.length} cases as ${approveRejectModal.decision}`);
       setSelectedIds([]);
     }
@@ -472,20 +479,20 @@ export default function RecordsPage() {
   };
 
   // Submit Dispatch Details
-  const handleSaveDispatch = () => {
+  const handleSaveDispatch = async () => {
     if (dispatchModal.record) {
       const r = dispatchModal.record;
-      standaloneDB.updateRecord(r.id, {
+      await supabaseDB.updateRecord(r.id, {
         status: 'DISPATCHED',
         filingProcess: 'DISPATCHED',
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note,
         trackingId: dispatchModal.trackingId || r.trackingId
       });
-      standaloneDB.addHistory(r.id, 'DISPATCHED', `Dispatched on ${dispatchModal.date}. ${dispatchModal.note}`);
+      await supabaseDB.addHistory(r.id, 'DISPATCHED', `Dispatched on ${dispatchModal.date}. ${dispatchModal.note}`);
       setBulkNotice(`✓ Case ${r.folder} marked as DISPATCHED.`);
     } else if (dispatchModal.isBulk && selectedIds.length > 0) {
-      standaloneDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
+      await supabaseDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note
       });
@@ -498,20 +505,20 @@ export default function RecordsPage() {
   };
 
   // Submit Delivered Details
-  const handleSaveDelivered = () => {
+  const handleSaveDelivered = async () => {
     if (deliveredModal.record) {
       const r = deliveredModal.record;
-      standaloneDB.updateRecord(r.id, {
+      await supabaseDB.updateRecord(r.id, {
         status: 'DELIVERED',
         filingProcess: 'DELIVERED',
         deliveredDate: deliveredModal.date,
         receiverName: deliveredModal.receiverName,
         receiptImage: deliveredModal.receiptImage
       });
-      standaloneDB.addHistory(r.id, 'DELIVERED', `Delivered on ${deliveredModal.date} to receiver: ${deliveredModal.receiverName}`);
+      await supabaseDB.addHistory(r.id, 'DELIVERED', `Delivered on ${deliveredModal.date} to receiver: ${deliveredModal.receiverName}`);
       setBulkNotice(`✓ Case ${r.folder} marked as DELIVERED to ${deliveredModal.receiverName}`);
     } else if (deliveredModal.isBulk && selectedIds.length > 0) {
-      standaloneDB.bulkUpdateStatus(selectedIds, 'DELIVERED', `Bulk delivered on ${deliveredModal.date}. Receiver: ${deliveredModal.receiverName}`, {
+      await supabaseDB.bulkUpdateStatus(selectedIds, 'DELIVERED', `Bulk delivered on ${deliveredModal.date}. Receiver: ${deliveredModal.receiverName}`, {
         deliveredDate: deliveredModal.date,
         receiverName: deliveredModal.receiverName,
         receiptImage: deliveredModal.receiptImage
@@ -536,13 +543,13 @@ export default function RecordsPage() {
   };
 
   // Handle single record edit save
-  const handleSaveRecord = (e: React.FormEvent) => {
+  const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
     setSavingRecord(true);
     try {
-      standaloneDB.updateRecord(editingRecord.id, editingRecord);
-      standaloneDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in Standalone CMS');
+      await supabaseDB.updateRecord(editingRecord.id, editingRecord);
+      await supabaseDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in CMS');
       setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
       setEditingRecord(null);
       loadAllRecords();
@@ -554,9 +561,9 @@ export default function RecordsPage() {
     }
   };
 
-  const handleDeleteRecord = (id: number, name: string) => {
-    if (confirm(`Are you sure you want to delete case "${name}" from standalone records?`)) {
-      standaloneDB.deleteRecord(id);
+  const handleDeleteRecord = async (id: number, name: string) => {
+    if (confirm(`Are you sure you want to delete case "${name}"?`)) {
+      await supabaseDB.deleteRecord(id);
       loadAllRecords();
       setBulkNotice(`Case "${name}" removed.`);
       setTimeout(() => setBulkNotice(null), 4000);
@@ -599,12 +606,19 @@ export default function RecordsPage() {
         {/* Header Bar */}
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0D9970] text-white rounded border border-[#0C0C0C]">
-                STANDALONE 0ms
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 ${dbSource === 'supabase' ? 'bg-[#0D9970]' : 'bg-[#C94A00]'} text-white rounded border border-[#0C0C0C]`}>
+                {dbSource === 'supabase' ? 'SUPABASE CLOUD LIVE' : 'STANDALONE / LOCAL'}
               </span>
+              <button
+                onClick={() => setSqlModalOpen(true)}
+                className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#FAF6EE] hover:bg-white text-[#0C0C0C] rounded border border-[#0C0C0C] flex items-center gap-1 cursor-pointer"
+                title="Configure Supabase SQL schema & API keys"
+              >
+                <Database className="w-3 h-3 text-[#0D9970]" /> Supabase SQL / DB
+              </button>
               <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-                BRANDEX CMS v2.1
+                BRANDEX CMS v2.2
               </span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1.5px] leading-tight">
@@ -1956,6 +1970,12 @@ export default function RecordsPage() {
           </div>
         </div>
       )}
+
+      <SqlSetupModal
+        isOpen={sqlModalOpen}
+        onClose={() => setSqlModalOpen(false)}
+        onSuccess={loadAllRecords}
+      />
 
       <Footer />
     </div>

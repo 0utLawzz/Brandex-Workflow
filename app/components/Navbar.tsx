@@ -4,12 +4,14 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { HardDrive, ShieldCheck } from 'lucide-react';
+import { HardDrive, ShieldCheck, Database } from 'lucide-react';
 import DataBackupModal from './DataBackupModal';
+import SqlSetupModal from './SqlSetupModal';
 
 export default function Navbar() {
   const pathname = usePathname();
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
 
   return (
     <>
@@ -28,7 +30,7 @@ export default function Navbar() {
               BRANDEX
             </div>
             <div className="nb-brand-sub font-['DM_Mono',monospace] text-[9px] text-[#0D9970] tracking-[2px] uppercase mt-[1px] hidden sm:block">
-              Trademark Application · Standalone CMS
+              Trademark Application · Supabase Cloud &amp; Local CMS
             </div>
           </div>
         </Link>
@@ -71,13 +73,21 @@ export default function Navbar() {
         <div className="nb-right flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => setShowBackupModal(true)}
+            onClick={() => setShowSqlModal(true)}
             className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#FAF6EE] bg-[#0C0C0C] hover:bg-[#1f1f1f] border-[1.5px] border-[#0D9970] px-2.5 py-1 uppercase rounded-[3px] shadow-[2px_2px_0_#0D9970] cursor-pointer"
-            title="Standalone Database Backup & Restore"
+            title="Link Supabase & SQL Schema"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-[#0D9970]" />
-            <span className="hidden sm:inline text-[#FAF6EE]">STANDALONE</span>
-            <HardDrive className="w-3 h-3 text-[#D4A800] ml-0.5" />
+            <Database className="w-3.5 h-3.5 text-[#0D9970]" />
+            <span className="hidden sm:inline text-[#FAF6EE]">SUPABASE</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowBackupModal(true)}
+            className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[10px] tracking-[1px] text-[#FAF6EE] bg-[#0C0C0C] hover:bg-[#1f1f1f] border-[1.5px] border-[#D4A800] px-2.5 py-1 uppercase rounded-[3px] shadow-[2px_2px_0_#D4A800] cursor-pointer"
+            title="Backup & Restore"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-[#D4A800]" />
+            <HardDrive className="w-3 h-3 text-[#D4A800] hidden sm:inline" />
           </button>
         </div>
       </nav>
@@ -85,6 +95,11 @@ export default function Navbar() {
       <DataBackupModal
         isOpen={showBackupModal}
         onClose={() => setShowBackupModal(false)}
+      />
+
+      <SqlSetupModal
+        isOpen={showSqlModal}
+        onClose={() => setShowSqlModal(false)}
       />
     </>
   );

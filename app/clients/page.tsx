@@ -5,11 +5,13 @@ import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { standaloneDB, ClientProfile } from '@/lib/standalone-db';
-import { Trash2, Plus, Users, ShieldCheck, Download, Pencil, X } from 'lucide-react';
+import { supabaseDB } from '@/lib/supabase-db';
+import { Trash2, Plus, Users, ShieldCheck, Download, Pencil, X, Database } from 'lucide-react';
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dbSource, setDbSource] = useState<'supabase' | 'local'>('supabase');
   const [clientCode, setClientCode] = useState('646');
   const [clientName, setClientName] = useState('');
   const [fatherName, setFatherName] = useState('');
@@ -30,19 +32,26 @@ export default function ClientsPage() {
     loadClients();
   }, []);
 
-  const loadClients = () => {
+  const loadClients = async () => {
     setLoading(true);
-    const data = standaloneDB.getClients();
-    setClients(data);
+    try {
+      const res = await supabaseDB.getClients();
+      setClients(res.clients);
+      setDbSource(res.source);
 
-    // Compute next suggested client code
-    if (data.length > 0) {
-      const codes = data.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
-      if (codes.length > 0) {
-        setClientCode(String(Math.max(...codes) + 1).padStart(3, '0'));
+      // Compute next suggested client code
+      if (res.clients.length > 0) {
+        const codes = res.clients.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
+        if (codes.length > 0) {
+          setClientCode(String(Math.max(...codes) + 1).padStart(3, '0'));
+        }
       }
+    } catch {
+      const local = standaloneDB.getClients();
+      setClients(local);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleOpenEdit = (client: ClientProfile) => {
@@ -58,12 +67,12 @@ export default function ClientsPage() {
     });
   };
 
-  const handleSaveEditedClient = (e: React.FormEvent) => {
+  const handleSaveEditedClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient || !editFormData.client_name?.trim()) return;
     setEditSaving(true);
     try {
-      const updated = standaloneDB.updateClient(editingClient.id, {
+      const updated = await supabaseDB.updateClient(editingClient.id, {
         client_code: (editFormData.client_code || '').trim(),
         client_name: (editFormData.client_name || '').trim().toUpperCase(),
         father_name: (editFormData.father_name || '').trim().toUpperCase(),
@@ -73,7 +82,7 @@ export default function ClientsPage() {
         consultant_name: (editFormData.consultant_name || '').trim().toUpperCase()
       });
       if (updated) {
-        setClients(standaloneDB.getClients());
+        await loadClients();
         setSuccessMsg(`Client profile for "${updated.client_name}" successfully updated!`);
         setEditingClient(null);
       }
@@ -84,7 +93,7 @@ export default function ClientsPage() {
     }
   };
 
-  const handleAddClient = (e: React.FormEvent) => {
+  const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim()) return;
     setSubmitting(true);
@@ -92,7 +101,7 @@ export default function ClientsPage() {
     setErrorMsg('');
 
     try {
-      const added = standaloneDB.addClient({
+      const added = await supabaseDB.addClient({
         client_code: clientCode.trim(),
         client_name: clientName.trim().toUpperCase(),
         father_name: fatherName.trim().toUpperCase(),
@@ -104,8 +113,8 @@ export default function ClientsPage() {
         created_at: new Date().toISOString()
       });
 
-      setClients(standaloneDB.getClients());
-      setSuccessMsg(`Client profile for "${added.client_name}" saved in this browser.`);
+      await loadClients();
+      setSuccessMsg(`Client profile for "${added.client_name}" saved.`);
 
       // Reset form
       setClientName('');
@@ -121,10 +130,10 @@ export default function ClientsPage() {
     }
   };
 
-  const handleDeleteClient = (id: number, name: string) => {
+  const handleDeleteClient = async (id: number, name: string) => {
     if (confirm(`Delete client profile for ${name}?`)) {
-      standaloneDB.deleteClient(id);
-      setClients(standaloneDB.getClients());
+      await supabaseDB.deleteClient(id);
+      await loadClients();
       setSuccessMsg(`Client ${name} removed.`);
     }
   };
@@ -159,11 +168,11 @@ export default function ClientsPage() {
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0D9970] text-white rounded border border-[#0C0C0C]">
-                STANDALONE 0ms
+              <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 ${dbSource === 'supabase' ? 'bg-[#0D9970]' : 'bg-[#C94A00]'} text-white rounded border border-[#0C0C0C]`}>
+                {dbSource === 'supabase' ? 'SUPABASE CLOUD LIVE' : 'LOCAL CACHE'}
               </span>
               <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666]">
-                LOCAL SOVEREIGNTY
+                CLIENT DIRECTORY
               </span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1px] leading-tight">

@@ -7,7 +7,8 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, SHEET_URL } from '@/lib/data';
 import { standaloneDB } from '@/lib/standalone-db';
-import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { supabaseDB } from '@/lib/supabase-db';
+import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
   const [selectedCategory, setSelectedCategory] = useState('INITIAL');
@@ -111,24 +112,41 @@ export default function TrademarkApplicationPage() {
     setIssueDate(localStr);
     updateExpiry(now);
 
-    // Fetch client profiles saved in this browser
-    function fetchClients() {
-      const clients = standaloneDB.getClients();
-      setSavedClients(clients);
+    // Fetch client profiles
+    async function fetchClients() {
+      try {
+        const res = await supabaseDB.getClients();
+        setSavedClients(res.clients);
+      } catch {
+        const clients = standaloneDB.getClients();
+        setSavedClients(clients);
+      }
     }
     fetchClients();
 
     // Auto-increment case number
-    function fetchLatestCaseNo() {
-      const records = standaloneDB.getRecords();
-      let maxCase = 0;
-      records.forEach(r => {
-        if (r.caseNo) {
-          const num = parseInt(r.caseNo, 10);
-          if (!isNaN(num) && num > maxCase) maxCase = num;
-        }
-      });
-      setCaseNo(String(maxCase + 1).padStart(3, '0'));
+    async function fetchLatestCaseNo() {
+      try {
+        const res = await supabaseDB.getRecords();
+        let maxCase = 0;
+        res.records.forEach(r => {
+          if (r.caseNo) {
+            const num = parseInt(r.caseNo, 10);
+            if (!isNaN(num) && num > maxCase) maxCase = num;
+          }
+        });
+        setCaseNo(String(maxCase + 1).padStart(3, '0'));
+      } catch {
+        const records = standaloneDB.getRecords();
+        let maxCase = 0;
+        records.forEach(r => {
+          if (r.caseNo) {
+            const num = parseInt(r.caseNo, 10);
+            if (!isNaN(num) && num > maxCase) maxCase = num;
+          }
+        });
+        setCaseNo(String(maxCase + 1).padStart(3, '0'));
+      }
     }
     fetchLatestCaseNo();
   }, [updateExpiry]);
@@ -283,10 +301,10 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
-      // 1. Save a local browser copy before sending the application to Apps Script.
+      // 1. Save to Supabase Cloud Database (and local cache)
       setProgressPercent(30);
-      setProgressLabel('Saving record in this browser');
-      const newRec = standaloneDB.addRecord({
+      setProgressLabel('Saving record in Supabase Database');
+      const newRec = await supabaseDB.addRecord({
         selectionMenu,
         clientCode,
         caseNo,
@@ -308,14 +326,14 @@ export default function TrademarkApplicationPage() {
       setLastSavedCaseId(insertedRecordId);
       setLastSavedFolder(payload.folder);
 
-      // 2. Add initial status history to this browser's local copy.
-      standaloneDB.addHistory(
+      // 2. Add initial status history to Supabase
+      await supabaseDB.addHistory(
         insertedRecordId,
         status.toUpperCase(),
         'Application created & generated.'
       );
 
-      // 3. Add attachment metadata to this browser's local copy.
+      // 3. Add attachment metadata
       if (additionalFiles.length > 0) {
         setProgressPercent(40);
         setProgressLabel('Attaching documents');
@@ -331,73 +349,74 @@ export default function TrademarkApplicationPage() {
       }
 
       setProgressPercent(60);
-      setProgressLabel('Sending application to Google Apps Script');
+      setProgressLabel('Generating documents via Google Apps Script');
 
-      const res = await fetch('/api/applications', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      setProgressPercent(85);
-      setProgressLabel('Processing response');
-
-      const text = await res.text();
-      let data: any;
+      let data: any = null;
       try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error('Google Apps Script returned an unreadable response. The case remains saved in this browser.');
-      }
-
-      if (res.ok && data.ok === true) {
-        clearInterval(progressTimerRef.current as NodeJS.Timeout);
-        setProgressPercent(100);
-        setProgressLabel('Completed');
-
-        setStatusType('success');
-        setStatusMsg(
-          `✅ Success! Documents generated; a copy of the case is saved in this browser.\n` +
-          `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
-          `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
-          (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
-        );
-        setStatusLinks({
-          folderUrl: data.folderUrl,
-          tm1Url: data.tm1Url,
-          tm48Url: data.tm48Url
+        const res = await fetch('/api/applications', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          headers: { 'Content-Type': 'application/json' },
         });
-        notifyResult(true, `${payload.folder} — documents generated and exported successfully.`);
-      } else {
-        const error = new Error(data.error || `Google Apps Script request failed (HTTP ${res.status}). The case remains saved in this browser.`);
-        (error as Error & { code?: string }).code = data.code;
-        throw error;
+
+        setProgressPercent(85);
+        setProgressLabel('Processing response');
+
+        const text = await res.text();
+        try {
+          data = JSON.parse(text);
+        } catch {}
+
+        if (res.ok && data && data.ok === true) {
+          clearInterval(progressTimerRef.current as NodeJS.Timeout);
+          setProgressPercent(100);
+          setProgressLabel('Completed');
+
+          setStatusType('success');
+          setStatusMsg(
+            `✅ Success! Case saved to Supabase Database & documents generated.\n` +
+            `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
+            `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
+            (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
+          );
+          setStatusLinks({
+            folderUrl: data.folderUrl,
+            tm1Url: data.tm1Url,
+            tm48Url: data.tm48Url
+          });
+          notifyResult(true, `${payload.folder} — saved to database and documents generated.`);
+          return;
+        } else {
+          const errMsg = data?.error || `Google Apps Script returned status ${res.status}`;
+          const isDocAuth = data?.code === 'GOOGLE_DOCS_PERMISSION_REQUIRED';
+          if (isDocAuth) {
+            setPermissionErrorModalOpen(true);
+          }
+          setStatusType('info');
+          setStatusMsg(
+            `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
+            `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.\n` +
+            `Note on Document Generation: ${errMsg}.`
+          );
+          notifyResult(true, 'Case saved in database. Apps Script doc generation pending.');
+        }
+      } catch (scriptErr: any) {
+        setStatusType('info');
+        setStatusMsg(
+          `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
+          `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.\n` +
+          `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
+        );
+        notifyResult(true, 'Case saved in database.');
       }
     } catch (err: any) {
       clearInterval(progressTimerRef.current as NodeJS.Timeout);
       setProgressPercent(100);
 
       const errText = String(err?.message || err || '');
-      const isDocPermissionError =
-        err?.code === 'GOOGLE_DOCS_PERMISSION_REQUIRED' ||
-        errText.includes('DocumentApp') ||
-        errText.includes('permissions are not sufficient') ||
-        errText.includes('auth/documents');
-
-      if (isDocPermissionError) {
-        setStatusType('info');
-        setPermissionErrorModalOpen(true);
-        setStatusMsg(
-          `⚠️ CASE COPY SAVED IN THIS BROWSER!\n` +
-          `Record ${folder || 'Trademark Case'} (Client: ${clientCode} · Case #${caseNo}) remains in this browser's local ledger.\n` +
-          'Google Docs Note: Apps Script requires Google Docs permission authorization to call DocumentApp.openById.'
-        );
-        notifyResult(false, 'Case copy saved in this browser. Apps Script needs Google Docs authorization.');
-      } else {
-        setStatusType('error');
-        setStatusMsg('❌ Request failed: ' + errText);
-        notifyResult(false, errText);
-      }
+      setStatusType('error');
+      setStatusMsg('❌ Submission error: ' + errText);
+      notifyResult(false, errText);
     } finally {
       setSubmitting(false);
     }
