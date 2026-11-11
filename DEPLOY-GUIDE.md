@@ -120,10 +120,17 @@ This occurs because your deployed Google Apps Script Web App was deployed withou
   "oauthScopes": [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-  ]
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/userinfo.email"
+  ],
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "ANYONE_ANONYMOUS"
+  }
 }
 ```
+
+The script uses the built-in `DriveApp` service, so an Advanced Drive API service entry is not required. The anonymous web-app access setting lets the Next.js server proxy call the endpoint; `RECORDS_ACCESS_TOKEN` must be set in Script Properties and is checked for every POST. Direct `getRecords` GET requests remain denied.
 
 ### Step 3: Trigger the Google Authorization Prompt
 
