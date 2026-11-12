@@ -201,7 +201,21 @@ export default function TrademarkApplicationPage() {
   const handleMultipleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArr = Array.from(e.target.files);
-      setAdditionalFiles(prev => [...prev, ...filesArr]);
+      const acceptedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+      const combined = [...additionalFiles, ...filesArr];
+      const invalidType = combined.find(file => !acceptedTypes.has(file.type));
+      const tooLarge = combined.find(file => file.size > 4 * 1024 * 1024);
+      if (combined.length > 10 || combined.reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024 || invalidType || tooLarge) {
+        e.target.value = '';
+        setStatusType('error');
+        setStatusMsg(invalidType
+          ? 'Additional files must be PDFs, JPEGs, or PNGs.'
+          : tooLarge
+            ? 'Each attachment must be 4 MB or smaller.'
+            : 'Attach up to 10 files and keep their combined size under 8 MB.');
+        return;
+      }
+      setAdditionalFiles(combined);
     }
   };
 
@@ -301,16 +315,34 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
+      if (additionalFiles.length > 0) {
+        setProgressPercent(24);
+        setProgressLabel('Preparing additional attachments');
+        payload.additionalFiles = await Promise.all(additionalFiles.map(async file => {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          return { name: file.name, mimeType: file.type, dataUrl };
+        }));
+      }
+
       // 1. Save to Supabase Cloud Database (and local cache)
       setProgressPercent(30);
       setProgressLabel('Saving record in Supabase Database');
       const newRec = await supabaseDB.addRecord({
+        clientId: selectedClientId ? Number(selectedClientId) : undefined,
+        category: selectedCategory,
         selectionMenu,
         clientCode,
         caseNo,
         tm: tm.trim().toUpperCase() || 'PENDING',
         folder: folder.trim().toUpperCase(),
         classNo: classNo.trim().toUpperCase(),
+        classDesc: classDesc.trim().toUpperCase(),
+        appType: appType.toUpperCase(),
         appName: appName.trim().toUpperCase(),
         appTrade: appTrade.trim().toUpperCase(),
         conName: conName.trim().toUpperCase(),
@@ -318,6 +350,8 @@ export default function TrademarkApplicationPage() {
         trackingId: trackingId.trim().toUpperCase(),
         year,
         date: payload.issueDate,
+        expiryDate: expiryDate.trim().toUpperCase(),
+        conAddr: conAdd.trim().toUpperCase(),
         img: payload.imageBase64 || '',
         noImg,
         filingProcess: 'PENDING',
@@ -325,28 +359,6 @@ export default function TrademarkApplicationPage() {
       const insertedRecordId = newRec.id;
       setLastSavedCaseId(insertedRecordId);
       setLastSavedFolder(payload.folder);
-
-      // 2. Add initial status history to Supabase
-      await supabaseDB.addHistory(
-        insertedRecordId,
-        status.toUpperCase(),
-        'Application created & generated.'
-      );
-
-      // 3. Add attachment metadata
-      if (additionalFiles.length > 0) {
-        setProgressPercent(40);
-        setProgressLabel('Attaching documents');
-        for (const file of additionalFiles) {
-          standaloneDB.addDocument({
-            record_id: insertedRecordId,
-            file_name: file.name,
-            file_size: file.size,
-            file_type: file.type || 'application/pdf',
-            storage_url: '#',
-          });
-        }
-      }
 
       setProgressPercent(60);
       setProgressLabel('Generating documents via Google Apps Script');
@@ -368,6 +380,22 @@ export default function TrademarkApplicationPage() {
         } catch {}
 
         if (res.ok && data && data.ok === true) {
+          if (data.serialNo) await supabaseDB.updateRecord(insertedRecordId, { serialNo: String(data.serialNo) });
+          let attachmentWarning = '';
+          for (const attachment of data.attachments || []) {
+            try {
+              await supabaseDB.addDocument({
+                record_id: insertedRecordId,
+                file_name: attachment.name,
+                file_size: attachment.size,
+                file_type: attachment.mimeType,
+                file_url: attachment.url,
+              });
+            } catch (error) {
+              console.error('[Application] Attachment reference could not be saved:', error);
+              attachmentWarning = ' One or more files are in Drive, but their database references could not be saved.';
+            }
+          }
           clearInterval(progressTimerRef.current as NodeJS.Timeout);
           setProgressPercent(100);
           setProgressLabel('Completed');
@@ -377,7 +405,7 @@ export default function TrademarkApplicationPage() {
             `✅ Success! Case saved to Supabase Database & documents generated.\n` +
             `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
             `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
-            (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
+            (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '') + attachmentWarning
           );
           setStatusLinks({
             folderUrl: data.folderUrl,

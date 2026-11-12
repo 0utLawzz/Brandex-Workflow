@@ -1,10 +1,12 @@
 import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
+import { mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 
 // Helper to map DB row to RecordItem
 export function mapRowToRecord(row: any): RecordItem {
   return {
     id: Number(row.id),
+    ...mapCaseFieldsFromRow(row),
     date: row.issue_date || row.date || '',
     folder: row.mark_name || row.folder || '',
     tm: row.trademark_no || row.tm || '',
@@ -42,6 +44,7 @@ export function mapRowToRecord(row: any): RecordItem {
 // Helper to map RecordItem to DB row payload
 export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any> {
   const row: Record<string, any> = {};
+  Object.assign(row, mapCaseFieldsToRow(record));
 
   if (record.folder !== undefined) row.mark_name = record.folder;
   if (record.tm !== undefined) row.trademark_no = record.tm;
@@ -201,10 +204,6 @@ class SupabaseDBService {
   }
 
   public async addRecord(record: Omit<RecordItem, 'id'> & { id?: number }): Promise<RecordItem> {
-    // 1. Always save locally first for guaranteed zero-loss persistence
-    const savedLocal = standaloneDB.addRecord(record);
-
-    // 2. Attempt insert into Supabase
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       try {
@@ -213,25 +212,47 @@ class SupabaseDBService {
         if (record.id) row.id = record.id;
         row.created_at = new Date().toISOString();
 
-        const { data, error } = await client
+        let { data, error } = await client
           .from('trademark_records')
           .insert([row])
           .select()
           .single();
 
+        // Existing projects may not yet have applied the additive client relationship migration.
+        if (error?.message.includes('client_id') && row.client_id !== undefined) {
+          delete row.client_id;
+          const retry = await client.from('trademark_records').insert([row]).select().single();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (!error && data) {
           const inserted = mapRowToRecord(data);
-          standaloneDB.updateRecord(savedLocal.id, inserted);
+          standaloneDB.addRecord(inserted, false);
+          const history = standaloneDB.addHistory(inserted.id, 'RECORD_CREATED', `Case #${inserted.caseNo || '001'} created with initial status: ${inserted.status || 'PENDING'}`);
+          try {
+            const { error: historyError } = await client.from('trademark_history').insert([{
+              record_id: inserted.id,
+              status: history.action,
+              notes: history.notes,
+              created_at: history.created_at,
+            }]);
+            if (historyError) console.warn('[SupabaseDB] Initial case history was not saved remotely:', historyError.message);
+          } catch (historyError) {
+            console.warn('[SupabaseDB] Initial case history request failed:', historyError);
+          }
           return inserted;
         } else if (error) {
           console.warn('[SupabaseDB] Record insert failed on remote DB:', error.message);
+          throw new Error(`Supabase record save failed: ${error.message}`);
         }
       } catch (err) {
         console.warn('[SupabaseDB] Error sending record to Supabase:', err);
+        throw err;
       }
     }
 
-    return savedLocal;
+    return standaloneDB.addRecord(record);
   }
 
   public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {
@@ -552,6 +573,28 @@ class SupabaseDBService {
     return localLog;
   }
 
+  public async addDocument(document: Omit<DocumentAttachment, 'id' | 'created_at'> & { file_size?: number }): Promise<DocumentAttachment> {
+    const { isConfigured } = getSupabaseCredentials();
+    if (isConfigured) {
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('trademark_documents').insert([{
+        record_id: document.record_id,
+        file_name: document.file_name,
+        file_size: document.file_size,
+        file_type: document.file_type,
+        file_url: document.file_url,
+      }]).select().single();
+      if (error || !data) throw new Error(`Document reference save failed: ${error?.message || 'No row returned'}`);
+      return standaloneDB.addDocument({
+        record_id: Number(data.record_id),
+        file_name: data.file_name,
+        file_type: data.file_type,
+        file_url: data.file_url,
+      });
+    }
+    return standaloneDB.addDocument(document);
+  }
+
   // Sync all local records to Supabase in one batch
   public async pushLocalToSupabase(): Promise<{ success: boolean; count: number; error?: string }> {
     const { isConfigured } = getSupabaseCredentials();
@@ -595,7 +638,8 @@ class SupabaseDBService {
           return row;
         });
 
-        await client.from('clients').upsert(clientRows, { onConflict: 'id' });
+        const { error: clientsError } = await client.from('clients').upsert(clientRows, { onConflict: 'id' });
+        if (clientsError) return { success: false, count, error: `Clients sync failed: ${clientsError.message}` };
       }
 
       return { success: true, count };

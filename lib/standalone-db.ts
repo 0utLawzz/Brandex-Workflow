@@ -10,14 +10,21 @@ import Papa from 'papaparse';
 
 export interface RecordItem {
   id: number;
+  clientId?: number | null;
+  serialNo?: string | null;
+  category?: string | null;
   date: string;
   folder: string;
   tm: string;
   classNo: string;
+  classDesc?: string | null;
+  appType?: string | null;
   appName: string;
   appTrade: string;
   year: string;
+  expiryDate?: string | null;
   conName: string;
+  conAddr?: string | null;
   lawFirm?: string;
   img?: string;
   noImg?: string;
@@ -112,7 +119,7 @@ class StandaloneDB {
     return this.getRecords().find(r => r.id === id);
   }
 
-  public addRecord(record: Omit<RecordItem, 'id'> & { id?: number }): RecordItem {
+  public addRecord(record: Omit<RecordItem, 'id'> & { id?: number }, logInitialHistory = true): RecordItem {
     const records = this.getRecords();
     const newId = record.id || (records.length > 0 ? Math.max(...records.map(r => r.id || 0)) + 1 : 1);
     const newRecord: RecordItem = {
@@ -123,9 +130,9 @@ class StandaloneDB {
     };
     records.unshift(newRecord);
     this.saveRecords(records);
-
-    // Auto-log initial history
-    this.addHistory(newId, 'RECORD_CREATED', `Case #${newRecord.caseNo || '001'} created with initial status: ${newRecord.status || 'PENDING'}`);
+    if (logInitialHistory) {
+      this.addHistory(newId, 'RECORD_CREATED', `Case #${newRecord.caseNo || '001'} created with initial status: ${newRecord.status || 'PENDING'}`);
+    }
     return newRecord;
   }
 
@@ -143,11 +150,6 @@ class StandaloneDB {
     };
     records[idx] = updated;
     this.saveRecords(records);
-
-    // If status changed, auto-log history
-    if (updates.status && updates.status !== prev.status) {
-      this.addHistory(id, 'STATUS_CHANGE', `Status changed from ${prev.status} to ${updates.status}`);
-    }
 
     return updated;
   }

@@ -76,6 +76,7 @@ function doPost(e) {
         folderUrl: result.folderUrl,
         tm1Url: result.tm1Url,
         tm48Url: result.tm48Url,
+        attachments: result.attachments || [],
         imageWarning: result.imageWarning || ""
       });
     }
@@ -270,6 +271,41 @@ function getOrCreateClientFolder(parentFolder, rawFolderName) {
   return parentFolder.createFolder(folderName);
 }
 
+function saveAdditionalFiles(caseFolder, files, formData) {
+  if (!files) return [];
+  if (!Array.isArray(files) || files.length > 10) throw new Error("Attach no more than 10 files");
+
+  var allowedTypes = { "application/pdf": true, "image/jpeg": true, "image/png": true };
+  var totalBytes = 0;
+  var saved = [];
+  var caseKey = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"]
+    .map(function(value) { return String(value).replace(/[^A-Za-z0-9_-]/g, "_"); })
+    .join("-");
+
+  files.forEach(function(item) {
+    if (!item || !allowedTypes[item.mimeType] || typeof item.name !== "string" || typeof item.dataUrl !== "string") {
+      throw new Error("An attachment has an unsupported type or invalid content");
+    }
+    var match = item.dataUrl.match(/^data:(application\/pdf|image\/jpeg|image\/png);base64,([A-Za-z0-9+/=]+)$/);
+    if (!match || match[1] !== item.mimeType) throw new Error("An attachment could not be decoded");
+
+    var bytes = Utilities.base64Decode(match[2]);
+    if (bytes.length > 4 * 1024 * 1024) throw new Error("Each attachment must be 4 MB or smaller");
+    totalBytes += bytes.length;
+    if (totalBytes > 8 * 1024 * 1024) throw new Error("Combined attachments must be 8 MB or smaller");
+
+    var safeOriginalName = item.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "attachment";
+    var storedName = caseKey + "_" + safeOriginalName;
+    var existing = caseFolder.getFilesByName(storedName);
+    var file = existing.hasNext()
+      ? existing.next()
+      : caseFolder.createFile(Utilities.newBlob(bytes, item.mimeType, storedName));
+    saved.push({ name: item.name, mimeType: item.mimeType, size: bytes.length, fileId: file.getId(), url: file.getUrl() });
+  });
+
+  return saved;
+}
+
 function processFormSubmission(data) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Sheet1");
@@ -364,7 +400,14 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
   }
 
   var parentFolder = DriveApp.getFolderById(mainFolderId);
-  var newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
+  var newFolder;
+  if (formData && (formData.clientCode || formData.caseNo)) {
+    var clientFolder = getOrCreateClientFolder(parentFolder, formData.clientCode || "UNASSIGNED_CLIENT");
+    var caseIdentity = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"].join("-");
+    newFolder = getOrCreateClientFolder(clientFolder, caseIdentity);
+  } else {
+    newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
+  }
 
   var imageId = "";
   var tmImageBlob = null;
@@ -429,10 +472,13 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 
+  var attachments = saveAdditionalFiles(newFolder, formData && formData.additionalFiles, formData || {});
+
   return {
     folderUrl: newFolder.getUrl(),
     tm1Url: tm1Doc ? tm1Doc.getUrl() : null,
     tm48Url: tm48Doc ? tm48Doc.getUrl() : null,
+    attachments: attachments,
     imageWarning: imageWarning
   };
 }

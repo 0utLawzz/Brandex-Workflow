@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyAuthSession } from '@/lib/auth-session';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -17,7 +18,7 @@ function authenticatedResponse() {
     return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Public auth routes
@@ -28,14 +29,17 @@ export function middleware(request: NextRequest) {
     const username = process.env.APP_ACCESS_USER;
     const password = process.env.APP_ACCESS_PASSWORD;
 
-    // If credentials are not configured, allow access
+    // Keep local development usable without deployment credentials.
     if (!username || !password) {
-        return authenticatedResponse();
+        if (process.env.NODE_ENV !== 'production') return authenticatedResponse();
+        return new NextResponse('Application access is not configured.', {
+            status: 503,
+            headers: { 'Cache-Control': 'no-store' },
+        });
     }
 
-    // Check cookie session (works perfectly inside iframes)
     const sessionCookie = request.cookies.get('brandex_auth')?.value;
-    if (sessionCookie === '1' || sessionCookie === 'authenticated') {
+    if (await verifyAuthSession(sessionCookie, username, password)) {
         return authenticatedResponse();
     }
 

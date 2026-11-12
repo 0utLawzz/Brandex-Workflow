@@ -99,6 +99,22 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS consultant_name TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS total_cases INT DEFAULT 0;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
+-- Preserve the selected client as a real, nullable relationship on new cases.
+ALTER TABLE public.trademark_records ADD COLUMN IF NOT EXISTS client_id BIGINT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'trademark_records_client_id_fkey'
+      AND conrelid = 'public.trademark_records'::regclass
+  ) THEN
+    ALTER TABLE public.trademark_records
+      ADD CONSTRAINT trademark_records_client_id_fkey
+      FOREIGN KEY (client_id) REFERENCES public.clients(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS trademark_records_client_id_idx ON public.trademark_records(client_id);
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.trademark_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trademark_history ENABLE ROW LEVEL SECURITY;

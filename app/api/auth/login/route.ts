@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { AUTH_SESSION_MAX_AGE, createAuthSession } from '@/lib/auth-session';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -17,30 +18,27 @@ export async function POST(request: Request) {
         const expectedUser = process.env.APP_ACCESS_USER;
         const expectedPass = process.env.APP_ACCESS_PASSWORD;
 
-        // If credentials are not set on server, allow
         if (!expectedUser || !expectedPass) {
-            const res = NextResponse.json({ ok: true, message: 'No password required' });
-            res.cookies.set('brandex_auth', '1', {
-                path: '/',
-                httpOnly: false,
-                sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 30,
-            });
-            return res;
+            return NextResponse.json(
+                { ok: false, error: 'Application access is not configured.' },
+                { status: 503, headers: { 'Cache-Control': 'no-store' } },
+            );
         }
 
         if (
-            username &&
-            password &&
+            typeof username === 'string' &&
+            typeof password === 'string' &&
             constantTimeEqual(username, expectedUser) &&
             constantTimeEqual(password, expectedPass)
         ) {
-            const res = NextResponse.json({ ok: true });
-            res.cookies.set('brandex_auth', '1', {
+            const session = await createAuthSession(expectedUser, expectedPass);
+            const res = NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
+            res.cookies.set('brandex_auth', session, {
                 path: '/',
-                httpOnly: false,
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax',
-                maxAge: 60 * 60 * 24 * 30,
+                maxAge: AUTH_SESSION_MAX_AGE,
             });
             return res;
         }
