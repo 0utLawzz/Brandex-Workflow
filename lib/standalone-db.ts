@@ -1,5 +1,7 @@
 'use client';
 
+import Papa from 'papaparse';
+
 // =========================================================================
 // BRANDEX LAW ASSOCIATES — STANDALONE IN-APP DATABASE ENGINE
 // 100% Client-Side Persistent Storage (localStorage + in-memory cache)
@@ -308,94 +310,245 @@ class StandaloneDB {
       "Notes"
     ];
 
-    const escapeCsv = (val: any) => {
-      if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
-      return `"${str}"`;
-    };
-
-    const rows = records.map(r => [
+    const data = records.map(r => [
       r.id,
-      escapeCsv(r.date),
-      escapeCsv(`${r.clientCode || '000'}-${r.selectionMenu || 'A'}-${r.caseNo || '001'}`),
-      escapeCsv(r.folder),
-      escapeCsv(r.tm),
-      escapeCsv(r.classNo ? r.classNo.replace(/\D/g, '') : ''),
-      escapeCsv(r.appName),
-      escapeCsv(r.appTrade),
-      escapeCsv(r.lawFirm || r.conName),
-      escapeCsv(r.status),
-      escapeCsv(r.trackingId || ''),
-      escapeCsv(r.dispatchedDate || ''),
-      escapeCsv(r.dispatchedNote || ''),
-      escapeCsv(r.deliveredDate || ''),
-      escapeCsv(r.receiverName || ''),
-      escapeCsv(r.clientCode || ''),
-      escapeCsv(r.cnic || ''),
-      escapeCsv(r.address || ''),
-      escapeCsv(r.notes || '')
-    ].join(','));
+      r.date || '',
+      `${r.clientCode || '000'}-${r.selectionMenu || 'A'}-${r.caseNo || '001'}`,
+      r.folder || '',
+      r.tm || '',
+      r.classNo ? String(r.classNo).replace(/\D/g, '') : '',
+      r.appName || '',
+      r.appTrade || '',
+      r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES',
+      r.status || 'PENDING',
+      r.trackingId || '',
+      r.dispatchedDate || '',
+      r.dispatchedNote || '',
+      r.deliveredDate || '',
+      r.receiverName || '',
+      r.clientCode || '',
+      r.cnic || '',
+      r.address || '',
+      r.notes || ''
+    ]);
 
-    return [headers.join(','), ...rows].join('\n');
+    return Papa.unparse({
+      fields: headers,
+      data
+    });
+  }
+
+  public generateSampleRecordsCSV(): string {
+    const headers = [
+      "ID",
+      "Date",
+      "Case Ref",
+      "Case Name",
+      "TM No",
+      "Class",
+      "Applicant",
+      "Trading As",
+      "Law Firm",
+      "Workflow Stage",
+      "Tracking ID",
+      "Dispatched Date",
+      "Dispatched Note",
+      "Delivered Date",
+      "Receiver Name",
+      "Client Code",
+      "CNIC",
+      "Address",
+      "Notes"
+    ];
+
+    const sampleRows = [
+      [
+        1,
+        "02/10/2026",
+        "646-A-001",
+        "AEROFLEX COURIER",
+        "TM-589201",
+        "39",
+        "MUHAMMAD USMAN RAZA",
+        "AEROFLEX LOGISTICS PAKISTAN",
+        "BRANDEX LAW ASSOCIATES",
+        "DISPATCHED",
+        "TCS-99201488",
+        "Tue 10-Nov-2026",
+        "Dispatched hardcopy Form TM-1 and TM-48 via TCS Express.",
+        "",
+        "",
+        "646",
+        "35201-1234567-1",
+        "PLOT 14, SECTOR I-9, ISLAMABAD",
+        "Priority examination requested."
+      ],
+      [
+        2,
+        "05/10/2026",
+        "646-A-002",
+        "NOVACURE PHARMA",
+        "TM-602114",
+        "5",
+        "DR. TARIQ MAHMOOD",
+        "NOVACURE HEALTH LABORATORIES",
+        "BRANDEX LAW ASSOCIATES",
+        "DELIVERED",
+        "LCS-7718290",
+        "Mon 09-Nov-2026",
+        "Original Registration Certificate dispatched via Leopards.",
+        "12-Nov-26",
+        "DR. TARIQ MAHMOOD (DIRECTOR)",
+        "646",
+        "37405-7654321-3",
+        "COMMERCIAL PLAZA, BLUE AREA, ISLAMABAD",
+        "Delivered with signed acknowledgment copy."
+      ],
+      [
+        3,
+        "12/10/2026",
+        "647-A-001",
+        "GOLDEN GRAIN MILLS",
+        "TM-614882",
+        "30",
+        "CHAUDHRY ASLAM PERVAIZ",
+        "GOLDEN AGRI FOODS",
+        "BRANDEX LAW ASSOCIATES",
+        "APPROVED",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "647",
+        "35102-9988776-5",
+        "G.T. ROAD, GUJRANWALA",
+        "Trademark advertised in Trademark Journal."
+      ],
+      [
+        4,
+        "18/10/2026",
+        "648-A-001",
+        "ZENITH TECH SOFTWARES",
+        "TM-620441",
+        "42",
+        "HAMZA KHALID",
+        "ZENITH CLOUD INNOVATIONS",
+        "BRANDEX LAW ASSOCIATES",
+        "IN REVIEW",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "648",
+        "35202-3344556-7",
+        "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE",
+        "Filing completed, waiting for hearing notice."
+      ]
+    ];
+
+    return Papa.unparse({
+      fields: headers,
+      data: sampleRows
+    });
   }
 
   public importRecordsCSV(csvText: string): { success: boolean; message: string; count: number } {
     if (!this.isBrowser()) return { success: false, message: "Browser environment required", count: 0 };
     try {
-      const lines = csvText.trim().split(/\r?\n/);
-      if (lines.length < 2) return { success: false, message: "CSV file has no data rows", count: 0 };
+      if (!csvText || !csvText.trim()) {
+        return { success: false, message: "Uploaded file is empty", count: 0 };
+      }
 
-      const parseCsvLine = (text: string) => {
-        const re = /(?:\"([^\"]*(?:\"\"[^\"]*)*)\")|([^,]+)|(?=,)/g;
-        const matches: string[] = [];
-        let match;
-        while ((match = re.exec(text)) !== null) {
-          if (match[1] !== undefined) {
-            matches.push(match[1].replace(/\"\"/g, '"'));
-          } else if (match[2] !== undefined) {
-            matches.push(match[2].trim());
-          } else {
-            matches.push('');
-          }
+      const parseResult = Papa.parse<any[]>(csvText.trim(), {
+        skipEmptyLines: 'greedy',
+      });
+
+      if (parseResult.errors && parseResult.errors.length > 0 && (!parseResult.data || parseResult.data.length === 0)) {
+        return { success: false, message: parseResult.errors[0]?.message || "CSV parse error", count: 0 };
+      }
+
+      const rows = parseResult.data;
+      if (!rows || rows.length < 2) {
+        return { success: false, message: "CSV file contains no data rows", count: 0 };
+      }
+
+      // Check header row (case-insensitive fuzzy detection)
+      const headerRow = rows[0].map((h: any) => String(h || '').trim().toLowerCase());
+      
+      const findCol = (possibleNames: string[], defaultIndex: number): number => {
+        for (const name of possibleNames) {
+          const idx = headerRow.findIndex((h: string) => h === name.toLowerCase() || h.includes(name.toLowerCase()));
+          if (idx !== -1) return idx;
         }
-        return matches;
+        return defaultIndex;
       };
+
+      const colDate = findCol(["date", "filing date"], 1);
+      const colFolder = findCol(["case name", "folder", "mark name", "trademark name", "mark"], 3);
+      const colTm = findCol(["tm no", "tm number", "trademark no", "tm"], 4);
+      const colClass = findCol(["class", "class no", "class #"], 5);
+      const colAppName = findCol(["applicant", "applicant name", "owner"], 6);
+      const colAppTrade = findCol(["trading as", "trade as", "business name"], 7);
+      const colLawFirm = findCol(["law firm", "consultant", "agent", "attorney"], 8);
+      const colStatus = findCol(["workflow stage", "status", "filing process", "stage"], 9);
+      const colTracking = findCol(["tracking id", "tracking", "courier tracking", "trk"], 10);
+      const colDispDate = findCol(["dispatched date", "dispatch date", "dispatched"], 11);
+      const colDispNote = findCol(["dispatched note", "dispatch note", "shipping note"], 12);
+      const colDelivDate = findCol(["delivered date", "delivery date", "delivered"], 13);
+      const colReceiver = findCol(["receiver name", "receiver", "received by"], 14);
+      const colClientCode = findCol(["client code", "code", "client #"], 15);
+      const colCnic = findCol(["cnic", "nic", "id card"], 16);
+      const colAddress = findCol(["address", "applicant address"], 17);
+      const colNotes = findCol(["notes", "internal notes", "note"], 18);
 
       const existing = this.getRecords();
       let importedCount = 0;
       let maxId = existing.length > 0 ? Math.max(...existing.map(r => r.id || 0)) : 0;
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const cols = parseCsvLine(line);
-        if (cols.length < 4) continue;
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const val = (idx: number) => {
+          if (idx >= 0 && idx < row.length && row[idx] !== undefined && row[idx] !== null) {
+            return String(row[idx]).trim();
+          }
+          return '';
+        };
+
+        const folder = val(colFolder);
+        const appName = val(colAppName);
+        const tm = val(colTm);
+        if (!folder && !appName && !tm) continue;
 
         maxId++;
         const newRec: RecordItem = {
           id: maxId,
-          date: cols[1] || new Date().toLocaleDateString('en-GB'),
-          folder: cols[3] || 'UNTITLED CASE',
-          tm: cols[4] || '',
-          classNo: cols[5] ? cols[5].replace(/\D/g, '') : '1',
-          appName: cols[6] || 'APPLICANT',
-          appTrade: cols[7] || '',
-          conName: cols[8] || 'BRANDEX LAW ASSOCIATES',
-          lawFirm: cols[8] || 'BRANDEX LAW ASSOCIATES',
-          status: cols[9] || 'PENDING',
-          filingProcess: cols[9] || 'PENDING',
-          trackingId: cols[10] || '',
-          dispatchedDate: cols[11] || '',
-          dispatchedNote: cols[12] || '',
-          deliveredDate: cols[13] || '',
-          receiverName: cols[14] || '',
-          clientCode: cols[15] || '',
-          cnic: cols[16] || '',
-          address: cols[17] || '',
-          notes: cols[18] || '',
+          date: val(colDate) || new Date().toLocaleDateString('en-GB'),
+          folder: (folder || 'UNTITLED CASE').toUpperCase(),
+          tm: tm.toUpperCase(),
+          classNo: val(colClass).replace(/\D/g, '') || '1',
+          appName: (appName || 'APPLICANT').toUpperCase(),
+          appTrade: val(colAppTrade).toUpperCase(),
+          conName: (val(colLawFirm) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
+          lawFirm: (val(colLawFirm) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
+          status: (val(colStatus) || 'PENDING').toUpperCase(),
+          filingProcess: (val(colStatus) || 'PENDING').toUpperCase(),
+          trackingId: val(colTracking).toUpperCase(),
+          dispatchedDate: val(colDispDate),
+          dispatchedNote: val(colDispNote),
+          deliveredDate: val(colDelivDate),
+          receiverName: val(colReceiver).toUpperCase(),
+          clientCode: val(colClientCode) || '646',
+          cnic: val(colCnic),
+          address: val(colAddress).toUpperCase(),
+          notes: val(colNotes),
           year: new Date().getFullYear().toString(),
           createdAt: new Date().toISOString()
         };
+
         existing.unshift(newRec);
         importedCount++;
       }
@@ -403,7 +556,148 @@ class StandaloneDB {
       this.saveRecords(existing);
       return { success: true, message: `Successfully imported ${importedCount} cases from CSV`, count: importedCount };
     } catch (e: any) {
-      return { success: false, message: e.message || "Failed to parse CSV", count: 0 };
+      return { success: false, message: e.message || "Failed to parse CSV file", count: 0 };
+    }
+  }
+
+  public exportClientsCSV(): string {
+    const clients = this.getClients();
+    const headers = [
+      "Client Code",
+      "Full Name",
+      "Father Name",
+      "Trading As",
+      "CNIC",
+      "Address",
+      "Consultant Name"
+    ];
+
+    const data = clients.map(c => [
+      c.client_code || '',
+      c.client_name || '',
+      c.father_name || '',
+      c.trading_as || '',
+      c.cnic || '',
+      c.address || '',
+      c.consultant_name || 'BRANDEX LAW ASSOCIATES'
+    ]);
+
+    return Papa.unparse({
+      fields: headers,
+      data
+    });
+  }
+
+  public generateSampleClientsCSV(): string {
+    const headers = [
+      "Client Code",
+      "Full Name",
+      "Father Name",
+      "Trading As",
+      "CNIC",
+      "Address",
+      "Consultant Name"
+    ];
+
+    const sampleRows = [
+      [
+        "646",
+        "MUHAMMAD USMAN RAZA",
+        "HAJI ABDUL RAZZAQ",
+        "AEROFLEX LOGISTICS PAKISTAN",
+        "35201-1234567-1",
+        "PLOT 14, SECTOR I-9, ISLAMABAD",
+        "BRANDEX LAW ASSOCIATES"
+      ],
+      [
+        "647",
+        "CHAUDHRY ASLAM PERVAIZ",
+        "CHAUDHRY BASHIR AHMED",
+        "GOLDEN AGRI FOODS",
+        "35102-9988776-5",
+        "G.T. ROAD, GUJRANWALA",
+        "BRANDEX LAW ASSOCIATES"
+      ],
+      [
+        "648",
+        "HAMZA KHALID",
+        "KHALID MEHMOOD",
+        "ZENITH CLOUD INNOVATIONS",
+        "35202-3344556-7",
+        "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE",
+        "BRANDEX LAW ASSOCIATES"
+      ]
+    ];
+
+    return Papa.unparse({
+      fields: headers,
+      data: sampleRows
+    });
+  }
+
+  public importClientsCSV(csvText: string): { success: boolean; message: string; count: number } {
+    if (!this.isBrowser()) return { success: false, message: "Browser environment required", count: 0 };
+    try {
+      if (!csvText || !csvText.trim()) {
+        return { success: false, message: "Uploaded file is empty", count: 0 };
+      }
+
+      const parseResult = Papa.parse<any[]>(csvText.trim(), {
+        skipEmptyLines: 'greedy',
+      });
+
+      const rows = parseResult.data;
+      if (!rows || rows.length < 2) {
+        return { success: false, message: "CSV file contains no data rows", count: 0 };
+      }
+
+      const headerRow = rows[0].map((h: any) => String(h || '').trim().toLowerCase());
+      const findCol = (possibleNames: string[], defaultIndex: number): number => {
+        for (const name of possibleNames) {
+          const idx = headerRow.findIndex((h: string) => h === name.toLowerCase() || h.includes(name.toLowerCase()));
+          if (idx !== -1) return idx;
+        }
+        return defaultIndex;
+      };
+
+      const colCode = findCol(["client code", "code", "client #", "client_code"], 0);
+      const colName = findCol(["full name", "client name", "name", "client_name"], 1);
+      const colFather = findCol(["father name", "father", "father_name"], 2);
+      const colTrade = findCol(["trading as", "trade as", "business", "trading_as", "company"], 3);
+      const colCnic = findCol(["cnic", "nic", "cnic no"], 4);
+      const colAddr = findCol(["address", "client address"], 5);
+      const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
+
+      const existing = this.getClients();
+      let importedCount = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        const val = (idx: number) => (idx >= 0 && idx < row.length && row[idx] !== undefined && row[idx] !== null) ? String(row[idx]).trim() : '';
+
+        const name = val(colName);
+        if (!name) continue;
+
+        const clientCode = val(colCode) || String(646 + existing.length + importedCount);
+        
+        this.addClient({
+          client_code: clientCode,
+          client_name: name.toUpperCase(),
+          father_name: val(colFather).toUpperCase(),
+          trading_as: val(colTrade).toUpperCase(),
+          cnic: val(colCnic),
+          address: val(colAddr).toUpperCase(),
+          consultant_name: (val(colConsultant) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
+          total_cases: 0,
+          created_at: new Date().toISOString()
+        });
+        importedCount++;
+      }
+
+      return { success: true, message: `Successfully imported ${importedCount} client profiles from CSV`, count: importedCount };
+    } catch (e: any) {
+      return { success: false, message: e.message || "Failed to parse client CSV file", count: 0 };
     }
   }
 

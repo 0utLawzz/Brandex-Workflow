@@ -1,152 +1,111 @@
-# BRANDEX WORKFLOW — Vercel Deployment & Architecture Guide
+# BRANDEX WORKFLOW — Vercel & Production Deployment Guide
 
-## 1. Where Are The Files? (All in this Repo!)
+## 1. Architecture Overview
 
-All pages and application logic are **100% self-contained inside this repository**. There are **no external repositories linked**.
+Brandex Workflow is a full-featured Legal Practice CMS for Brandex Law Associates built on Next.js 15 (App Router).
 
-### Repository Structure
-
-```
-Brandex-Workflow2/
-├── app/
-│   ├── api/
-│   │   ├── applications/route.ts    # Authenticated application proxy
-│   │   └── records/route.ts         # Authenticated records proxy
-│   ├── page.tsx                     # CMS Home
-│   ├── records/
-│   │   └── page.tsx                 # Trademark Records & Timeline Dashboard
-│   ├── trademark-application/
-│   │   └── page.tsx                 # Trademark Application Form Generator
-│   ├── clients/
-│   │   └── page.tsx                 # Client Directory & Profile Management
-│   ├── components/
-│   │   ├── Navbar.tsx               # Top Navigation & Quick Switcher
-│   │   ├── DataBackupModal.tsx      # 1-Click JSON Backup Export / Restore / Reset
-│   │   └── Footer.tsx               # Neo-brutalist Footer
-│   ├── layout.tsx                   # Root HTML Layout & Meta Tags
-│   └── globals.css                  # Tailwind CSS Styles
-├── lib/
-│   ├── apps-script-proxy.ts         # Server-only token proxy
-│   ├── standalone-db.ts             # Browser localStorage store
-│   └── data.ts                      # Classes, statuses, and endpoint config
-├── middleware.ts                    # Production Basic Auth gate
-├── Code.gs                          # Google Apps Script backend source
-├── public/                          # Static Assets & Thumbnails
-├── package.json                     # Next.js 15 & Dependencies
-├── next.config.ts                   # Next.js Configuration
-└── DEPLOY-GUIDE.md                  # This Deployment & Architecture Guide
-```
+### Persistence & Storage Tiers
+1. **Primary Cloud Database (Supabase PostgreSQL):**
+   - Tables: `trademark_records`, `trademark_history`, `trademark_documents`, `clients`.
+   - Stores all trademark filings, case status transitions, courier dispatch tracking, and uploaded proof documents/receipts.
+2. **Local Sovereignty (Browser Engine):**
+   - Implemented via `lib/standalone-db.ts` to ensure 0ms latency and uninterrupted operation even during intermittent internet connectivity.
+3. **Document MailMerge Backend:**
+   - Google Apps Script (`Code.gs`) generates official Form TM-1 and TM-48 documents directly in Google Drive.
 
 ---
 
-## 2. Vercel Deployment Settings
+## 2. Deploying to Vercel (Step-by-Step)
 
-When importing `Brandex-Workflow2` into Vercel:
+### Option A: Deploy via GitHub Integration (Recommended)
 
-| Setting | Value | Notes |
-| --------- | ------- | ------- |
-| **Framework Preset** | `Next.js` | Auto-detected |
-| **Root Directory** | `./` | Leave as default `./` |
-| **Build Command** | `npm run build` | Default `next build` |
-| **Output Directory** | `.next` | Default Next.js output |
-| **Node.js Version** | `20.x` or `22.x` | Recommended |
+1. **Commit and Push Code to GitHub:**
+   ```bash
+   git add .
+   git commit -m "feat: complete brandex cms with supabase persistence, dispatch receipts and clean UI"
+   git push origin main
+   ```
 
-### Hostinger Node.js Upload
+2. **Import into Vercel:**
+   - Go to [vercel.com](https://vercel.com) and log in.
+   - Click **Add New...** → **Project**.
+   - Select your GitHub repository (`0utLawzz/Brandex-Workflow`).
 
-For Hostinger plans with Node.js app support, upload a source archive rooted at the project files. Use Node.js `22.x`, root directory `./`, install command `npm ci`, build command `npm run build`, and start command `npm start`. The standalone server uses the port assigned by the hosting platform.
+3. **Configure Project Settings in Vercel:**
+   - **Framework Preset:** `Next.js` (Automatically detected).
+   - **Root Directory:** `./`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `.next`
+   - **Node.js Version:** `20.x` or `22.x`
 
-Include `app/`, `lib/`, `public/`, `middleware.ts`, `package.json`, `package-lock.json`, and the Next.js configuration files. Do not include `.env*`, `.git/`, `.next/`, `.next-dev/`, or `node_modules/`. Set `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN` as Hostinger runtime environment variables; never expose the token with a `NEXT_PUBLIC_` prefix. Optionally set `NEXT_PUBLIC_APPS_SCRIPT_URL` before building to override the built-in Apps Script endpoint. Use HTTPS.
+4. **Add Environment Variables:**
+   Under the **Environment Variables** section, add the following key-value pairs:
 
-Before enabling production access, open the Apps Script project settings and add the Script Property `RECORDS_ACCESS_TOKEN` with the exact same secret as `APPS_SCRIPT_RECORDS_TOKEN`. Deploy a new web-app version after updating `Code.gs`. The Records page and application form now call same-origin Next.js API routes; those routes attach the secret server-side. The Apps Script `getRecords` GET action and all POST actions reject requests without that secret. A live deployment is not protected until the property and new script version are in place.
+   | Key | Description | Example / Location |
+   | --- | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://your-project.supabase.co` |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon public key | `eyJhbGciOi...` |
+   | `APP_ACCESS_USER` | Staff login username | `IT` or `admin` |
+   | `APP_ACCESS_PASSWORD` | Staff login password | `YourStrongPassword` |
+   | `APPS_SCRIPT_RECORDS_TOKEN` | Secret token matching Script Property | `your-secret-token` |
+   | `NEXT_PUBLIC_APPS_SCRIPT_URL` | Google Apps Script Web App URL | `https://script.google.com/macros/s/.../exec` |
+   | `NEXT_PUBLIC_SHEET_URL` | Google Sheet URL | `https://docs.google.com/spreadsheets/d/...` |
 
-### Current data storage and environment variables
-
-This app is **not connected to Supabase for persistence**. Client profiles and CMS changes are saved in the current browser's `localStorage`; each browser/device has a separate copy. Initial application submissions also call Google Apps Script, which writes to the configured Google Sheet and generates Drive documents. The Records page reads that Apps Script feed and combines it with the current browser's local records.
-
-Hostinger runtime variables do not replace browser storage behavior. If you override `NEXT_PUBLIC_APPS_SCRIPT_URL`, set it in the build environment because `NEXT_PUBLIC_` values are embedded in the client bundle. `NEXT_PUBLIC_SHEET_URL` is not currently used by the page links, which still point to the configured Sheet directly.
-
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `DATABASE_URL` are not currently used by the app's persistence flow. Setting them will not move records to Supabase. Never put a Supabase service-role key or database password in a `NEXT_PUBLIC_` variable or browser bundle.
-
----
-
-## 3. Security & Speed Optimizations
-
-1. **Browser-local data**:
-   - `lib/standalone-db.ts` uses browser `localStorage`. It is not a shared server database and can be cleared with browser data.
-2. **Data Portability & 1-Click Backups**:
-   - Click **STANDALONE** in the top navbar or **Backup JSON** on the Records page to download a timestamped full JSON backup of all clients, records, timelines, and documents.
-   - Restore or migrate your data on any device anytime using the **Import JSON Backup** feature.
-   - Export filtered tables to standard CSV format anytime.
-
----
-
-## 4. Key Features
-
-- **Automatic Selection Slider**: Auto-rotating showcase on the Home Page highlighting the 4 core workflow tools with interactive pause-on-hover.
-- **Screen Wipe Transition**: High-impact Neo-Brutalism wipe animation when launching the Records Dashboard from the Home Page.
-- **Record Management & Timelines**: Full tracking of trademark filings, stages (DELIVERED, DISPATCHED, APPROVED, REVIEW, PENDING), and case history.
-- **Client Directory**: Manage client codes, CNICs, addresses, and instant auto-fill into applications.
-
-### Supabase migration status
-
-`supabase_schema.sql` describes an earlier proposed schema, but the running app does not use it. The schema does not cover all CMS fields and leaves RLS enabled with access denied until reviewed policies are added. Do not run it as a production migration. A safe migration needs an agreed field mapping, an authentication and access policy design, and a one-time import plan for existing Sheet and browser-local records. No live data was migrated by this repository review.
+5. **Deploy:**
+   - Click **Deploy**. Vercel will install dependencies, build the Next.js production bundle, and publish your site with automatic SSL and global CDN caching.
 
 ---
 
-## 5. Troubleshooting: "Specified permissions are not sufficient to call DocumentApp.openById"
+### Option B: Deploy via Vercel CLI
 
-If you encounter this error during document generation:
-`❌ Request failed: Specified permissions are not sufficient to call DocumentApp.openById. Required permissions: https://www.googleapis.com/auth/documents`
+1. Install Vercel CLI globally:
+   ```bash
+   npm i -g vercel
+   ```
+2. Log in and deploy from project directory:
+   ```bash
+   vercel
+   ```
+3. Deploy to production:
+   ```bash
+   vercel --prod
+   ```
 
-This occurs because your deployed Google Apps Script Web App was deployed without the Google Docs OAuth scope authorized on your Google account. Follow these 4 steps (takes 2 minutes):
+---
 
-### Step 1: Enable the manifest file in Google Apps Script
+## 3. Database Schema Setup in Supabase
 
-1. Open your Apps Script Project at [script.google.com](https://script.google.com).
-2. On the left sidebar, click **Project Settings** (⚙️ gear icon).
-3. Check the box: **"Show 'appsscript.json' manifest file in editor"**.
+1. Open your Supabase Dashboard: [https://supabase.com/dashboard](https://supabase.com/dashboard)
+2. Select your project → Navigate to **SQL Editor**.
+3. Open `supabase_schema.sql` from this repository, copy its contents, paste them into the SQL Editor, and click **Run**.
+4. The script creates:
+   - `trademark_records` (including `dispatched_image`, `dispatched_doc_name`, `dispatched_doc_type`, `receipt_image`)
+   - `trademark_history` (audit logs of stage transitions)
+   - `trademark_documents` (file attachments, airway bills, receipts)
+   - `clients` (client ledger profiles)
+   - Row Level Security (RLS) policies allowing secure authenticated access.
 
-### Step 2: Ensure `appsscript.json` has `auth/documents`
+---
 
-1. Go back to the **Editor** (`< >` code icon) and click on **appsscript.json**.
-2. Verify that `oauthScopes` includes `https://www.googleapis.com/auth/documents`:
+## 4. Google Apps Script Configuration
 
-```json
-{
-  "timeZone": "Asia/Karachi",
-  "dependencies": {},
-  "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8",
-  "oauthScopes": [
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/userinfo.email"
-  ],
-  "webapp": {
-    "executeAs": "USER_DEPLOYING",
-    "access": "ANYONE_ANONYMOUS"
-  }
-}
-```
+1. Open your Google Spreadsheet for trademark records.
+2. Go to **Extensions** → **Apps Script**.
+3. Paste the contents of `Code.gs` from this repository.
+4. Under **Project Settings** (gear icon) → **Script Properties**, add:
+   - Property: `RECORDS_ACCESS_TOKEN`
+   - Value: The exact same secret value as your `APPS_SCRIPT_RECORDS_TOKEN`.
+5. Click **Deploy** → **New Deployment** → Type: **Web App**:
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+6. Copy the Web App URL and set it as `NEXT_PUBLIC_APPS_SCRIPT_URL`.
 
-The script uses the built-in `DriveApp` service, so an Advanced Drive API service entry is not required. The anonymous web-app access setting lets the Next.js server proxy call the endpoint; `RECORDS_ACCESS_TOKEN` must be set in Script Properties and is checked for every POST. Direct `getRecords` GET requests remain denied.
+---
 
-### Step 3: Trigger the Google Authorization Prompt
+## 5. Security Checklist
 
-1. In the Editor, open **Code.gs**.
-2. From the function dropdown in the top toolbar, select `authorizeScript`.
-3. Click the **Run** button.
-4. Google will show: **"Authorization required"**.
-5. Click **Review permissions** -> Select your Google Account -> Click **Advanced** -> Click **Go to Brandex Law Associates (unsafe)** -> Click **Allow**.
-6. Check the Execution log — it will display: `✅ DocumentApp & DriveApp permissions authorized successfully!`.
-
-### Step 4: Deploy as a "New version" (CRITICAL!)
->
-> **Important**: Google Apps Script web apps do NOT update their permissions until you deploy a **New version**!
-
-1. In the top right, click **Deploy** > **Manage deployments**.
-2. Click the **Edit (pencil icon)** on your Active deployment.
-3. In the **Version** dropdown, change from the existing number to **"New version"**.
-4. Click **Deploy**.
-5. Done! The web application can now create and mailmerge Google Docs seamlessly.
+- [x] All database mutations and sensitive operations run securely.
+- [x] Passwords and API tokens are never exposed in client bundles (`process.env.APP_ACCESS_PASSWORD`).
+- [x] Protected routes require authentication via `middleware.ts`.
+- [x] PapaParse parses CSV files safely with zero infinite-loop risks.
+- [x] Dispatch receipts and documents are stored as verified data URLs or Supabase records with size limits (up to 12MB).

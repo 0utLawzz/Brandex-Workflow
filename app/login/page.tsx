@@ -63,11 +63,11 @@ function LoginForm() {
           BRANDEX LAW ASSOCIATES
         </h1>
         <div className="flex items-center gap-1.5 mt-1">
-          <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0D9970] text-white rounded border border-[#0C0C0C] flex items-center gap-1">
-            <Database className="w-3 h-3" /> SUPABASE LINKED
+          <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0C0C0C] text-[#FAF6EE] rounded border border-[#0C0C0C] flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-[#0D9970]" /> SECURE PORTAL
           </span>
           <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-            CMS ACCESS
+            STAFF ACCESS
           </span>
         </div>
       </div>

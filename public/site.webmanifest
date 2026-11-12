@@ -1,0 +1,26 @@
+{
+  "name": "Brandex Law Associates CMS",
+  "short_name": "Brandex CMS",
+  "description": "Trademark Application Generator and Legal Records CMS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F0E8D0",
+  "theme_color": "#0C0C0C",
+  "icons": [
+    {
+      "src": "/assets/brandex-favicon-20261003.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/brandex-logo-12.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/brandex-logo-20.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

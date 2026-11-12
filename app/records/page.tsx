@@ -8,7 +8,6 @@ import Footer from '@/app/components/Footer';
 import { SHEET_URL } from '@/lib/data';
 import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
-import SqlSetupModal from '@/app/components/SqlSetupModal';
 import {
   CheckSquare,
   Square,
@@ -35,7 +34,8 @@ import {
   Receipt,
   Eye,
   Paperclip,
-  ExternalLink
+  ExternalLink,
+  FileSpreadsheet
 } from 'lucide-react';
 
 // Highlight query matches in text
@@ -89,7 +89,6 @@ export default function RecordsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [dbSource, setDbSource] = useState<'supabase' | 'local'>('supabase');
-  const [sqlModalOpen, setSqlModalOpen] = useState(false);
 
   // 1. Default status is "PENDING & IN REVIEW"
   const [filterStatus, setFilterStatus] = useState<string>('PENDING_IN_REVIEW');
@@ -411,6 +410,21 @@ export default function RecordsPage() {
     setTimeout(() => setBulkNotice(null), 4000);
   };
 
+  const handleDownloadSampleCSV = () => {
+    const csvContent = standaloneDB.generateSampleRecordsCSV();
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'sample_brandex_records.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setBulkNotice('✓ Downloaded sample demo CSV template with realistic cases.');
+    setTimeout(() => setBulkNotice(null), 4000);
+  };
+
   const handleImportCSVClick = () => {
     csvFileInputRef.current?.click();
   };
@@ -686,18 +700,11 @@ export default function RecordsPage() {
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 ${dbSource === 'supabase' ? 'bg-[#0D9970]' : 'bg-[#C94A00]'} text-white rounded border border-[#0C0C0C]`}>
-                {dbSource === 'supabase' ? 'SUPABASE CLOUD LIVE' : 'STANDALONE / LOCAL'}
+              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0C0C0C] text-[#FAF6EE] rounded border border-[#0C0C0C]">
+                BRANDEX LAW ASSOCIATES
               </span>
-              <button
-                onClick={() => setSqlModalOpen(true)}
-                className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#FAF6EE] hover:bg-white text-[#0C0C0C] rounded border border-[#0C0C0C] flex items-center gap-1 cursor-pointer"
-                title="Configure Supabase SQL schema & API keys"
-              >
-                <Database className="w-3 h-3 text-[#0D9970]" /> Supabase SQL / DB
-              </button>
               <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-                BRANDEX CMS v2.2
+                TRADEMARK &amp; IP REGISTRY CMS
               </span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1.5px] leading-tight">
@@ -706,8 +713,18 @@ export default function RecordsPage() {
           </div>
 
           <div className="flex gap-2.5 flex-wrap items-center">
-            {/* CSV Import & Export Tools */}
+            {/* CSV Import, Export & Sample Template */}
             <button
+              type="button"
+              onClick={handleDownloadSampleCSV}
+              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
+              title="Download sample CSV template with demo trademark data"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0284c7]" /> Sample CSV
+            </button>
+
+            <button
+              type="button"
               onClick={handleImportCSVClick}
               className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
               title="Import cases from CSV file"
@@ -716,6 +733,7 @@ export default function RecordsPage() {
             </button>
 
             <button
+              type="button"
               onClick={handleExportCSV}
               className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
               title="Export all cases to CSV"
@@ -2306,12 +2324,6 @@ export default function RecordsPage() {
           </div>
         </div>
       )}
-
-      <SqlSetupModal
-        isOpen={sqlModalOpen}
-        onClose={() => setSqlModalOpen(false)}
-        onSuccess={loadAllRecords}
-      />
 
       <Footer />
     </div>
