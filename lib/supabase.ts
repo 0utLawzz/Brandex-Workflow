@@ -9,15 +9,11 @@ const DEFAULT_SUPABASE_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpia2dlcmJkbmptY3RxcW5vcW5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg4MDB9.placeholder';
 
 export function getSupabaseCredentials(): { url: string; key: string; isConfigured: boolean } {
-  let url = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
-  let key = DEFAULT_SUPABASE_KEY;
-
-  if (typeof window !== 'undefined') {
-    const savedUrl = localStorage.getItem('brandex_supabase_url');
-    const savedKey = localStorage.getItem('brandex_supabase_key');
-    if (savedUrl && savedUrl.trim()) url = savedUrl.trim();
-    if (savedKey && savedKey.trim()) key = savedKey.trim();
-  }
+  // Supabase endpoints and keys must come from deployment configuration.
+  // Do not accept browser localStorage overrides: any staff member could
+  // redirect the client to an attacker-controlled project or key.
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+  const key = DEFAULT_SUPABASE_KEY;
 
   const isConfigured = Boolean(
     url &&

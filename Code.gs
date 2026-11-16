@@ -311,6 +311,8 @@ function processFormSubmission(data) {
   var sheet = ss.getSheetByName("Sheet1");
   if (!sheet) throw new Error("Sheet1 not found");
 
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
   var lastRow = sheet.getLastRow() + 1;
   var serial  = generateUniqueSerial(sheet);
   var today   = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
@@ -338,10 +340,12 @@ function processFormSubmission(data) {
     );
   } catch (procErr) {
     sheet.getRange(lastRow, 1).setValue("ERROR");
+    lock.releaseLock();
     throw procErr;
   }
 
   sheet.getRange(lastRow, 1).setValue("DONE");
+  lock.releaseLock();
 
   return {
     serialNo: serial,
