@@ -1,5 +1,6 @@
 export const APPS_SCRIPT_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APPS_SCRIPT_URL) ||
+  (typeof process !== 'undefined' && process.env.NEXT_APPS_SCRIPT_URL) ||
   "https://script.google.com/macros/s/AKfycbyUMRVcdasDxGIaaPKbSzhEVbkKyMyYLNv4-NQ8pyGJEjWOukRPzS3Pt5Da6_CdNmP33Q/exec";
 export const SHEET_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SHEET_URL) ||

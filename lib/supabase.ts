@@ -5,6 +5,7 @@ const DEFAULT_SUPABASE_URL = 'https://zbkgerbdnjmctqqnoqnd.supabase.co';
 // Anonymous key placeholder or user-configured key
 const DEFAULT_SUPABASE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_SUPABASE_ANON_KEY ||
   process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpia2dlcmJkbmptY3RxcW5vcW5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg4MDB9.placeholder';
 

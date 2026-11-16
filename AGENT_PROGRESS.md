@@ -69,6 +69,13 @@ Files: `app/api/applications/route.ts`, `middleware.ts`
 - Authenticated responses now include basic `nosniff` and same-origin referrer headers.
 - Updated origin comparison to respect Vercel/reverse-proxy `X-Forwarded-Proto` and `X-Forwarded-Host` headers. This prevents valid production submissions from being rejected because the server runtime sees an internal origin.
 
+### Vercel environment-name compatibility
+
+Files: `lib/data.ts`, `lib/supabase.ts`
+
+- Production currently contains legacy names `NEXT_APPS_SCRIPT_URL` and `NEXT_SUPABASE_ANON_KEY`, while the documented names use `NEXT_PUBLIC_*`.
+- The application now supports both names without exposing or copying secret values. Documented `NEXT_PUBLIC_*` values remain preferred.
+
 ## Validation completed
 
 - `node --experimental-strip-types --test tests/*.test.mjs`: 2 passed, 0 failed.
