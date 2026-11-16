@@ -11,6 +11,7 @@ Last updated: 2026-11-17
 - Unauthenticated API smoke response was correctly `401 Authentication required`. Authenticated end-to-end generation still requires a protected-browser session and valid production configuration; no production client data was submitted.
 - Latest compatibility fix committed as `d173e8a` and deployed to production deployment `dpl_AjLFUoThcxT5hBGqg1T95g2Cybeu` with `READY` status.
 - Vercel production variable names were found to use legacy aliases; application code now accepts both the legacy names and the documented names.
+- The follow-up documentation push is also live as production deployment `dpl_F75jJJzvyuwMLYgKfwAUnyvtrYKq` with `READY` status and the same production alias.
 
 ## Working rules
 
