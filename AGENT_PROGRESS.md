@@ -9,6 +9,8 @@ Last updated: 2026-11-17
 - Production alias: `https://br-workflow.vercel.app`.
 - Deployment protection is enabled. An automation bypass was temporarily created by the Vercel CLI during smoke verification; revoke or rotate that bypass in Vercel Project Settings → Deployment Protection → Automation Bypass after verification.
 - Unauthenticated API smoke response was correctly `401 Authentication required`. Authenticated end-to-end generation still requires a protected-browser session and valid production configuration; no production client data was submitted.
+- Latest compatibility fix committed as `d173e8a` and deployed to production deployment `dpl_AjLFUoThcxT5hBGqg1T95g2Cybeu` with `READY` status.
+- Vercel production variable names were found to use legacy aliases; application code now accepts both the legacy names and the documented names.
 
 ## Working rules
 
