@@ -2,6 +2,22 @@ import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
 import { mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 
+const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
+
+async function withSupabaseTimeout<T>(operation: PromiseLike<T>): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve(operation),
+      new Promise<T>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('Supabase request timed out')), SUPABASE_REQUEST_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
 // Helper to map DB row to RecordItem
 export function mapRowToRecord(row: any): RecordItem {
   return {
@@ -130,10 +146,10 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await client
+      const { data, error } = await withSupabaseTimeout(client
         .from('trademark_records')
         .select('id')
-        .limit(1);
+        .limit(1));
 
       if (error) {
         return {
@@ -172,10 +188,10 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await client
+      const { data, error } = await withSupabaseTimeout(client
         .from('trademark_records')
         .select('*')
-        .order('id', { ascending: false });
+        .order('id', { ascending: false }));
 
       if (error) {
         console.warn('[SupabaseDB] Query returned error, using local fallback:', error.message);
@@ -433,10 +449,10 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await client
+      const { data, error } = await withSupabaseTimeout(client
         .from('clients')
         .select('*')
-        .order('id', { ascending: false });
+        .order('id', { ascending: false }));
 
       if (error) {
         return { clients: local, source: 'local', error: error.message };
