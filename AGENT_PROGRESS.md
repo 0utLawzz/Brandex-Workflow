@@ -2,6 +2,14 @@
 
 Last updated: 2026-11-17
 
+## Deployment status
+
+- Changes committed and pushed to GitHub `main` in commit `895bc95`.
+- Vercel production deployment completed with `READY` status.
+- Production alias: `https://br-workflow.vercel.app`.
+- Deployment protection is enabled. An automation bypass was temporarily created by the Vercel CLI during smoke verification; revoke or rotate that bypass in Vercel Project Settings → Deployment Protection → Automation Bypass after verification.
+- Unauthenticated API smoke response was correctly `401 Authentication required`. Authenticated end-to-end generation still requires a protected-browser session and valid production configuration; no production client data was submitted.
+
 ## Working rules
 
 - Do not modify production Supabase, Google Sheets, Apps Script, Google Drive, Hostinger, or live client data without explicit approval.
