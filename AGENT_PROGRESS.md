@@ -16,6 +16,7 @@ Last updated: 2026-11-17
 - Apps Script deployment inspection showed the active Web App URL was a newer deployment URL than the old Vercel/fallback URL. The current active URL was set in Vercel Production as both `NEXT_PUBLIC_APPS_SCRIPT_URL` and `NEXT_APPS_SCRIPT_URL`.
 - New deployment `dpl_3m5c9pB5Fr2psVXZi3ic4RTQrd2w` reached `READY`; the production application page loads and displays all existing series options and form controls.
 - Added a 10-second timeout to Supabase connection, record, and client reads so a stalled Supabase request falls back instead of leaving the Records screen indefinitely loading.
+- Pushed commit `0cb3e4c` to `origin/main`; production deployment `dpl_Bw8dB1KAnXPFkCVVpvnHPMdxLKkE` is READY and aliased to `https://br-workflow.vercel.app`.
 
 ## Working rules
 
