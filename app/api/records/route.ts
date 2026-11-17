@@ -7,30 +7,34 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const { isConfigured } = getSupabaseCredentials();
-  let supabaseRecords: ReturnType<typeof mapRowToRecord>[] = [];
-  let supabaseAvailable = false;
+  const supabaseRead = isConfigured
+    ? (async () => {
+      try {
+        const client = getSupabaseClient();
+        const { data, error } = await client
+          .from('trademark_records')
+          .select('*')
+          .order('id', { ascending: false });
 
-  // Read the configured Supabase source once.
-  if (isConfigured) {
-    try {
-      const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('trademark_records')
-        .select('*')
-        .order('id', { ascending: false });
-
-      if (!error && Array.isArray(data)) {
-        supabaseRecords = data.map(mapRowToRecord);
-        supabaseAvailable = true;
+        if (!error && Array.isArray(data)) {
+          return { records: data.map(mapRowToRecord), available: true };
+        }
+      } catch (e) {
+        console.warn('[API records] Supabase query failed:', e);
       }
-    } catch (e) {
-      console.warn('[API records] Supabase query failed:', e);
-    }
-  }
+      return { records: [] as ReturnType<typeof mapRowToRecord>[], available: false };
+    })()
+    : Promise.resolve({ records: [] as ReturnType<typeof mapRowToRecord>[], available: false });
 
   // The Records page synchronizes cases written by Apps Script/Sheets too.
-  if (process.env.APPS_SCRIPT_RECORDS_TOKEN) {
-    const appsScriptResponse = await proxyAppsScript({ action: 'getRecords' });
+  // Start both existing source reads together so their latencies do not add up.
+  const appsScriptRead = process.env.APPS_SCRIPT_RECORDS_TOKEN
+    ? proxyAppsScript({ action: 'getRecords' })
+    : Promise.resolve(null);
+  const [supabaseResult, appsScriptResponse] = await Promise.all([supabaseRead, appsScriptRead]);
+  const { records: supabaseRecords, available: supabaseAvailable } = supabaseResult;
+
+  if (appsScriptResponse) {
     const appsScriptData = await appsScriptResponse.json().catch(() => null);
 
     if (appsScriptResponse.ok && appsScriptData?.ok === true && Array.isArray(appsScriptData.records)) {

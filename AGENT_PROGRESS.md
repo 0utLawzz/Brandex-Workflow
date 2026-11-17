@@ -140,7 +140,7 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 
 ## Production boundary
 
-No production database, Supabase project, Google Apps Script deployment, Google Sheet, Google Drive folder, Hostinger server, or live client data has been changed by this work.
+Before the live correction below, no production database, Supabase project, Apps Script deployment, Sheet row, Drive folder, Hostinger server, or live client data had been changed. The approved Apps Script property-key correction and version deployments are documented below; no production case row or file was edited or deleted.
 
 ## Latest verified state — 2026-11-17
 
@@ -186,8 +186,10 @@ No production database, Supabase project, Google Apps Script deployment, Google 
 - Existing Drive folder `325-A-056` visibly contains a logo plus the generated TM-1 and TM-48 files. This confirms that the document outputs exist for that folder; do not generate a duplicate for it.
 - Fixed `getRecordsForView()` in the Apps Script editor to expose the case filing stage from Sheet column V for both `status` and `filingProcess`, rather than using column A's generation state. Blank stages default to `PENDING`. Saved and deployed the existing web app as Version 76; deployment reported success and retained the same web app URL and access settings.
 - Production Records CMS loads 35 current records after refresh. The Sheet case searched as `ADADSD` was not present in those 35, so retrieval of that Sheet-only case is not yet proven.
-- Retrieval fix in progress: `app/api/records/route.ts` now reads Supabase once and, when the existing Apps Script backend token is configured, also synchronizes Apps Script/Sheets records and merges on the existing folder/trademark identity. Supabase wins for duplicates. This restores the page's existing background-sync behavior without adding columns or duplicate Supabase reads.
+- Retrieval fix: `app/api/records/route.ts` now reads Supabase once and, when the existing Apps Script backend token is configured, also synchronizes Apps Script/Sheets records and merges on the existing folder/trademark identity. Supabase wins for duplicates. This restores the page's existing background-sync behavior without adding columns or duplicate Supabase reads.
 - `lib/record-source-merge.ts` and `tests/record-source-merge.test.mjs` cover Sheet-only records, Supabase duplicate priority, and blank identity fields. The Apps Script mapping regression is in `tests/apps-script-contract.test.mjs`.
-- Current validation after both changes: `npm test` passed (17 tests), `npm run lint`, `npx tsc --noEmit`, `npm run build`, `Get-Content Code.gs -Raw | node --check`, and `git diff --check` passed. The local retrieval change still needs a GitHub push and Vercel deployment before production verification.
+- Current validation after both changes: `npm test` passed (17 tests), `npm run lint`, `npx tsc --noEmit`, `npm run build`, `Get-Content Code.gs -Raw | node --check`, and `git diff --check` passed. Commit `f5af20b` is pushed to GitHub `main`; Vercel production deployment `dpl_4GkSkWqFJmDaM9CfW1hsvjzE6VsZ` is `READY` and owns `https://br-workflow.vercel.app`.
+- Production verification after reload: Records CMS combined source count is 510, with 47 pending/in-review records in its default stage filter. Searching the formerly missing Sheet value `ADADSD` returns exactly one visible pending case. No duplicate submission or production mutation was used for this verification.
+- The full Sheet-backed view took roughly 15 seconds to appear. A follow-up now starts the existing Supabase and Apps Script source reads in parallel; this preserves the same data and read count while avoiding sequential wait time. Validation is green locally; this follow-up still needs a GitHub push, Vercel deployment, and production timing check.
 - Keep the Supabase permissive-RLS issue and browser local-storage quota failure open. Neither was changed by this deployment. No production data row was edited, imported, or deleted during this retrieval fix.
 
