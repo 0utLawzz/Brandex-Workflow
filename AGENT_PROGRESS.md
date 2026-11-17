@@ -19,6 +19,7 @@ Last updated: 2026-11-17
 - Pushed commit `0cb3e4c` to `origin/main`; production deployment `dpl_Bw8dB1KAnXPFkCVVpvnHPMdxLKkE` is READY and aliased to `https://br-workflow.vercel.app`.
 - Verified the previously configured newer Apps Script URL returned Google 404, while the repository fallback deployment URL returned the expected JSON `Authentication required` response. Restored both Vercel Production variables (`NEXT_APPS_SCRIPT_URL` and `NEXT_PUBLIC_APPS_SCRIPT_URL`) to the working deployment URL and redeployed as `dpl_BckpXtxmf7Gq9866hjCoNSvPRZ5c` (READY).
 - Real document-generation verification remains pending because it creates a Google Sheet row and Drive documents; no synthetic production submission has been made without an explicit test record/data from the user.
+- Pushed `2d78730` with CSV case-reference preservation and its regression test. Production deployment `dpl_965JWhspw8n7ZHn2XgLXoJNf4AZa` is READY at `https://br-workflow.vercel.app`.
 
 ## Working rules
 
