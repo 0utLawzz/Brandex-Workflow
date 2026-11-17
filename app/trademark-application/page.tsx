@@ -9,6 +9,7 @@ import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, SHEET_URL 
 import { standaloneDB } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { getSupabaseCredentials } from '@/lib/supabase';
+import { buildGenerationRetryDraft } from '@/lib/generation-retry';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
@@ -65,7 +66,9 @@ export default function TrademarkApplicationPage() {
   const [lastSavedCaseId, setLastSavedCaseId] = useState<number | null>(null);
   const [lastSavedFolder, setLastSavedFolder] = useState<string>('');
   const [lastSavedToSupabase, setLastSavedToSupabase] = useState(false);
+  const [lastSavedToAppsScript, setLastSavedToAppsScript] = useState(false);
   const [generationPending, setGenerationPending] = useState(false);
+  const [retryImageData, setRetryImageData] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
@@ -129,6 +132,70 @@ export default function TrademarkApplicationPage() {
 
     // Auto-increment case number
     async function fetchLatestCaseNo() {
+      const retryId = Number(new URLSearchParams(window.location.search).get('retryId'));
+      if (Number.isSafeInteger(retryId) && retryId > 0) {
+        try {
+          const search = new URLSearchParams(window.location.search);
+          const retryFolder = search.get('retryFolder') || '';
+          const retryTm = search.get('retryTm') || '';
+          const response = await fetch('/api/records', { cache: 'no-store' });
+          const result = await response.json();
+          const existing = response.ok && result?.ok && Array.isArray(result.records)
+            ? result.records.find((record: any) => retryFolder || retryTm
+              ? String(record.folder || '').trim() === retryFolder.trim() && String(record.tm || '').trim() === retryTm.trim()
+              : Number(record.id) === retryId)
+            : null;
+          if (!existing) {
+            setStatusType('error');
+            setStatusMsg('This case could not be found in the connected records. No new case was created.');
+            return;
+          }
+          const draft = buildGenerationRetryDraft(existing);
+          const identityFolder = String(existing.folder || '').trim();
+          const identityTrademark = String(existing.tm || '').trim();
+          const supabaseKey = identityFolder || identityTrademark
+            ? `${identityFolder}__${identityTrademark}`
+            : `id:${existing.id ?? ''}`;
+          const isSupabaseRecord = Array.isArray(result.supabaseRecordKeys) && result.supabaseRecordKeys.includes(supabaseKey);
+          setSelectedCategory(draft.category);
+          setSelectionMenu(draft.selectionMenu);
+          setClientCode(draft.clientCode);
+          setCaseNo(draft.caseNo);
+          setSelectedClientId(draft.clientId ? String(draft.clientId) : '');
+          setClassNo(draft.classNo);
+          setClassDesc(draft.classDesc);
+          setConName(draft.conName);
+          setConAdd(draft.conAddr);
+          setFolder(draft.folder);
+          setTm(draft.tm);
+          setAppType(draft.appType);
+          setAppName(draft.appName);
+          setAppSo(draft.appSo);
+          setAppCnic(draft.appCnic);
+          setIssueDate(draft.issueDate);
+          setExpiryDate(draft.expiryDate);
+          setAppTrade(draft.appTrade);
+          setAppAdd(draft.appAdd);
+          setYear(draft.year);
+          setNoImg(draft.noImg);
+          setStatus(draft.status);
+          setTrackingId(draft.trackingId);
+          setRetryImageData(draft.imageData);
+          setPreviewSrc(draft.imageData || null);
+          setLastSavedCaseId(retryId);
+          setLastSavedFolder(draft.folder);
+          setLastSavedToSupabase(isSupabaseRecord);
+          setLastSavedToAppsScript(String(result.source || '').includes('apps-script'));
+          setGenerationPending(true);
+          setStatusType('info');
+          setStatusMsg('Existing case loaded for document retry. Missing applicant details must be completed below. Reattach any additional files because those are not stored in the case record.');
+        } catch {
+          setStatusType('error');
+          setStatusMsg('Could not load this case for retry. No new case was created. Please try again.');
+        }
+        return;
+      }
+
       try {
         const res = await supabaseDB.getRecords();
         let maxCase = 0;
@@ -270,6 +337,24 @@ export default function TrademarkApplicationPage() {
 
   const submitApplication = async (retryGeneration: boolean) => {
     if (submitting) return;
+    if (retryGeneration) {
+      const missing = [
+        !folder.trim() && 'case folder',
+        !classNo.trim() && 'class',
+        !appName.trim() && 'applicant name',
+        !appSo.trim() && 'father name',
+        !appCnic.trim() && 'CNIC',
+        !appAdd.trim() && 'applicant address',
+        !issueDate && 'issue date',
+        !appTrade.trim() && 'trading name',
+        !year.trim() && 'year',
+      ].filter(Boolean);
+      if (missing.length) {
+        setStatusType('info');
+        setStatusMsg(`Complete these required details before retrying: ${missing.join(', ')}. The existing case will be reused.`);
+        return;
+      }
+    }
     let recordSavedToSupabase = retryGeneration ? lastSavedToSupabase : false;
 
     const payload: Record<string, any> = {
@@ -325,6 +410,10 @@ export default function TrademarkApplicationPage() {
         payload.imageBase64 = base64;
         payload.imageName = selectedFile.name;
         payload.imageMime = selectedFile.type;
+      } else if (retryGeneration && retryImageData) {
+        payload.imageBase64 = retryImageData;
+        payload.imageName = `${folder.trim()}.png`;
+        payload.imageMime = retryImageData.startsWith('data:image/jpeg') ? 'image/jpeg' : 'image/png';
       }
 
       if (additionalFiles.length > 0) {
@@ -343,7 +432,7 @@ export default function TrademarkApplicationPage() {
 
       // A generation retry reuses the record that was already saved before
       // Apps Script failed. Never insert a second case for the same retry.
-      let insertedRecordId = lastSavedCaseId;
+      let insertedRecordId = retryGeneration && !lastSavedToSupabase ? null : lastSavedCaseId;
       if (!retryGeneration) {
         setProgressPercent(30);
         recordSavedToSupabase = getSupabaseCredentials().isConfigured;
@@ -379,9 +468,10 @@ export default function TrademarkApplicationPage() {
         setLastSavedCaseId(insertedRecordId);
         setLastSavedFolder(payload.folder);
         setLastSavedToSupabase(recordSavedToSupabase);
+        setLastSavedToAppsScript(false);
       }
 
-      if (!insertedRecordId) throw new Error('The saved case could not be found for document retry.');
+      if (!retryGeneration && !insertedRecordId) throw new Error('The saved case could not be found for document generation.');
 
       setProgressPercent(60);
       setProgressLabel('Generating documents via Google Apps Script');
@@ -403,20 +493,23 @@ export default function TrademarkApplicationPage() {
         } catch {}
 
         if (res.ok && data && data.ok === true) {
-          if (data.serialNo) await supabaseDB.updateRecord(insertedRecordId, { serialNo: String(data.serialNo) });
+          if (data.serialNo && insertedRecordId) await supabaseDB.updateRecord(insertedRecordId, { serialNo: String(data.serialNo) });
           let attachmentWarning = '';
-          for (const attachment of data.attachments || []) {
-            try {
-              await supabaseDB.addDocument({
-                record_id: insertedRecordId,
-                file_name: attachment.name,
-                file_size: attachment.size,
-                file_type: attachment.mimeType,
-                file_url: attachment.url,
-              });
-            } catch (error) {
-              console.error('[Application] Attachment reference could not be saved:', error);
-              attachmentWarning = ' One or more files are in Drive, but their database references could not be saved.';
+          const savedRecordId = insertedRecordId;
+          if (savedRecordId) {
+            for (const attachment of data.attachments || []) {
+              try {
+                await supabaseDB.addDocument({
+                  record_id: savedRecordId,
+                  file_name: attachment.name,
+                  file_size: attachment.size,
+                  file_type: attachment.mimeType,
+                  file_url: attachment.url,
+                });
+              } catch (error) {
+                console.error('[Application] Attachment reference could not be saved:', error);
+                attachmentWarning = ' One or more files are in Drive, but their database references could not be saved.';
+              }
             }
           }
           clearInterval(progressTimerRef.current as NodeJS.Timeout);
@@ -424,8 +517,13 @@ export default function TrademarkApplicationPage() {
           setProgressLabel('Completed');
 
           setStatusType('success');
+          const savedLocation = recordSavedToSupabase
+            ? 'Case saved to Supabase.'
+            : retryGeneration && lastSavedToAppsScript
+              ? 'Existing case remains in Google Sheets.'
+              : 'Case saved in this browser only; Supabase is not configured.';
           setStatusMsg(
-            `✅ Success! Documents generated. ${recordSavedToSupabase ? 'Case saved to Supabase.' : 'Case saved in this browser only; Supabase is not configured.'}\n` +
+            `✅ Success! Documents generated. ${savedLocation}\n` +
             `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
             `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
             (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '') + attachmentWarning
@@ -435,8 +533,8 @@ export default function TrademarkApplicationPage() {
             tm1Url: data.tm1Url,
             tm48Url: data.tm48Url
           });
-          notifyResult(true, recordSavedToSupabase
-            ? `${payload.folder} — saved to database and documents generated.`
+          notifyResult(true, recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
+            ? `${payload.folder} — saved case and generated documents.`
             : `${payload.folder} — documents generated; case is only saved in this browser.`);
           setGenerationPending(false);
           return;
@@ -451,13 +549,15 @@ export default function TrademarkApplicationPage() {
           setGenerationPending(true);
           const savedStatus = recordSavedToSupabase
             ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.`
-            : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
+            : retryGeneration && lastSavedToAppsScript
+              ? `✅ EXISTING CASE FOUND IN GOOGLE SHEETS.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) remains in the connected Apps Script records.`
+              : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
           setStatusMsg(
             `${savedStatus}\n` +
             `Note on Document Generation: ${errMsg}.` +
             (isBackendAuth ? '\nCheck the Apps Script property and Vercel backend token are identical.' : '')
           );
-          notifyResult(recordSavedToSupabase, recordSavedToSupabase
+          notifyResult(recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript), recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
             ? 'Case saved in database. Apps Script doc generation pending.'
             : 'Case is only in this browser. Apps Script doc generation pending.');
         }
@@ -466,12 +566,14 @@ export default function TrademarkApplicationPage() {
         setGenerationPending(true);
         const savedStatus = recordSavedToSupabase
           ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.`
-          : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
+          : retryGeneration && lastSavedToAppsScript
+            ? `✅ EXISTING CASE FOUND IN GOOGLE SHEETS.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) remains in the connected Apps Script records.`
+            : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
         setStatusMsg(
           `${savedStatus}\n` +
           `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
         );
-        notifyResult(recordSavedToSupabase, recordSavedToSupabase
+        notifyResult(recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript), recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
           ? 'Case saved in database.'
           : 'Case is only in this browser.');
       }

@@ -1429,6 +1429,16 @@ export default function RecordsPage() {
                         {/* Col 12: Actions */}
                         <td className="p-2.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
+                            {((r.status || 'PENDING').toUpperCase().includes('PENDING') || (r.status || '').toUpperCase().includes('REVIEW')) && (
+                              <Link
+                                href={`/trademark-application?retryId=${encodeURIComponent(String(r.id))}&retryFolder=${encodeURIComponent(r.folder || '')}&retryTm=${encodeURIComponent(r.tm || '')}`}
+                                className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#d1fae5] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer inline-flex"
+                                title="Retry document generation for this existing case"
+                                aria-label={`Retry documents for case ${r.folder}`}
+                              >
+                                <RefreshCw className="w-3.5 h-3.5 text-[#0D9970]" />
+                              </Link>
+                            )}
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"

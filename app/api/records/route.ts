@@ -5,6 +5,14 @@ import { mergeRecordSources } from '@/lib/record-source-merge';
 
 export const dynamic = 'force-dynamic';
 
+function getSupabaseRecordKeys(records: Array<{ id?: number | string | null; folder?: string | null; tm?: string | null }>) {
+  return records.map((record) => {
+    const folder = String(record.folder || '').trim();
+    const trademark = String(record.tm || '').trim();
+    return folder || trademark ? `${folder}__${trademark}` : `id:${record.id ?? ''}`;
+  });
+}
+
 export async function GET() {
   const { isConfigured } = getSupabaseCredentials();
   const supabaseRead = isConfigured
@@ -42,6 +50,7 @@ export async function GET() {
       return Response.json({
         ok: true,
         records,
+        supabaseRecordKeys: getSupabaseRecordKeys(supabaseRecords),
         source: supabaseAvailable ? 'supabase+apps-script' : 'apps-script',
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -52,6 +61,7 @@ export async function GET() {
       return Response.json({
         ok: true,
         records: supabaseRecords,
+        supabaseRecordKeys: getSupabaseRecordKeys(supabaseRecords),
         source: 'supabase',
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -66,6 +76,7 @@ export async function GET() {
     return Response.json({
       ok: true,
       records: supabaseRecords,
+      supabaseRecordKeys: getSupabaseRecordKeys(supabaseRecords),
       source: 'supabase',
     }, { headers: { 'Cache-Control': 'no-store' } });
   }

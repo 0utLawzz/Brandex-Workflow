@@ -202,11 +202,19 @@ Before the live correction below, no production database, Supabase project, Apps
 - The safe retry action exists only in the original application page's in-memory state (`lastSavedCaseId` plus the submitted form values). The CMS row does not preserve that retry state. Re-submitting the form would create another case; manually reconstructing and posting a generation payload could create duplicate Drive/Sheet outputs or omit source attachments. No retry, new case, or production mutation was performed.
 - Next step: use the original application's visible “Retry Document Generation” action if its failed-result card is still open. If that browser state is gone, provide the original failed-result page/session or confirm a separate recovery approach before rebuilding a payload. Then verify the result and Drive files for `222-A-054` before closing the generation issue.
 
-### 2026-11-17 local retry reliability fix (not deployed yet)
+### 2026-11-17 Apps Script retry reliability deployment
 
 - `Code.gs` now records a stable mapping from client/series/case reference to its Sheet serial and reuses the matching row on a repeat generation request. It verifies the stored form values and stops if the reference points to changed data or multiple rows match, rather than silently appending another case.
 - Apps Script now reuses the case's logo file and reopens existing TM-1/TM-48 docs to replace any remaining template fields after a partial document failure. Existing completed output remains unchanged because replaced placeholders no longer exist. Additional attachments already use name-based reuse.
 - The application retry sends the still-selected original logo and attachments again; Apps Script reuses stored files by name. New Supabase case writes now save applicant father name, CNIC, and address into existing schema columns, without adding columns.
 - Added Apps Script retry regressions, including a simulated failed processing attempt followed by a retry that confirms one Sheet row is reused. Full `npm test` passes 20/20; `npm run lint`, `npx tsc --noEmit`, `npm run build`, Apps Script JavaScript syntax check, and `git diff --check` pass.
-- These source changes have not yet been pushed to GitHub/Vercel or deployed to Apps Script. The live CMS still showed `222-A-054` as PENDING. No production retry or Sheet/Drive change has been performed in this work segment.
+- Commit `8b31970` was pushed to GitHub `main`; Vercel deployment `dpl_8GLyVwVE4ioMJURq8QqkPiUHzgw2` reached READY at `https://br-workflow.vercel.app`. Apps Script Version 77 was deployed with the same existing web app URL and permissions. The actual failed case was not retried, and no production case, Sheet row, or Drive file was changed.
+
+### 2026-11-17 durable retry recovery work (local, validated; deployment pending)
+
+- Added a Records action that opens document recovery for the existing pending/review case, plus form hydration from the combined Supabase + Apps Script Records API. It matches by case folder and trademark when available, avoiding reliance on a potentially overlapping numeric ID alone.
+- The existing `/api/records` response now includes the identities already present in Supabase, so the form can safely tell Supabase-backed records from Sheet-only cases without another database query. A Sheet-only retry skips Supabase serial/document writes, preventing a Sheet serial number from being mistaken for an unrelated Supabase row ID.
+- Retry uses the existing case and does not insert a second case. Existing applicant details and saved logo are restored; missing father name, CNIC, address, date, and other required fields must be supplied before sending a retry. Additional attachments must be reattached because they are not stored with the case record.
+- Added retry field/date regression tests. Current validation: `npm test` 22/22, `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` pass. No live generation or production data changes were performed.
+- Next: commit and push this recovery path, wait for its Vercel deployment to become READY, then use the recovery link only after the user supplies the missing applicant details and required attachments. Verify generated Drive links and the resulting record without creating another case. Do not mark end-to-end generation resolved until that check succeeds.
 
