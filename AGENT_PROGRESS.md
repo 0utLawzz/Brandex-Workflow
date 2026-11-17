@@ -180,3 +180,14 @@ No production database, Supabase project, Google Apps Script deployment, Google 
 3. If token authentication passes but generation reports Google Docs/Drive authorization errors, authorize the existing Apps Script project scopes and deploy a new Apps Script version as indicated by the error.
 4. Inspect the returned generation result, case record status, and corresponding Drive outputs before treating end-to-end generation as verified. Do not create a new production case just for testing.
 
+### 2026-11-17 live correction and retrieval finding
+
+- The user approved renaming the production Apps Script property to `RECORDS_ACCESS_TOKEN` while preserving its existing value. The active deployment URL remains the same and still uses execute-as-owner / Anyone settings.
+- Existing Drive folder `325-A-056` visibly contains a logo plus the generated TM-1 and TM-48 files. This confirms that the document outputs exist for that folder; do not generate a duplicate for it.
+- Fixed `getRecordsForView()` in the Apps Script editor to expose the case filing stage from Sheet column V for both `status` and `filingProcess`, rather than using column A's generation state. Blank stages default to `PENDING`. Saved and deployed the existing web app as Version 76; deployment reported success and retained the same web app URL and access settings.
+- Production Records CMS loads 35 current records after refresh. The Sheet case searched as `ADADSD` was not present in those 35, so retrieval of that Sheet-only case is not yet proven.
+- Retrieval fix in progress: `app/api/records/route.ts` now reads Supabase once and, when the existing Apps Script backend token is configured, also synchronizes Apps Script/Sheets records and merges on the existing folder/trademark identity. Supabase wins for duplicates. This restores the page's existing background-sync behavior without adding columns or duplicate Supabase reads.
+- `lib/record-source-merge.ts` and `tests/record-source-merge.test.mjs` cover Sheet-only records, Supabase duplicate priority, and blank identity fields. The Apps Script mapping regression is in `tests/apps-script-contract.test.mjs`.
+- Current validation after both changes: `npm test` passed (17 tests), `npm run lint`, `npx tsc --noEmit`, `npm run build`, `Get-Content Code.gs -Raw | node --check`, and `git diff --check` passed. The local retrieval change still needs a GitHub push and Vercel deployment before production verification.
+- Keep the Supabase permissive-RLS issue and browser local-storage quota failure open. Neither was changed by this deployment. No production data row was edited, imported, or deleted during this retrieval fix.
+

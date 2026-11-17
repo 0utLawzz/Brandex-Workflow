@@ -372,7 +372,9 @@ function getRecordsForView() {
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
     records.push({
-      status: row[0] || "",
+      // Column A tracks document-generation state (START/GENERATING/DONE/ERROR).
+      // The records CMS filters the case's workflow stage, which lives in column V.
+      status: row[21] || "PENDING",
       folder: row[4] || "",
       tm: row[3] || "",
       date: row[5] || "",
@@ -383,7 +385,7 @@ function getRecordsForView() {
       conName: row[17] || "",
       img: row[19] || "",
       noImg: row[20] || "",
-      filingProcess: row[21] || ""
+      filingProcess: row[21] || "PENDING"
     });
   }
 
