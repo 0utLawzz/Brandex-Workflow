@@ -313,48 +313,48 @@ function processFormSubmission(data) {
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
-  var lastRow = sheet.getLastRow() + 1;
-  var serial  = generateUniqueSerial(sheet);
-  var today   = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
-
-  var rowValues = [
-    "START ‼", "STAGE 1", serial,
-    data.tm || "", data.folder || "", today,
-    data.classNo || "", data.classDesc || "", data.appType || "",
-    data.appName || "", data.appSo || "", data.appCnic || "",
-    data.issueDate || "", data.expiryDate || "", data.appTrade || "",
-    data.appAdd || "", data.year || "", data.conName || "", data.conAdd || "",
-    "", // T - imageId filled after upload into client folder
-    data.noImg || "[NO IMAGE PROVIDED]",
-    "PENDING" // V - FILING PROCESS
-  ];
-  sheet.getRange(lastRow, 1, 1, 22).setValues([rowValues]);
-
-  sheet.getRange(lastRow, 1).setValue("GENERATING");
-  SpreadsheetApp.flush();
-
-  var processResult;
+  var lastRow = null;
   try {
-    processResult = processRowAndReturnLinks(
+    lastRow = sheet.getLastRow() + 1;
+    var serial  = generateUniqueSerial(sheet);
+    var today   = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
+
+    var rowValues = [
+      "START ‼", "STAGE 1", serial,
+      data.tm || "", data.folder || "", today,
+      data.classNo || "", data.classDesc || "", data.appType || "",
+      data.appName || "", data.appSo || "", data.appCnic || "",
+      data.issueDate || "", data.expiryDate || "", data.appTrade || "",
+      data.appAdd || "", data.year || "", data.conName || "", data.conAdd || "",
+      "", // T - imageId filled after upload into client folder
+      data.noImg || "[NO IMAGE PROVIDED]",
+      "PENDING" // V - FILING PROCESS
+    ];
+    sheet.getRange(lastRow, 1, 1, 22).setValues([rowValues]);
+
+    sheet.getRange(lastRow, 1).setValue("GENERATING");
+    SpreadsheetApp.flush();
+
+    var processResult = processRowAndReturnLinks(
       sheet, lastRow, MAIN_FOLDER_ID, TM1_TEMPLATE_ID, TM48_TEMPLATE_ID, data
     );
+
+    sheet.getRange(lastRow, 1).setValue("DONE");
+
+    return {
+      serialNo: serial,
+      row: lastRow,
+      folderUrl: processResult.folderUrl,
+      tm1Url: processResult.tm1Url,
+      tm48Url: processResult.tm48Url,
+      imageWarning: processResult.imageWarning
+    };
   } catch (procErr) {
-    sheet.getRange(lastRow, 1).setValue("ERROR");
-    lock.releaseLock();
+    if (lastRow) sheet.getRange(lastRow, 1).setValue("ERROR");
     throw procErr;
+  } finally {
+    lock.releaseLock();
   }
-
-  sheet.getRange(lastRow, 1).setValue("DONE");
-  lock.releaseLock();
-
-  return {
-    serialNo: serial,
-    row: lastRow,
-    folderUrl: processResult.folderUrl,
-    tm1Url: processResult.tm1Url,
-    tm48Url: processResult.tm48Url,
-    imageWarning: processResult.imageWarning
-  };
 }
 
 function getRecordsForView() {

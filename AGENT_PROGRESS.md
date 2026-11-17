@@ -125,6 +125,7 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 - Added equivalent client CSV export/import coverage; client code and profile data survive a round-trip.
 - Added Apps Script failure classification plus regression coverage. Token rejection now tells the operator to match `APPS_SCRIPT_RECORDS_TOKEN` with the Apps Script `RECORDS_ACCESS_TOKEN` property, while missing Google Docs OAuth permission remains a separate remediation path. Local authenticated API smoke tests confirmed invalid actions return 400 and cross-origin posts return 403.
 - Pushed `9392bfe`; Vercel production deployment `dpl_6b8K2F3mwH1kTTVyp2EsFE9RNXUP` is READY at `https://br-workflow.vercel.app`.
+- Improved `Code.gs` lock handling: `processFormSubmission` now releases its script lock in `finally`, including failures that occur before a row is fully written. Added Apps Script contract tests for authenticated generation, TM-1/TM-48, bulk/single processing, and lock release. This committed source still needs to be pasted/deployed as a new Apps Script version; browser automation could not access the user's local Chrome tabs for the deployment.
 
 ## Production boundary
 
