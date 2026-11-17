@@ -8,6 +8,7 @@ import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, SHEET_URL } from '@/lib/data';
 import { standaloneDB } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
+import { getSupabaseCredentials } from '@/lib/supabase';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
@@ -63,6 +64,7 @@ export default function TrademarkApplicationPage() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [lastSavedCaseId, setLastSavedCaseId] = useState<number | null>(null);
   const [lastSavedFolder, setLastSavedFolder] = useState<string>('');
+  const [lastSavedToSupabase, setLastSavedToSupabase] = useState(false);
   const [generationPending, setGenerationPending] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -268,6 +270,7 @@ export default function TrademarkApplicationPage() {
 
   const submitApplication = async (retryGeneration: boolean) => {
     if (submitting) return;
+    let recordSavedToSupabase = retryGeneration ? lastSavedToSupabase : false;
 
     const payload: Record<string, any> = {
       action: 'generateFromForm',
@@ -343,7 +346,8 @@ export default function TrademarkApplicationPage() {
       let insertedRecordId = lastSavedCaseId;
       if (!retryGeneration) {
         setProgressPercent(30);
-        setProgressLabel('Saving record in Supabase Database');
+        recordSavedToSupabase = getSupabaseCredentials().isConfigured;
+        setProgressLabel(recordSavedToSupabase ? 'Saving record in Supabase Database' : 'Saving local browser copy');
         const newRec = await supabaseDB.addRecord({
         clientId: selectedClientId ? Number(selectedClientId) : undefined,
         category: selectedCategory,
@@ -371,6 +375,7 @@ export default function TrademarkApplicationPage() {
         insertedRecordId = newRec.id;
         setLastSavedCaseId(insertedRecordId);
         setLastSavedFolder(payload.folder);
+        setLastSavedToSupabase(recordSavedToSupabase);
       }
 
       if (!insertedRecordId) throw new Error('The saved case could not be found for document retry.');
@@ -417,7 +422,7 @@ export default function TrademarkApplicationPage() {
 
           setStatusType('success');
           setStatusMsg(
-            `✅ Success! Case saved to Supabase Database & documents generated.\n` +
+            `✅ Success! Documents generated. ${recordSavedToSupabase ? 'Case saved to Supabase.' : 'Case saved in this browser only; Supabase is not configured.'}\n` +
             `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
             `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
             (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '') + attachmentWarning
@@ -427,7 +432,9 @@ export default function TrademarkApplicationPage() {
             tm1Url: data.tm1Url,
             tm48Url: data.tm48Url
           });
-          notifyResult(true, `${payload.folder} — saved to database and documents generated.`);
+          notifyResult(true, recordSavedToSupabase
+            ? `${payload.folder} — saved to database and documents generated.`
+            : `${payload.folder} — documents generated; case is only saved in this browser.`);
           setGenerationPending(false);
           return;
         } else {
@@ -439,23 +446,31 @@ export default function TrademarkApplicationPage() {
           }
           setStatusType('info');
           setGenerationPending(true);
+          const savedStatus = recordSavedToSupabase
+            ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.`
+            : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
           setStatusMsg(
-            `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
-            `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.\n` +
+            `${savedStatus}\n` +
             `Note on Document Generation: ${errMsg}.` +
             (isBackendAuth ? '\nCheck the Apps Script property and Vercel backend token are identical.' : '')
           );
-          notifyResult(true, 'Case saved in database. Apps Script doc generation pending.');
+          notifyResult(recordSavedToSupabase, recordSavedToSupabase
+            ? 'Case saved in database. Apps Script doc generation pending.'
+            : 'Case is only in this browser. Apps Script doc generation pending.');
         }
       } catch (scriptErr: any) {
         setStatusType('info');
         setGenerationPending(true);
+        const savedStatus = recordSavedToSupabase
+          ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.`
+          : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
         setStatusMsg(
-          `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
-          `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.\n` +
+          `${savedStatus}\n` +
           `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
         );
-        notifyResult(true, 'Case saved in database.');
+        notifyResult(recordSavedToSupabase, recordSavedToSupabase
+          ? 'Case saved in database.'
+          : 'Case is only in this browser.');
       }
     } catch (err: any) {
       clearInterval(progressTimerRef.current as NodeJS.Timeout);
@@ -473,6 +488,7 @@ export default function TrademarkApplicationPage() {
   const handleReset = () => {
     setGenerationPending(false);
     setLastSavedCaseId(null);
+    setLastSavedToSupabase(false);
     setFolder('');
     setTm('');
     onClassChange('3');
