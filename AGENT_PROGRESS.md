@@ -158,6 +158,14 @@ No production database, Supabase project, Google Apps Script deployment, Google 
 - No case, sheet row, or Drive document was created or changed during these checks. The user's previously reported failure remains unresolved: Supabase saves the case, but Apps Script document generation returns a generic failure.
 - Auth secret roles: `APP_ACCESS_PASSWORD` is for the website login. The Apps Script backend token is `APPS_SCRIPT_RECORDS_TOKEN`, which must equal Apps Script Script Property `RECORDS_ACCESS_TOKEN`; do not paste either value into chat.
 
+### 2026-11-17 follow-up: Apps Script proxy regression checks
+
+- Added proxy-level regression tests proving that a missing backend token fails closed without making an upstream request, a configured token is forwarded only in the server-to-server request, a successful Apps Script result is preserved, and a token rejection is surfaced without leaking the token.
+- Made the proxy's local TypeScript imports explicit so Node's built-in TypeScript test runner can import it, and enabled `allowImportingTsExtensions` for this no-emit TypeScript project.
+- Validation: full `npm test` passed (14 tests), `npm run lint` passed, `npx tsc --noEmit` passed after the build generated `.next/types`, `npm run build` passed, and `git diff --check` passed. A standalone typecheck was initially run concurrently with `next build` and saw generated `.next/types` disappear; rerunning after build completed passed.
+- Production token status remains unresolved: Vercel's `APPS_SCRIPT_RECORDS_TOKEN` production entry was updated at `2026-11-16 23:07:11 UTC` and the newest production deployment (`dpl_7jKcx3iftNcNWtR9vR4Bnai1BDzP`, commit `34872ff`) became READY at `2026-11-16 23:08:08 UTC`, so that deployment includes the changed Vercel environment snapshot. The screenshot's continued rejection therefore points to a value mismatch, a different Apps Script project/URL, or a Script Property not saved on the deployed Apps Script project; secret values and project identity cannot be verified from the Vercel metadata. No live case retry or document creation was performed in this follow-up.
+- This change does not claim that production generation now succeeds. Next required step is private verification that the exact Web App URL configured in Vercel is the deployed Apps Script project whose `RECORDS_ACCESS_TOKEN` Script Property matches Vercel's production `APPS_SCRIPT_RECORDS_TOKEN`; then retry the existing failed case and verify its generated Drive files.
+
 ### Next required verification
 
 1. In Vercel Production, confirm `NEXT_PUBLIC_APPS_SCRIPT_URL` points to the currently deployed Apps Script Web App URL. Do not assume it matches the URL in the source or the encrypted legacy variable.

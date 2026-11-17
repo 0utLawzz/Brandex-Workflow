@@ -1,5 +1,5 @@
-import { APPS_SCRIPT_URL } from '@/lib/data';
-import { describeAppsScriptFailure } from '@/lib/apps-script-response';
+import { APPS_SCRIPT_URL } from './data.ts';
+import { describeAppsScriptFailure } from './apps-script-response.ts';
 
 export async function proxyAppsScript(payload: Record<string, unknown>) {
     const accessToken = process.env.APPS_SCRIPT_RECORDS_TOKEN;
