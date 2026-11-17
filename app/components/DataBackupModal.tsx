@@ -3,6 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload, RefreshCw, X, ShieldCheck, Database, Check } from 'lucide-react';
 import { standaloneDB } from '@/lib/standalone-db';
+import { supabaseDB } from '@/lib/supabase-db';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -17,9 +18,9 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
 
   if (!isOpen) return null;
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try {
-      const json = standaloneDB.exportBackupJSON();
+      const json = await supabaseDB.getBackupSnapshot();
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -35,19 +36,24 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     }
   };
 
+  const importBackup = async (content: string) => {
+    try {
+      const restored = await supabaseDB.restoreBackupJSON(content);
+      const importedClientCount = restored.clients;
+      setStatusMsg({ text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved.`, type: 'success' });
+      if (onDataChanged) onDataChanged();
+    } catch (err: any) {
+      setStatusMsg({ text: err.message || 'Failed to import backup', type: 'error' });
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      const res = standaloneDB.importBackupJSON(content);
-      if (res.success) {
-        setStatusMsg({ text: res.message, type: 'success' });
-        if (onDataChanged) onDataChanged();
-      } else {
-        setStatusMsg({ text: res.message, type: 'error' });
-      }
+      if (content) void importBackup(content);
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -55,14 +61,8 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
 
   const handleManualImport = () => {
     if (!importText.trim()) return;
-    const res = standaloneDB.importBackupJSON(importText);
-    if (res.success) {
-      setStatusMsg({ text: res.message, type: 'success' });
-      setImportText('');
-      if (onDataChanged) onDataChanged();
-    } else {
-      setStatusMsg({ text: res.message, type: 'error' });
-    }
+    void importBackup(importText);
+    setImportText('');
   };
 
   const handleReset = () => {

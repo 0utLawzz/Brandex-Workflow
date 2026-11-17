@@ -132,9 +132,13 @@ export default function ClientsPage() {
 
   const handleDeleteClient = async (id: number, name: string) => {
     if (confirm(`Delete client profile for ${name}?`)) {
-      await supabaseDB.deleteClient(id);
-      await loadClients();
-      setSuccessMsg(`Client ${name} removed.`);
+      try {
+        await supabaseDB.deleteClient(id);
+        await loadClients();
+        setSuccessMsg(`Client ${name} removed.`);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to delete client');
+      }
     }
   };
 
@@ -164,13 +168,19 @@ export default function ClientsPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       if (content) {
-        const result = standaloneDB.importClientsCSV(content);
+        const result = standaloneDB.importClientsCSV(content, false);
         if (result.success) {
-          loadClients();
-          setSuccessMsg(result.message);
+          try {
+            const importedCount = await supabaseDB.importClients(result.clients || []);
+            await loadClients();
+            setSuccessMsg(`Successfully imported ${importedCount} client profiles from CSV`);
+          } catch (err: any) {
+            await loadClients();
+            setErrorMsg(err.message || 'Failed to save imported clients');
+          }
         } else {
           setErrorMsg(result.message);
         }
@@ -184,8 +194,13 @@ export default function ClientsPage() {
     e.target.value = '';
   };
 
-  const handleExportCSV = () => {
-    const csvContent = standaloneDB.exportClientsCSV();
+  const handleExportCSV = async () => {
+    const clientsResult = await supabaseDB.getClients();
+    if (clientsResult.error) {
+      setErrorMsg(`CSV export stopped because the client directory could not be read: ${clientsResult.error}`);
+      return;
+    }
+    const csvContent = standaloneDB.exportClientsCSV(clientsResult.clients);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

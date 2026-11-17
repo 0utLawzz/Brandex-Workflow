@@ -395,8 +395,13 @@ export default function RecordsPage() {
   };
 
   // CSV Export & Import Handlers
-  const handleExportCSV = () => {
-    const csvContent = standaloneDB.exportRecordsCSV();
+  const handleExportCSV = async () => {
+    const recordsResult = await supabaseDB.getRecords();
+    if (recordsResult.error) {
+      setErrorMsg(`CSV export stopped because the records could not be read: ${recordsResult.error}`);
+      return;
+    }
+    const csvContent = standaloneDB.exportRecordsCSV(recordsResult.records);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -434,13 +439,19 @@ export default function RecordsPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       if (content) {
-        const result = standaloneDB.importRecordsCSV(content);
+        const result = standaloneDB.importRecordsCSV(content, false);
         if (result.success) {
-          loadAllRecords();
-          setBulkNotice(`✓ ${result.message}`);
+          try {
+            const importedCount = await supabaseDB.importRecords((result.records || []).map(({ id: _id, ...record }) => record));
+            await loadAllRecords();
+            setBulkNotice(`✓ Successfully imported ${importedCount} cases from CSV`);
+          } catch (err: any) {
+            await loadAllRecords();
+            setErrorMsg(err.message || 'Failed to save imported cases');
+          }
         } else {
           setErrorMsg(result.message);
         }
@@ -457,10 +468,14 @@ export default function RecordsPage() {
     const client = savedClients.find(c => String(c.id) === selectedClientForAssign);
     if (!client) return;
 
-    await supabaseDB.bulkAssignClient(selectedIds, client);
-    loadAllRecords();
-    setBulkNotice(`✓ Reassigned ${selectedIds.length} cases to client "${client.client_name}" (#${client.client_code})`);
-    setSelectedIds([]);
+    try {
+      await supabaseDB.bulkAssignClient(selectedIds, client);
+      await loadAllRecords();
+      setBulkNotice(`✓ Reassigned ${selectedIds.length} cases to client "${client.client_name}" (#${client.client_code})`);
+      setSelectedIds([]);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to reassign selected cases');
+    }
     setTimeout(() => setBulkNotice(null), 4000);
   };
 
@@ -500,6 +515,7 @@ export default function RecordsPage() {
 
   // Submit Approved or Rejected Decision
   const handleSaveApproveReject = async () => {
+    try {
     if (approveRejectModal.record) {
       const r = approveRejectModal.record;
       await supabaseDB.updateRecord(r.id, {
@@ -515,12 +531,16 @@ export default function RecordsPage() {
       setSelectedIds([]);
     }
     setApproveRejectModal({ open: false, decision: 'APPROVED', notes: '' });
-    loadAllRecords();
+    await loadAllRecords();
     setTimeout(() => setBulkNotice(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update case status');
+    }
   };
 
   // Submit Dispatch Details (Including courier tracking and proof of sending)
   const handleSaveDispatch = async () => {
+    try {
     if (dispatchModal.record) {
       const r = dispatchModal.record;
       await supabaseDB.updateRecord(r.id, {
@@ -559,12 +579,16 @@ export default function RecordsPage() {
       dispatchedDocName: '',
       dispatchedDocType: ''
     });
-    loadAllRecords();
+    await loadAllRecords();
     setTimeout(() => setBulkNotice(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save dispatch details');
+    }
   };
 
   // Submit Delivered Details
   const handleSaveDelivered = async () => {
+    try {
     if (deliveredModal.record) {
       const r = deliveredModal.record;
       await supabaseDB.updateRecord(r.id, {
@@ -586,8 +610,11 @@ export default function RecordsPage() {
       setSelectedIds([]);
     }
     setDeliveredModal({ open: false, date: '', receiverName: '', receiptImage: '' });
-    loadAllRecords();
+    await loadAllRecords();
     setTimeout(() => setBulkNotice(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save delivery details');
+    }
   };
 
   // Handle receipt image upload for Delivery confirmation
@@ -647,10 +674,14 @@ export default function RecordsPage() {
 
   const handleDeleteRecord = async (id: number, name: string) => {
     if (confirm(`Are you sure you want to delete case "${name}"?`)) {
-      await supabaseDB.deleteRecord(id);
-      loadAllRecords();
-      setBulkNotice(`Case "${name}" removed.`);
-      setTimeout(() => setBulkNotice(null), 4000);
+      try {
+        await supabaseDB.deleteRecord(id);
+        await loadAllRecords();
+        setBulkNotice(`Case "${name}" removed.`);
+        setTimeout(() => setBulkNotice(null), 4000);
+      } catch (err: any) {
+        setErrorMsg(err.message || 'Failed to delete case');
+      }
     }
   };
 

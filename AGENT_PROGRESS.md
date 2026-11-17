@@ -128,6 +128,15 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 - Pushed `9392bfe`; Vercel production deployment `dpl_6b8K2F3mwH1kTTVyp2EsFE9RNXUP` is READY at `https://br-workflow.vercel.app`.
 - Improved `Code.gs` lock handling: `processFormSubmission` now releases its script lock in `finally`, including failures that occur before a row is fully written. Added Apps Script contract tests for authenticated generation, TM-1/TM-48, bulk/single processing, and lock release. This committed source still needs to be pasted/deployed as a new Apps Script version; browser automation could not access the user's local Chrome tabs for the deployment.
 
+### Current working changes (not yet pushed)
+
+- Supabase record/client mutations now check remote errors before reporting success and synchronize local cache only after successful cloud writes. Record/client updates use returned rows so they also work when the browser cache has not been primed. Dispatch proof insert errors are surfaced instead of swallowed.
+- Records and clients CSV import now parse without first writing local-only phantom data, insert into Supabase in batches of 100 when configured, and cache only returned remote rows. Case identity fields and X/A/N/B series are preserved. Standalone/local mode keeps its existing import behavior.
+- Records and client CSV exports now read the cloud source first and report errors rather than downloading stale local cache when the cloud read fails.
+- Backup JSON export reads records, clients, history, and document references from Supabase when configured. Cloud restore imports new records and clients without overwriting existing rows; local-only restore keeps the existing snapshot replacement behavior. In cloud restore, history/document references are not re-attached to newly inserted records because the imported database IDs are reassigned; this limitation is reported as a remaining scope item.
+- Validation after current changes: `npm test` passed (11 tests, including cloud-mode parser no-local-write regressions), `npm run lint`, `npx tsc --noEmit`, and `npm run build` passed. Build uses `.env`/`.env.local` but no secret values were printed. `git diff --check` passed with CRLF warnings only.
+- Git branch remains aligned with `origin/main`; current changes have not been committed or pushed yet.
+
 ## Production boundary
 
 No production database, Supabase project, Google Apps Script deployment, Google Sheet, Google Drive folder, Hostinger server, or live client data has been changed by this work.

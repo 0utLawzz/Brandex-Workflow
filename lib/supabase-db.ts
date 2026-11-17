@@ -124,6 +124,22 @@ export function mapClientToRow(client: Partial<ClientProfile>): Record<string, a
   return row;
 }
 
+function cacheRecord(record: RecordItem): void {
+  const records = standaloneDB.getRecords();
+  const index = records.findIndex(item => item.id === record.id);
+  if (index === -1) records.unshift(record);
+  else records[index] = { ...records[index], ...record };
+  standaloneDB.saveRecords(records);
+}
+
+function cacheClient(client: ClientProfile): void {
+  const clients = standaloneDB.getClients();
+  const index = clients.findIndex(item => item.id === client.id);
+  if (index === -1) clients.unshift(client);
+  else clients[index] = { ...clients[index], ...client };
+  standaloneDB.saveClients(clients);
+}
+
 export interface SupabaseStatus {
   connected: boolean;
   tableReady: boolean;
@@ -271,69 +287,95 @@ class SupabaseDBService {
     return standaloneDB.addRecord(record);
   }
 
-  public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {
-    // 1. Update locally
-    const updatedLocal = standaloneDB.updateRecord(id, updates);
-
-    // 2. Update on Supabase
+  public async importRecords(records: Array<Omit<RecordItem, 'id'>>): Promise<number> {
+    if (records.length === 0) return 0;
     const { isConfigured } = getSupabaseCredentials();
-    if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        const row = mapRecordToRow(updates);
-
-        // If a dispatch document/image is provided, save in trademark_documents table
-        if (updates.dispatchedImage) {
-          try {
-            await client.from('trademark_documents').insert([{
-              record_id: id,
-              file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
-              file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
-              file_url: updates.dispatchedImage,
-              created_at: new Date().toISOString()
-            }]);
-          } catch (docErr) {
-            console.warn('[SupabaseDB] Failed to insert dispatch doc:', docErr);
-          }
-        }
-
-        const { error } = await client
-          .from('trademark_records')
-          .update(row)
-          .eq('id', id);
-
-        if (error && error.message.includes('dispatched_image')) {
-          // Fallback if column not yet added to trademark_records: save without that column
-          delete row.dispatched_image;
-          delete row.dispatched_doc_name;
-          delete row.dispatched_doc_type;
-          await client.from('trademark_records').update(row).eq('id', id);
-        }
-      } catch (err) {
-        console.warn('[SupabaseDB] Error updating record on Supabase:', err);
-      }
+    if (!isConfigured) {
+      records.forEach(record => standaloneDB.addRecord(record, false));
+      return records.length;
     }
 
-    return updatedLocal;
+    const client = getSupabaseClient();
+    let importedCount = 0;
+    for (let offset = 0; offset < records.length; offset += 100) {
+      const batch = records.slice(offset, offset + 100);
+      const rows = batch.map(record => {
+        const row = mapRecordToRow(record);
+        delete row.id;
+        row.created_at = record.createdAt || new Date().toISOString();
+        return row;
+      });
+
+      let result = await withSupabaseTimeout(client.from('trademark_records').insert(rows).select());
+      if (result.error?.message.includes('client_id') && rows.some(row => row.client_id !== undefined)) {
+        const compatibleRows = rows.map(row => {
+          const compatibleRow = { ...row };
+          delete compatibleRow.client_id;
+          return compatibleRow;
+        });
+        result = await withSupabaseTimeout(client.from('trademark_records').insert(compatibleRows).select());
+      }
+      if (result.error) {
+        throw new Error(`CSV import saved ${importedCount} of ${records.length} cases before failing: ${result.error.message}`);
+      }
+      const inserted = Array.isArray(result.data) ? result.data.map(mapRowToRecord) : [];
+      if (inserted.length !== batch.length) {
+        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${records.length} cases; Supabase returned an incomplete batch.`);
+      }
+      inserted.forEach(cacheRecord);
+      importedCount += inserted.length;
+    }
+    return importedCount;
+  }
+
+  public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {
+    const { isConfigured } = getSupabaseCredentials();
+    if (isConfigured) {
+      const client = getSupabaseClient();
+      const row = mapRecordToRow(updates);
+
+      let result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
+      if (result.error && result.error.message.includes('dispatched_image')) {
+        delete row.dispatched_image;
+        delete row.dispatched_doc_name;
+        delete row.dispatched_doc_type;
+        result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
+      }
+      if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
+      if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
+
+      const updated = mapRowToRecord(result.data);
+      cacheRecord(updated);
+
+      if (updates.dispatchedImage) {
+        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert([{
+          record_id: id,
+          file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
+          file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
+          file_url: updates.dispatchedImage,
+          created_at: new Date().toISOString()
+        }]));
+        if (documentError) throw new Error(`Case was updated, but dispatch proof reference save failed: ${documentError.message}`);
+      }
+      return updated;
+    }
+
+    return standaloneDB.updateRecord(id, updates);
   }
 
   public async deleteRecord(id: number): Promise<boolean> {
-    standaloneDB.deleteRecord(id);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        await client
-          .from('trademark_records')
-          .delete()
-          .eq('id', id);
-      } catch (err) {
-        console.warn('[SupabaseDB] Error deleting record on Supabase:', err);
-      }
+      const client = getSupabaseClient();
+      const { data, error } = await withSupabaseTimeout(client.from('trademark_records').delete().eq('id', id).select('id').maybeSingle());
+      if (error) throw new Error(`Supabase record delete failed: ${error.message}`);
+      if (!data) throw new Error('Supabase record delete returned no case. It may have been deleted or access denied.');
+      const records = standaloneDB.getRecords().filter(record => record.id !== id);
+      standaloneDB.saveRecords(records);
+      return true;
     }
 
-    return true;
+    return standaloneDB.deleteRecord(id);
   }
 
   public async bulkUpdateStatus(
@@ -351,13 +393,10 @@ class SupabaseDBService {
       receiptImage?: string;
     }
   ): Promise<void> {
-    standaloneDB.bulkUpdateStatus(ids, newStatus, auditNote, meta);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        const updatePayload: Record<string, any> = {
+      const client = getSupabaseClient();
+      const updatePayload: Record<string, any> = {
           status: newStatus,
           filing_process: newStatus,
           updated_at: new Date().toISOString(),
@@ -371,53 +410,52 @@ class SupabaseDBService {
           ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
         };
 
-        const { error } = await client
+      let { error } = await withSupabaseTimeout(client
           .from('trademark_records')
           .update(updatePayload)
-          .in('id', ids);
+          .in('id', ids));
 
-        if (error && error.message.includes('dispatched_image')) {
-          delete updatePayload.dispatched_image;
-          delete updatePayload.dispatched_doc_name;
-          delete updatePayload.dispatched_doc_type;
-          await client.from('trademark_records').update(updatePayload).in('id', ids);
-        }
+      if (error && error.message.includes('dispatched_image')) {
+        delete updatePayload.dispatched_image;
+        delete updatePayload.dispatched_doc_name;
+        delete updatePayload.dispatched_doc_type;
+        ({ error } = await withSupabaseTimeout(client.from('trademark_records').update(updatePayload).in('id', ids)));
+      }
+      if (error) throw new Error(`Supabase bulk status update failed: ${error.message}`);
 
-        // Also save to trademark_documents if dispatch receipt was attached
-        if (meta?.dispatchedImage) {
-          const docRows = ids.map(id => ({
+      standaloneDB.bulkUpdateStatus(ids, newStatus, auditNote, meta);
+
+      if (meta?.dispatchedImage) {
+        const docRows = ids.map(id => ({
             record_id: id,
             file_name: meta.dispatchedDocName || `Dispatch_Receipt_${id}`,
             file_type: meta.dispatchedDocType || (meta.dispatchedImage!.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
             file_url: meta.dispatchedImage,
             created_at: new Date().toISOString()
-          }));
-          await client.from('trademark_documents').insert(docRows);
-        }
+        }));
+        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert(docRows));
+        if (documentError) throw new Error(`Dispatch proof save failed: ${documentError.message}`);
+      }
 
-        // Record history entries
-        const historyRows = ids.map(id => ({
+      const historyRows = ids.map(id => ({
           record_id: id,
           status: newStatus,
           notes: auditNote || `Bulk stage updated to ${newStatus}`,
           created_at: new Date().toISOString()
-        }));
+      }));
 
-        await client.from('trademark_history').insert(historyRows);
-      } catch (err) {
-        console.warn('[SupabaseDB] Bulk status update failed on remote:', err);
-      }
+      const { error: historyError } = await withSupabaseTimeout(client.from('trademark_history').insert(historyRows));
+      if (historyError) throw new Error(`Status updated, but history logging failed: ${historyError.message}`);
     }
+
+    if (!getSupabaseCredentials().isConfigured) standaloneDB.bulkUpdateStatus(ids, newStatus, auditNote, meta);
   }
 
   public async bulkAssignClient(ids: number[], clientProfile: ClientProfile): Promise<void> {
-    standaloneDB.bulkAssignClient(ids, clientProfile);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        await client
+      const client = getSupabaseClient();
+      const { error } = await withSupabaseTimeout(client
           .from('trademark_records')
           .update({
             client_code: clientProfile.client_code,
@@ -429,11 +467,12 @@ class SupabaseDBService {
             consultant_name: clientProfile.consultant_name,
             updated_at: new Date().toISOString()
           })
-          .in('id', ids);
-      } catch (err) {
-        console.warn('[SupabaseDB] Bulk client assignment failed on remote:', err);
-      }
+          .in('id', ids));
+      if (error) throw new Error(`Supabase client reassignment failed: ${error.message}`);
+      standaloneDB.bulkAssignClient(ids, clientProfile);
     }
+
+    if (!getSupabaseCredentials().isConfigured) standaloneDB.bulkAssignClient(ids, clientProfile);
   }
 
   // -------------------------------------------------------------
@@ -474,67 +513,139 @@ class SupabaseDBService {
     }
   }
 
-  public async addClient(client: Omit<ClientProfile, 'id'> & { id?: number }): Promise<ClientProfile> {
-    const savedLocal = standaloneDB.addClient(client);
+  public async getBackupSnapshot(): Promise<string> {
+    const [recordsResult, clientsResult] = await Promise.all([this.getRecords(), this.getClients()]);
+    if (recordsResult.error || clientsResult.error) {
+      throw new Error(`Backup stopped because cloud data could not be read: ${recordsResult.error || clientsResult.error}`);
+    }
+    if (recordsResult.source !== clientsResult.source) {
+      throw new Error('Backup stopped because case and client data came from different sources. Reload and retry after the connection is restored.');
+    }
+    const { isConfigured } = getSupabaseCredentials();
+    let history: HistoryLog[] | undefined;
+    let documents: DocumentAttachment[] | undefined;
+    if (isConfigured) {
+      const client = getSupabaseClient();
+      const [historyResult, documentsResult] = await Promise.all([
+        withSupabaseTimeout(client.from('trademark_history').select('*')),
+        withSupabaseTimeout(client.from('trademark_documents').select('*'))
+      ]);
+      if (historyResult.error || documentsResult.error) {
+        throw new Error(`Backup stopped because history or document data could not be read: ${historyResult.error?.message || documentsResult.error?.message}`);
+      }
+      history = (historyResult.data || []).map((row: any) => ({
+        id: Number(row.id), record_id: Number(row.record_id), action: row.status || row.action || 'STAGE_UPDATE', notes: row.notes || '', created_at: row.created_at || ''
+      }));
+      documents = (documentsResult.data || []).map((row: any) => ({
+        id: Number(row.id), record_id: Number(row.record_id), file_name: row.file_name || '', file_type: row.file_type || '', file_url: row.file_url || '', created_at: row.created_at || ''
+      }));
+    }
+    return standaloneDB.exportBackupJSON({
+      records: recordsResult.records,
+      clients: clientsResult.clients,
+      ...(history ? { history } : {}),
+      ...(documents ? { documents } : {})
+    });
+  }
 
+  public async addClient(client: Omit<ClientProfile, 'id'> & { id?: number }): Promise<ClientProfile> {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const clientSupabase = getSupabaseClient();
-        const row = mapClientToRow(client);
-        row.created_at = new Date().toISOString();
+      const clientSupabase = getSupabaseClient();
+      const row = mapClientToRow(client);
+      row.created_at = new Date().toISOString();
 
-        const { data, error } = await clientSupabase
-          .from('clients')
-          .insert([row])
-          .select()
-          .single();
-
-        if (!error && data) {
-          const inserted = mapRowToClient(data);
-          standaloneDB.updateClient(savedLocal.id, inserted);
-          return inserted;
-        }
-      } catch (err) {
-        console.warn('[SupabaseDB] Error adding client to Supabase:', err);
-      }
+      const { data, error } = await withSupabaseTimeout(clientSupabase
+        .from('clients')
+        .insert([row])
+        .select()
+        .single());
+      if (error || !data) throw new Error(`Supabase client save failed: ${error?.message || 'No row returned'}`);
+      const inserted = mapRowToClient(data);
+      cacheClient(inserted);
+      return inserted;
     }
 
-    return savedLocal;
+    return standaloneDB.addClient(client);
+  }
+
+  public async importClients(clients: Array<Omit<ClientProfile, 'id'>>): Promise<number> {
+    if (clients.length === 0) return 0;
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) {
+      clients.forEach(client => standaloneDB.addClient(client));
+      return clients.length;
+    }
+
+    const client = getSupabaseClient();
+    let importedCount = 0;
+    for (let offset = 0; offset < clients.length; offset += 100) {
+      const batch = clients.slice(offset, offset + 100);
+      const rows = batch.map(profile => ({
+        ...mapClientToRow(profile),
+        created_at: profile.created_at || new Date().toISOString()
+      }));
+      const { data, error } = await withSupabaseTimeout(client.from('clients').insert(rows).select());
+      if (error) {
+        throw new Error(`CSV import saved ${importedCount} of ${clients.length} clients before failing: ${error.message}`);
+      }
+      const inserted = Array.isArray(data) ? data.map(mapRowToClient) : [];
+      if (inserted.length !== batch.length) {
+        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${clients.length} clients; Supabase returned an incomplete batch.`);
+      }
+      inserted.forEach(cacheClient);
+      importedCount += inserted.length;
+    }
+    return importedCount;
+  }
+
+  public async restoreBackupJSON(json: string): Promise<{ count: number; clients: number }> {
+    const parsed = standaloneDB.parseBackupJSON(json);
+    if (!parsed.success) throw new Error(parsed.message);
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) {
+      const restored = standaloneDB.importBackupJSON(json);
+      if (!restored.success) throw new Error(restored.message);
+      return { count: restored.count, clients: parsed.clients?.length || 0 };
+    }
+
+    const records = (parsed.records || []).map(({ id: _id, ...record }) => record);
+    const clients = parsed.clients || [];
+    if (records.length) await this.importRecords(records);
+    if (clients.length) await this.importClients(clients);
+    return { count: records.length, clients: clients.length };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {
-    const updated = standaloneDB.updateClient(id, updates);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        const row = mapClientToRow(updates);
-        row.updated_at = new Date().toISOString();
-        await client.from('clients').update(row).eq('id', id);
-      } catch (err) {
-        console.warn('[SupabaseDB] Error updating client on Supabase:', err);
-      }
+      const client = getSupabaseClient();
+      const row = mapClientToRow(updates);
+      row.updated_at = new Date().toISOString();
+      const { data, error } = await withSupabaseTimeout(client.from('clients').update(row).eq('id', id).select().maybeSingle());
+      if (error) throw new Error(`Supabase client update failed: ${error.message}`);
+      if (!data) throw new Error('Supabase client update returned no client. It may have been deleted or access denied.');
+      const updated = mapRowToClient(data);
+      cacheClient(updated);
+      return updated;
     }
 
-    return updated;
+    return standaloneDB.updateClient(id, updates);
   }
 
   public async deleteClient(id: number): Promise<boolean> {
-    standaloneDB.deleteClient(id);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        await client.from('clients').delete().eq('id', id);
-      } catch (err) {
-        console.warn('[SupabaseDB] Error deleting client on Supabase:', err);
-      }
+      const client = getSupabaseClient();
+      const { data, error } = await withSupabaseTimeout(client.from('clients').delete().eq('id', id).select('id').maybeSingle());
+      if (error) throw new Error(`Supabase client delete failed: ${error.message}`);
+      if (!data) throw new Error('Supabase client delete returned no client. It may have been deleted or access denied.');
+      const clients = standaloneDB.getClients().filter(clientProfile => clientProfile.id !== id);
+      standaloneDB.saveClients(clients);
+      return true;
     }
 
-    return true;
+    return standaloneDB.deleteClient(id);
   }
 
   // -------------------------------------------------------------
@@ -569,37 +680,32 @@ class SupabaseDBService {
   }
 
   public async addHistory(recordId: number, status: string, notes: string): Promise<HistoryLog> {
-    const localLog = standaloneDB.addHistory(recordId, status, notes);
-
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
-      try {
-        const client = getSupabaseClient();
-        await client.from('trademark_history').insert([{
-          record_id: recordId,
-          status,
-          notes,
-          created_at: new Date().toISOString()
-        }]);
-      } catch (err) {
-        console.warn('[SupabaseDB] Error logging history to Supabase:', err);
-      }
+      const client = getSupabaseClient();
+      const { error } = await withSupabaseTimeout(client.from('trademark_history').insert([{
+        record_id: recordId,
+        status,
+        notes,
+        created_at: new Date().toISOString()
+      }]));
+      if (error) throw new Error(`Supabase history save failed: ${error.message}`);
     }
 
-    return localLog;
+    return standaloneDB.addHistory(recordId, status, notes);
   }
 
   public async addDocument(document: Omit<DocumentAttachment, 'id' | 'created_at'> & { file_size?: number }): Promise<DocumentAttachment> {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const { data, error } = await client.from('trademark_documents').insert([{
+      const { data, error } = await withSupabaseTimeout(client.from('trademark_documents').insert([{
         record_id: document.record_id,
         file_name: document.file_name,
         file_size: document.file_size,
         file_type: document.file_type,
         file_url: document.file_url,
-      }]).select().single();
+      }]).select().single());
       if (error || !data) throw new Error(`Document reference save failed: ${error?.message || 'No row returned'}`);
       return standaloneDB.addDocument({
         record_id: Number(data.record_id),

@@ -288,8 +288,7 @@ class StandaloneDB {
     this.saveRecords(updated);
   }
 
-  public exportRecordsCSV(): string {
-    const records = this.getRecords();
+  public exportRecordsCSV(records: RecordItem[] = this.getRecords()): string {
     const headers = [
       "ID",
       "Date",
@@ -456,7 +455,7 @@ class StandaloneDB {
     });
   }
 
-  public importRecordsCSV(csvText: string): { success: boolean; message: string; count: number } {
+  public importRecordsCSV(csvText: string, persist = true): { success: boolean; message: string; count: number; records?: RecordItem[] } {
     if (!this.isBrowser()) return { success: false, message: "Browser environment required", count: 0 };
     try {
       if (!csvText || !csvText.trim()) {
@@ -506,9 +505,10 @@ class StandaloneDB {
       const colAddress = findCol(["address", "applicant address"], 17);
       const colNotes = findCol(["notes", "internal notes", "note"], 18);
 
-      const existing = this.getRecords();
+      const existing = persist ? this.getRecords() : [];
       let importedCount = 0;
-      let maxId = existing.length > 0 ? Math.max(...existing.map(r => r.id || 0)) : 0;
+      let maxId = persist && existing.length > 0 ? Math.max(...existing.map(r => r.id || 0)) : 0;
+      const importedRecords: RecordItem[] = [];
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -561,18 +561,18 @@ class StandaloneDB {
         };
 
         existing.unshift(newRec);
+        importedRecords.push(newRec);
         importedCount++;
       }
 
-      this.saveRecords(existing);
-      return { success: true, message: `Successfully imported ${importedCount} cases from CSV`, count: importedCount };
+      if (persist) this.saveRecords(existing);
+      return { success: true, message: `Successfully imported ${importedCount} cases from CSV`, count: importedCount, records: importedRecords };
     } catch (e: any) {
       return { success: false, message: e.message || "Failed to parse CSV file", count: 0 };
     }
   }
 
-  public exportClientsCSV(): string {
-    const clients = this.getClients();
+  public exportClientsCSV(clients: ClientProfile[] = this.getClients()): string {
     const headers = [
       "Client Code",
       "Full Name",
@@ -646,7 +646,7 @@ class StandaloneDB {
     });
   }
 
-  public importClientsCSV(csvText: string): { success: boolean; message: string; count: number } {
+  public importClientsCSV(csvText: string, persist = true): { success: boolean; message: string; count: number; clients?: Array<Omit<ClientProfile, 'id'>> } {
     if (!this.isBrowser()) return { success: false, message: "Browser environment required", count: 0 };
     try {
       if (!csvText || !csvText.trim()) {
@@ -679,8 +679,9 @@ class StandaloneDB {
       const colAddr = findCol(["address", "client address"], 5);
       const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
 
-      const existing = this.getClients();
+      const existing = persist ? this.getClients() : [];
       let importedCount = 0;
+      const importedClients: Array<Omit<ClientProfile, 'id'>> = [];
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -692,7 +693,7 @@ class StandaloneDB {
 
         const clientCode = val(colCode) || String(646 + existing.length + importedCount);
         
-        this.addClient({
+        const importedClient = {
           client_code: clientCode,
           client_name: name.toUpperCase(),
           father_name: val(colFather).toUpperCase(),
@@ -702,11 +703,13 @@ class StandaloneDB {
           consultant_name: (val(colConsultant) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
           total_cases: 0,
           created_at: new Date().toISOString()
-        });
+        };
+        importedClients.push(importedClient);
+        if (persist) this.addClient(importedClient);
         importedCount++;
       }
 
-      return { success: true, message: `Successfully imported ${importedCount} client profiles from CSV`, count: importedCount };
+      return { success: true, message: `Successfully imported ${importedCount} client profiles from CSV`, count: importedCount, clients: importedClients };
     } catch (e: any) {
       return { success: false, message: e.message || "Failed to parse client CSV file", count: 0 };
     }
@@ -810,15 +813,15 @@ class StandaloneDB {
   // -------------------------------------------------------------
   // BACKUP & RESTORE (FULL STANDALONE SOVEREIGNTY)
   // -------------------------------------------------------------
-  public exportBackupJSON(): string {
+  public exportBackupJSON(dataOverrides: Partial<{ records: RecordItem[]; clients: ClientProfile[]; history: HistoryLog[]; documents: DocumentAttachment[] }> = {}): string {
     const data = {
       version: "2.0-standalone",
       exportedAt: new Date().toISOString(),
       appName: "Brandex Law Associates CMS",
-      records: this.getRecords(),
-      clients: this.getClients(),
-      history: this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]') : [],
-      documents: this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_DOCS) || '[]') : []
+      records: dataOverrides.records ?? this.getRecords(),
+      clients: dataOverrides.clients ?? this.getClients(),
+      history: dataOverrides.history ?? (this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]') : []),
+      documents: dataOverrides.documents ?? (this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_DOCS) || '[]') : [])
     };
     return JSON.stringify(data, null, 2);
   }
@@ -847,6 +850,28 @@ class StandaloneDB {
       return { success: true, message: `Successfully restored ${recordCount} records!`, count: recordCount };
     } catch (err: any) {
       return { success: false, message: err.message || "Failed to parse backup JSON", count: 0 };
+    }
+  }
+
+  public parseBackupJSON(jsonStr: string): { success: boolean; message: string; count: number; records?: RecordItem[]; clients?: Array<Omit<ClientProfile, 'id'>> } {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (!data || typeof data !== 'object') return { success: false, message: 'Invalid JSON format', count: 0 };
+      if (Array.isArray(data.records) && data.records.some((record: any) => !record || typeof record !== 'object' || !Number.isFinite(Number(record.id)))) {
+        return { success: false, message: 'Backup contains a case without a valid ID', count: 0 };
+      }
+      if (Array.isArray(data.clients) && data.clients.some((client: any) => !client || typeof client !== 'object' || !Number.isFinite(Number(client.id)))) {
+        return { success: false, message: 'Backup contains a client without a valid ID', count: 0 };
+      }
+      return {
+        success: true,
+        message: `Backup contains ${Array.isArray(data.records) ? data.records.length : 0} records`,
+        count: Array.isArray(data.records) ? data.records.length : 0,
+        records: Array.isArray(data.records) ? data.records : undefined,
+        clients: Array.isArray(data.clients) ? data.clients.map(({ id: _id, ...client }: ClientProfile) => client) : undefined
+      };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Failed to parse backup JSON', count: 0 };
     }
   }
 
