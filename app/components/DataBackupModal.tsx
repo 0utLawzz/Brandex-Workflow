@@ -40,7 +40,10 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     try {
       const restored = await supabaseDB.restoreBackupJSON(content);
       const importedClientCount = restored.clients;
-      setStatusMsg({ text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved.`, type: 'success' });
+      setStatusMsg({
+        text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved. History and document links were not restored.`,
+        type: 'success'
+      });
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
       setStatusMsg({ text: err.message || 'Failed to import backup', type: 'error' });
