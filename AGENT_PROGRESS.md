@@ -135,7 +135,8 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 - Records and client CSV exports now read the cloud source first and report errors rather than downloading stale local cache when the cloud read fails.
 - Backup JSON export reads records, clients, history, and document references from Supabase when configured. Cloud restore inserts cases and clients without overwriting existing rows; local-only restore keeps existing snapshot replacement behavior. In cloud restore, history/document references are not re-attached to newly inserted records because the imported database IDs are reassigned; the UI now explicitly reports this limitation.
 - Validation at commit `28dabfe`: `npm test` passed (11 tests, including cloud-mode parser no-local-write regressions), `npm run lint`, `npx tsc --noEmit`, `npm run build`, and `git diff --check` passed. Vercel production deployment `dpl_32cpWLV1JgzhZ1qg5Zk585fk6Ayi` reached READY and alias `https://br-workflow.vercel.app` is assigned. Unauthenticated `GET /api/records` returned `401 Authentication required`.
-- Commit `28dabfe` was pushed to `origin/main`. The follow-up UI clarity fix for backup restore is currently local and needs its own validation/push/deploy.
+- Commit `28dabfe` and follow-up `3535271` are pushed to `origin/main`; production deployment `dpl_62KUULAQZ8AfXBmkv5iDEfUwDF56` for `3535271` reached READY and owns alias `https://br-workflow.vercel.app`.
+- Direct unauthenticated production `GET /api/records` returns `401 Authentication required`, as expected. No authenticated production case generation/update or data import was performed because that would create or change live client/case/Drive data. Google Drive search did not find an accessible Apps Script project, so the `Code.gs` update is still not proven deployed to Apps Script.
 
 ## Production boundary
 
