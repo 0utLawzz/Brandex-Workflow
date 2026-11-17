@@ -54,3 +54,30 @@ test('records CSV round-trip preserves client, series, and case number', () => {
   assert.equal(record.selectionMenu, 'N');
   assert.equal(record.caseNo, '046');
 });
+
+test('clients CSV round-trip preserves the client profile', () => {
+  standaloneDB.clearAllData();
+  standaloneDB.addClient({
+    client_code: '325',
+    client_name: 'TEST CLIENT',
+    father_name: 'TEST FATHER',
+    trading_as: 'TEST TRADING',
+    cnic: '12345-1234567-1',
+    address: 'TEST ADDRESS',
+    consultant_name: 'BRANDEX LAW ASSOCIATES',
+    total_cases: 0,
+    created_at: '2026-11-17T00:00:00.000Z',
+  });
+
+  const exported = standaloneDB.exportClientsCSV();
+  standaloneDB.clearAllData();
+  const imported = standaloneDB.importClientsCSV(exported);
+  const [client] = standaloneDB.getClients();
+
+  assert.equal(imported.success, true);
+  assert.equal(imported.count, 1);
+  assert.equal(client.client_code, '325');
+  assert.equal(client.client_name, 'TEST CLIENT');
+  assert.equal(client.trading_as, 'TEST TRADING');
+  assert.equal(client.cnic, '12345-1234567-1');
+});
