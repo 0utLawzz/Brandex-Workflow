@@ -18,6 +18,7 @@ Last updated: 2026-11-17
 - Added a 10-second timeout to Supabase connection, record, and client reads so a stalled Supabase request falls back instead of leaving the Records screen indefinitely loading.
 - Pushed commit `0cb3e4c` to `origin/main`; production deployment `dpl_Bw8dB1KAnXPFkCVVpvnHPMdxLKkE` is READY and aliased to `https://br-workflow.vercel.app`.
 - Verified the previously configured newer Apps Script URL returned Google 404, while the repository fallback deployment URL returned the expected JSON `Authentication required` response. Restored both Vercel Production variables (`NEXT_APPS_SCRIPT_URL` and `NEXT_PUBLIC_APPS_SCRIPT_URL`) to the working deployment URL and redeployed as `dpl_BckpXtxmf7Gq9866hjCoNSvPRZ5c` (READY).
+- Real document-generation verification remains pending because it creates a Google Sheet row and Drive documents; no synthetic production submission has been made without an explicit test record/data from the user.
 
 ## Working rules
 
