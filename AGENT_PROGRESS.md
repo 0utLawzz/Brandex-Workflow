@@ -124,6 +124,7 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 - Added a browser-storage regression test for records CSV export/import. It proves that the client code, X/A/N/B series, and case number survive a round-trip. Remaining coverage: API validation, case numbering, submission failure states, attachment limits, and bulk-generation behavior.
 - Added equivalent client CSV export/import coverage; client code and profile data survive a round-trip.
 - Added Apps Script failure classification plus regression coverage. Token rejection now tells the operator to match `APPS_SCRIPT_RECORDS_TOKEN` with the Apps Script `RECORDS_ACCESS_TOKEN` property, while missing Google Docs OAuth permission remains a separate remediation path. Local authenticated API smoke tests confirmed invalid actions return 400 and cross-origin posts return 403.
+- Pushed `9392bfe`; Vercel production deployment `dpl_6b8K2F3mwH1kTTVyp2EsFE9RNXUP` is READY at `https://br-workflow.vercel.app`.
 
 ## Production boundary
 
