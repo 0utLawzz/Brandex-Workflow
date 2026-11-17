@@ -63,6 +63,7 @@ export default function TrademarkApplicationPage() {
   const [copiedScript, setCopiedScript] = useState(false);
   const [lastSavedCaseId, setLastSavedCaseId] = useState<number | null>(null);
   const [lastSavedFolder, setLastSavedFolder] = useState<string>('');
+  const [generationPending, setGenerationPending] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
@@ -262,12 +263,46 @@ export default function TrademarkApplicationPage() {
       return;
     }
 
+    await submitApplication(false);
+  };
+
+  const submitApplication = async (retryGeneration: boolean) => {
+    if (submitting) return;
+
+    const payload: Record<string, any> = {
+      action: 'generateFromForm',
+      category: selectedCategory,
+      selectionMenu,
+      clientCode,
+      caseNo,
+      folder: folder.trim().toUpperCase(),
+      tm: tm.trim().toUpperCase(),
+      classNo: classNo.trim().toUpperCase(),
+      classDesc: classDesc.trim().toUpperCase(),
+      appType: appType.toUpperCase(),
+      appName: appName.trim().toUpperCase(),
+      appSo: appSo.trim().toUpperCase(),
+      appCnic: appCnic.trim().toUpperCase(),
+      issueDate: formatDisplayDate(issueDate ? new Date(issueDate) : new Date()).toUpperCase(),
+      expiryDate: expiryDate.trim().toUpperCase(),
+      appTrade: appTrade.trim().toUpperCase(),
+      appAdd: appAdd.trim().toUpperCase(),
+      year,
+      conName: conName.trim().toUpperCase(),
+      conAdd: conAdd.trim().toUpperCase(),
+      status: status.toUpperCase(),
+      trackingId: trackingId.trim().toUpperCase(),
+      noImg: (noImg.trim() || '[NO IMAGE PROVIDED]').toUpperCase()
+    };
+
     setSubmitting(true);
     setShowProgress(true);
     setProgressPercent(10);
     setProgressLabel('Preparing request');
     setStatusType('info');
-    setStatusMsg('Saving a local browser copy and sending the application to Google Apps Script...');
+    setStatusMsg(retryGeneration
+      ? 'Retrying document generation for the saved case...'
+      : 'Saving a local browser copy and sending the application to Google Apps Script...');
     setStatusLinks(null);
 
     progressTimerRef.current = setInterval(() => {
@@ -275,33 +310,7 @@ export default function TrademarkApplicationPage() {
     }, 1300);
 
     try {
-      const payload: Record<string, any> = {
-        action: 'generateFromForm',
-        category: selectedCategory,
-        selectionMenu,
-        clientCode,
-        caseNo,
-        folder: folder.trim().toUpperCase(),
-        tm: tm.trim().toUpperCase(),
-        classNo: classNo.trim().toUpperCase(),
-        classDesc: classDesc.trim().toUpperCase(),
-        appType: appType.toUpperCase(),
-        appName: appName.trim().toUpperCase(),
-        appSo: appSo.trim().toUpperCase(),
-        appCnic: appCnic.trim().toUpperCase(),
-        issueDate: formatDisplayDate(issueDate ? new Date(issueDate) : new Date()).toUpperCase(),
-        expiryDate: expiryDate.trim().toUpperCase(),
-        appTrade: appTrade.trim().toUpperCase(),
-        appAdd: appAdd.trim().toUpperCase(),
-        year: year,
-        conName: conName.trim().toUpperCase(),
-        conAdd: conAdd.trim().toUpperCase(),
-        status: status.toUpperCase(),
-        trackingId: trackingId.trim().toUpperCase(),
-        noImg: (noImg.trim() || '[NO IMAGE PROVIDED]').toUpperCase()
-      };
-
-      if (selectedFile) {
+      if (!retryGeneration && selectedFile) {
         setProgressPercent(18);
         setProgressLabel('Reading logo image');
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -315,7 +324,7 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
-      if (additionalFiles.length > 0) {
+      if (!retryGeneration && additionalFiles.length > 0) {
         setProgressPercent(24);
         setProgressLabel('Preparing additional attachments');
         payload.additionalFiles = await Promise.all(additionalFiles.map(async file => {
@@ -329,10 +338,13 @@ export default function TrademarkApplicationPage() {
         }));
       }
 
-      // 1. Save to Supabase Cloud Database (and local cache)
-      setProgressPercent(30);
-      setProgressLabel('Saving record in Supabase Database');
-      const newRec = await supabaseDB.addRecord({
+      // A generation retry reuses the record that was already saved before
+      // Apps Script failed. Never insert a second case for the same retry.
+      let insertedRecordId = lastSavedCaseId;
+      if (!retryGeneration) {
+        setProgressPercent(30);
+        setProgressLabel('Saving record in Supabase Database');
+        const newRec = await supabaseDB.addRecord({
         clientId: selectedClientId ? Number(selectedClientId) : undefined,
         category: selectedCategory,
         selectionMenu,
@@ -355,10 +367,13 @@ export default function TrademarkApplicationPage() {
         img: payload.imageBase64 || '',
         noImg,
         filingProcess: 'PENDING',
-      });
-      const insertedRecordId = newRec.id;
-      setLastSavedCaseId(insertedRecordId);
-      setLastSavedFolder(payload.folder);
+        });
+        insertedRecordId = newRec.id;
+        setLastSavedCaseId(insertedRecordId);
+        setLastSavedFolder(payload.folder);
+      }
+
+      if (!insertedRecordId) throw new Error('The saved case could not be found for document retry.');
 
       setProgressPercent(60);
       setProgressLabel('Generating documents via Google Apps Script');
@@ -413,6 +428,7 @@ export default function TrademarkApplicationPage() {
             tm48Url: data.tm48Url
           });
           notifyResult(true, `${payload.folder} — saved to database and documents generated.`);
+          setGenerationPending(false);
           return;
         } else {
           const errMsg = data?.error || `Google Apps Script returned status ${res.status}`;
@@ -422,6 +438,7 @@ export default function TrademarkApplicationPage() {
             setPermissionErrorModalOpen(true);
           }
           setStatusType('info');
+          setGenerationPending(true);
           setStatusMsg(
             `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
             `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.\n` +
@@ -432,6 +449,7 @@ export default function TrademarkApplicationPage() {
         }
       } catch (scriptErr: any) {
         setStatusType('info');
+        setGenerationPending(true);
         setStatusMsg(
           `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
           `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.\n` +
@@ -453,6 +471,8 @@ export default function TrademarkApplicationPage() {
   };
 
   const handleReset = () => {
+    setGenerationPending(false);
+    setLastSavedCaseId(null);
     setFolder('');
     setTm('');
     onClassChange('3');
@@ -996,6 +1016,16 @@ export default function TrademarkApplicationPage() {
             <div className="whitespace-pre-line">{statusMsg}</div>
             {statusType === 'info' && (
               <div className="mt-4 pt-3 border-t-2 border-[#0C0C0C]/20 flex flex-wrap gap-2.5 items-center">
+                {generationPending && lastSavedCaseId !== null && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={() => void submitApplication(true)}
+                    className="inline-flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.78rem] font-bold py-2 px-3.5 bg-[#0D9970] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-[#08785a] disabled:opacity-50 cursor-pointer"
+                  >
+                    Retry Document Generation
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setPermissionErrorModalOpen(true)}

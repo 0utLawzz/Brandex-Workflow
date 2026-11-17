@@ -109,7 +109,7 @@ The chosen design must be implemented locally, tested, and reviewed before any l
 
 ### Priority 1: Partial case completion
 
-Add a recoverable status/retry path for cases where the database write succeeds but Apps Script or Drive generation fails. Preserve the current user-visible case-initiation flow.
+- Added a retry action for generation failures that reuses the already saved record ID and does not create a duplicate Supabase case. Retry omits re-uploading the original image/attachments, and Apps Script now reuses existing TM-1/TM-48 files by name in the same case folder. Local tests cover the retry functions and Apps Script document idempotency; live Apps Script deployment is still pending.
 
 ### Priority 1: Drive identity protection
 

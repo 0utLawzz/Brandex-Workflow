@@ -20,3 +20,8 @@ test('Apps Script preserves bulk processing and always releases its form-submiss
   assert.match(code, /LockService\.getScriptLock\(\)/);
   assert.match(code, /finally\s*\{\s*lock\.releaseLock\(\);\s*\}/);
 });
+
+test('document retries reuse existing named documents in the case folder', () => {
+  assert.match(code, /function generateWordDocReturn\([\s\S]*?folder\.getFilesByName\(docName\)/);
+  assert.match(code, /function generateWordDoc\([\s\S]*?folder\.getFilesByName\(docName\)/);
+});

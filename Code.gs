@@ -488,6 +488,9 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
 }
 
 function generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
+  var existing = folder.getFilesByName(docName);
+  if (existing.hasNext()) return existing.next();
+
   var templateFile = DriveApp.getFileById(templateId);
   var doc = templateFile.makeCopy(docName, folder);
   var document = DocumentApp.openById(doc.getId());
@@ -736,6 +739,9 @@ function generateDocuments(rowData, folder, tm1TemplateId, tm48TemplateId, image
 }
 
 function generateWordDoc(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
+  var existing = folder.getFilesByName(docName);
+  if (existing.hasNext()) return existing.next();
+
   var templateFile = DriveApp.getFileById(templateId);
   var doc = templateFile.makeCopy(docName, folder);
   var document = DocumentApp.openById(doc.getId());
