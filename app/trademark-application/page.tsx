@@ -313,7 +313,7 @@ export default function TrademarkApplicationPage() {
     }, 1300);
 
     try {
-      if (!retryGeneration && selectedFile) {
+      if (selectedFile) {
         setProgressPercent(18);
         setProgressLabel('Reading logo image');
         const base64 = await new Promise<string>((resolve, reject) => {
@@ -327,7 +327,7 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       }
 
-      if (!retryGeneration && additionalFiles.length > 0) {
+      if (additionalFiles.length > 0) {
         setProgressPercent(24);
         setProgressLabel('Preparing additional attachments');
         payload.additionalFiles = await Promise.all(additionalFiles.map(async file => {
@@ -360,6 +360,9 @@ export default function TrademarkApplicationPage() {
         classDesc: classDesc.trim().toUpperCase(),
         appType: appType.toUpperCase(),
         appName: appName.trim().toUpperCase(),
+        fatherName: appSo.trim().toUpperCase(),
+        cnic: appCnic.trim().toUpperCase(),
+        address: appAdd.trim().toUpperCase(),
         appTrade: appTrade.trim().toUpperCase(),
         conName: conName.trim().toUpperCase(),
         status: status.toUpperCase(),

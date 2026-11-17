@@ -306,6 +306,63 @@ function saveAdditionalFiles(caseFolder, files, formData) {
   return saved;
 }
 
+function submissionIdentityKey(formData) {
+  if (!formData || !formData.clientCode || !formData.selectionMenu || !formData.caseNo) return "";
+  var identity = [formData.clientCode, formData.selectionMenu, formData.caseNo]
+    .map(function(value) { return String(value).trim().toUpperCase(); })
+    .join("|");
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, identity);
+  return "FORM_SUBMISSION_" + Utilities.base64EncodeWebSafe(digest).replace(/=+$/, "");
+}
+
+function submissionRowMatches(row, formData) {
+  var columns = [
+    [3, "tm"], [4, "folder"], [6, "classNo"], [7, "classDesc"], [8, "appType"],
+    [9, "appName"], [10, "appSo"], [11, "appCnic"], [12, "issueDate"], [13, "expiryDate"],
+    [14, "appTrade"], [15, "appAdd"], [16, "year"], [17, "conName"], [18, "conAdd"], [20, "noImg"]
+  ];
+  return columns.every(function(column) {
+    var expected = formData[column[1]] == null ? "" : String(formData[column[1]]).trim();
+    var actual = row[column[0]] == null ? "" : String(row[column[0]]).trim();
+    return actual === expected;
+  });
+}
+
+function findExistingSubmissionRow(sheet, formData, mappingKey) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+
+  var allRows = sheet.getRange(2, 1, lastRow - 1, 22).getValues();
+  var properties = PropertiesService.getScriptProperties();
+  var mappedSerial = mappingKey ? properties.getProperty(mappingKey) : "";
+
+  if (mappedSerial) {
+    var mappedRows = [];
+    allRows.forEach(function(row, index) {
+      if (String(row[2] || "").trim() === mappedSerial) mappedRows.push({ row: row, number: index + 2 });
+    });
+    if (mappedRows.length === 1) {
+      if (!submissionRowMatches(mappedRows[0].row, formData)) {
+        throw new Error("This client/series/case number is already linked to different form data. Review the existing case before retrying.");
+      }
+      return mappedRows[0].number;
+    }
+    if (mappedRows.length > 1) throw new Error("The saved case reference matches multiple sheet rows. Manual review is required before retrying.");
+    properties.deleteProperty(mappingKey);
+  }
+
+  var matches = [];
+  allRows.forEach(function(row, index) {
+    if (submissionRowMatches(row, formData)) matches.push({ row: row, number: index + 2 });
+  });
+  if (matches.length > 1) throw new Error("Multiple sheet rows match this retry. Manual review is required before generating documents.");
+  if (matches.length === 1) {
+    if (mappingKey) properties.setProperty(mappingKey, String(matches[0].row[2] || ""));
+    return matches[0].number;
+  }
+  return 0;
+}
+
 function processFormSubmission(data) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("Sheet1");
@@ -315,24 +372,31 @@ function processFormSubmission(data) {
   lock.waitLock(30000);
   var lastRow = null;
   try {
-    lastRow = sheet.getLastRow() + 1;
-    var serial  = generateUniqueSerial(sheet);
-    var today   = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
-
-    var rowValues = [
-      "START ‼", "STAGE 1", serial,
-      data.tm || "", data.folder || "", today,
-      data.classNo || "", data.classDesc || "", data.appType || "",
-      data.appName || "", data.appSo || "", data.appCnic || "",
-      data.issueDate || "", data.expiryDate || "", data.appTrade || "",
-      data.appAdd || "", data.year || "", data.conName || "", data.conAdd || "",
-      "", // T - imageId filled after upload into client folder
-      data.noImg || "[NO IMAGE PROVIDED]",
-      "PENDING" // V - FILING PROCESS
-    ];
-    sheet.getRange(lastRow, 1, 1, 22).setValues([rowValues]);
-
-    sheet.getRange(lastRow, 1).setValue("GENERATING");
+    var mappingKey = submissionIdentityKey(data);
+    lastRow = findExistingSubmissionRow(sheet, data, mappingKey);
+    var serial;
+    if (lastRow) {
+      serial = sheet.getRange(lastRow, 3).getValue();
+      sheet.getRange(lastRow, 1).setValue("GENERATING");
+    } else {
+      lastRow = sheet.getLastRow() + 1;
+      serial = generateUniqueSerial(sheet);
+      var today = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
+      var rowValues = [
+        "START ‼", "STAGE 1", serial,
+        data.tm || "", data.folder || "", today,
+        data.classNo || "", data.classDesc || "", data.appType || "",
+        data.appName || "", data.appSo || "", data.appCnic || "",
+        data.issueDate || "", data.expiryDate || "", data.appTrade || "",
+        data.appAdd || "", data.year || "", data.conName || "", data.conAdd || "",
+        "", // T - imageId filled after upload into client folder
+        data.noImg || "[NO IMAGE PROVIDED]",
+        "PENDING" // V - FILING PROCESS
+      ];
+      sheet.getRange(lastRow, 1, 1, 22).setValues([rowValues]);
+      if (mappingKey) PropertiesService.getScriptProperties().setProperty(mappingKey, String(serial));
+      sheet.getRange(lastRow, 1).setValue("GENERATING");
+    }
     SpreadsheetApp.flush();
 
     var processResult = processRowAndReturnLinks(
@@ -433,7 +497,8 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
       var imageFileName = safeName + "_logo." + ext;
 
       var blob = Utilities.newBlob(bytes, formData.imageMime || "image/jpeg", imageFileName);
-      var file = newFolder.createFile(blob);
+      var existingLogo = newFolder.getFilesByName(imageFileName);
+      var file = existingLogo.hasNext() ? existingLogo.next() : newFolder.createFile(blob);
       imageId = file.getId();
       tmImageBlob = blob;
       sheet.getRange(row, 20).setValue(imageId);
@@ -491,10 +556,9 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
 
 function generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
   var existing = folder.getFilesByName(docName);
-  if (existing.hasNext()) return existing.next();
-
-  var templateFile = DriveApp.getFileById(templateId);
-  var doc = templateFile.makeCopy(docName, folder);
+  var doc = existing.hasNext()
+    ? existing.next()
+    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
   var document = DocumentApp.openById(doc.getId());
   var body = document.getBody();
 
@@ -742,10 +806,9 @@ function generateDocuments(rowData, folder, tm1TemplateId, tm48TemplateId, image
 
 function generateWordDoc(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
   var existing = folder.getFilesByName(docName);
-  if (existing.hasNext()) return existing.next();
-
-  var templateFile = DriveApp.getFileById(templateId);
-  var doc = templateFile.makeCopy(docName, folder);
+  var doc = existing.hasNext()
+    ? existing.next()
+    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
   var document = DocumentApp.openById(doc.getId());
   var body = document.getBody();
 

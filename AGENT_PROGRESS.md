@@ -195,3 +195,18 @@ Before the live correction below, no production database, Supabase project, Apps
 - A read-only Google Drive search found no folder named `222-A-054` and no Drive item matching the screenshot's case name `SADFSADSAD`. The earlier `325-A-056` output folder is unrelated evidence and must not be treated as generation success for `222-A-054`.
 - The authenticated Records API now returns Apps Script/Sheet records alongside Supabase records (510 combined records observed), which confirms the Vercel backend token is accepted by the renamed Apps Script property. Secret values were never displayed or changed.
 
+### Follow-up after user's approval — 2026-11-17
+
+- The user approved renaming the Apps Script property; this had already been completed and verified as above, with the saved secret value retained.
+- Read-only check of the current production Records CMS now finds the screenshot's existing case `222-A-054` (`SADFSADSAD`) as `PENDING`. The page shows it as a normal case row and has no document-generation retry control.
+- The safe retry action exists only in the original application page's in-memory state (`lastSavedCaseId` plus the submitted form values). The CMS row does not preserve that retry state. Re-submitting the form would create another case; manually reconstructing and posting a generation payload could create duplicate Drive/Sheet outputs or omit source attachments. No retry, new case, or production mutation was performed.
+- Next step: use the original application's visible “Retry Document Generation” action if its failed-result card is still open. If that browser state is gone, provide the original failed-result page/session or confirm a separate recovery approach before rebuilding a payload. Then verify the result and Drive files for `222-A-054` before closing the generation issue.
+
+### 2026-11-17 local retry reliability fix (not deployed yet)
+
+- `Code.gs` now records a stable mapping from client/series/case reference to its Sheet serial and reuses the matching row on a repeat generation request. It verifies the stored form values and stops if the reference points to changed data or multiple rows match, rather than silently appending another case.
+- Apps Script now reuses the case's logo file and reopens existing TM-1/TM-48 docs to replace any remaining template fields after a partial document failure. Existing completed output remains unchanged because replaced placeholders no longer exist. Additional attachments already use name-based reuse.
+- The application retry sends the still-selected original logo and attachments again; Apps Script reuses stored files by name. New Supabase case writes now save applicant father name, CNIC, and address into existing schema columns, without adding columns.
+- Added Apps Script retry regressions, including a simulated failed processing attempt followed by a retry that confirms one Sheet row is reused. Full `npm test` passes 20/20; `npm run lint`, `npx tsc --noEmit`, `npm run build`, Apps Script JavaScript syntax check, and `git diff --check` pass.
+- These source changes have not yet been pushed to GitHub/Vercel or deployed to Apps Script. The live CMS still showed `222-A-054` as PENDING. No production retry or Sheet/Drive change has been performed in this work segment.
+
