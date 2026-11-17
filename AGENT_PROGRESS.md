@@ -142,3 +142,21 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 
 No production database, Supabase project, Google Apps Script deployment, Google Sheet, Google Drive folder, Hostinger server, or live client data has been changed by this work.
 
+## Latest verified state — 2026-11-17
+
+- Git checkout is clean on `main`, synchronized with `origin/main` at `ee0be16` (`docs: update deployment progress`).
+- Vercel production deployment `dpl_5QdFDP2GASUGuA85Af96pCFsEQ2Z` is `READY`, built from `ee0be16`, and has the `br-workflow.vercel.app` alias.
+- Vercel Production has entries for `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, `APPS_SCRIPT_RECORDS_TOKEN`, `NEXT_APPS_SCRIPT_URL`, and `NEXT_PUBLIC_APPS_SCRIPT_URL`. The Vercel API returned encrypted values (including `decrypted: false`), so their actual values and whether the two URLs match cannot be verified here. Earlier URL-matching statements in this file are historical and must not be treated as currently verified.
+- The Apps Script URL hardcoded in the current checkout responds to a read-only health GET with `Brandex MailMerge backend is live.` A POST `getRecords` request without a token returns `Authentication required` and no records. This verifies that endpoint is reachable and rejects unauthenticated reads; it does not verify the production Vercel URL, the token match, or that the current `Code.gs` source is deployed there.
+- A Google Drive search for Apps Script project files returned no accessible `application/vnd.google-apps.script` files. The active Apps Script deployment/version and its `RECORDS_ACCESS_TOKEN` / OAuth authorization therefore remain unverified.
+- Vercel reported no clustered runtime errors for the selected records/application routes during the last seven days. Individual logs could not be queried because the Hobby plan does not retain logs for that time range; this is not proof that generation succeeded.
+- No case, sheet row, or Drive document was created or changed during these checks. The user's previously reported failure remains unresolved: Supabase saves the case, but Apps Script document generation returns a generic failure.
+- Auth secret roles: `APP_ACCESS_PASSWORD` is for the website login. The Apps Script backend token is `APPS_SCRIPT_RECORDS_TOKEN`, which must equal Apps Script Script Property `RECORDS_ACCESS_TOKEN`; do not paste either value into chat.
+
+### Next required verification
+
+1. In Vercel Production, confirm `NEXT_PUBLIC_APPS_SCRIPT_URL` points to the currently deployed Apps Script Web App URL. Do not assume it matches the URL in the source or the encrypted legacy variable.
+2. Privately compare Vercel `APPS_SCRIPT_RECORDS_TOKEN` with Apps Script Script Property `RECORDS_ACCESS_TOKEN`.
+3. Confirm the latest `Code.gs` has been deployed as a new Apps Script version and the script owner has authorized the required Docs/Drive scopes.
+4. After these checks, retry document generation on an explicitly selected existing test case; avoid creating a new production case just for testing. Inspect the returned generation state and the corresponding Drive outputs before calling the workflow verified.
+
