@@ -417,6 +417,7 @@ export default function TrademarkApplicationPage() {
         } else {
           const errMsg = data?.error || `Google Apps Script returned status ${res.status}`;
           const isDocAuth = data?.code === 'GOOGLE_DOCS_PERMISSION_REQUIRED';
+          const isBackendAuth = data?.code === 'APPS_SCRIPT_AUTHENTICATION_FAILED';
           if (isDocAuth) {
             setPermissionErrorModalOpen(true);
           }
@@ -424,7 +425,8 @@ export default function TrademarkApplicationPage() {
           setStatusMsg(
             `✅ CASE SAVED IN SUPABASE DATABASE!\n` +
             `Record "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.\n` +
-            `Note on Document Generation: ${errMsg}.`
+            `Note on Document Generation: ${errMsg}.` +
+            (isBackendAuth ? '\nCheck the Apps Script property and Vercel backend token are identical.' : '')
           );
           notifyResult(true, 'Case saved in database. Apps Script doc generation pending.');
         }
