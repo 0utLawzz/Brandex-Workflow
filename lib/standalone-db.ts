@@ -488,6 +488,7 @@ class StandaloneDB {
       };
 
       const colDate = findCol(["date", "filing date"], 1);
+      const colCaseRef = findCol(["case ref", "case reference"], 2);
       const colFolder = findCol(["case name", "folder", "mark name", "trademark name", "mark"], 3);
       const colTm = findCol(["tm no", "tm number", "trademark no", "tm"], 4);
       const colClass = findCol(["class", "class no", "class #"], 5);
@@ -525,6 +526,12 @@ class StandaloneDB {
         const tm = val(colTm);
         if (!folder && !appName && !tm) continue;
 
+        // The exported Case Ref is the only CSV field that carries the series.
+        // Restore it so an export/import round-trip preserves X/A/N/B and the
+        // original case identity instead of silently defaulting to series A.
+        const caseReference = val(colCaseRef).toUpperCase();
+        const caseReferenceMatch = /^(\d{1,3})-([XANB])-(\d{1,3})$/.exec(caseReference);
+
         maxId++;
         const newRec: RecordItem = {
           id: maxId,
@@ -543,7 +550,9 @@ class StandaloneDB {
           dispatchedNote: val(colDispNote),
           deliveredDate: val(colDelivDate),
           receiverName: val(colReceiver).toUpperCase(),
-          clientCode: val(colClientCode) || '646',
+          clientCode: val(colClientCode) || caseReferenceMatch?.[1] || '646',
+          selectionMenu: caseReferenceMatch?.[2] || 'A',
+          caseNo: caseReferenceMatch?.[3] || '',
           cnic: val(colCnic),
           address: val(colAddress).toUpperCase(),
           notes: val(colNotes),

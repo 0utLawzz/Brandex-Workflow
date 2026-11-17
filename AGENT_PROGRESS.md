@@ -120,7 +120,7 @@ Reduce unnecessary full-row/full-table reads and avoid storing large file data U
 
 ### Priority 2: Tests
 
-Add focused tests for API validation, case numbering, submission failure states, attachment limits, and the preserved series/bulk-generation behavior.
+- Added a browser-storage regression test for records CSV export/import. It proves that the client code, X/A/N/B series, and case number survive a round-trip. Remaining coverage: API validation, case numbering, submission failure states, attachment limits, and bulk-generation behavior.
 
 ## Production boundary
 
