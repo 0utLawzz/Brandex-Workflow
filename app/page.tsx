@@ -525,15 +525,6 @@ export default function HomePage() {
                 >
                   Record View
                 </button>
-                <a
-                  href="https://docs.google.com/spreadsheets/d/1u7oYu63G28y54byhOw-2KS3nlt7GrpmbkT3uKMX2b8M/edit?gid=1496727423#gid=1496727423"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="tag tag-sheet tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#FAF6EE] text-[#0C0C0C] no-underline shadow-[2px_2px_0_#0C0C0C]"
-                  onClick={() => playSound(380)}
-                >
-                  Google Sheet
-                </a>
               </div>
             </div>
           </div>

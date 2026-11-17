@@ -1,25 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
-const { mergeRecordSources } = await import('../lib/record-source-merge.ts');
+const recordsApi = await readFile(new URL('../app/api/records/route.ts', import.meta.url), 'utf8');
 
-test('retains Sheet-only cases and lets Supabase win on duplicate case identity', () => {
-  const sheetRecord = { id: 1001, folder: 'MARK ONE', tm: 'TM-1', status: 'PENDING' };
-  const sheetOnlyRecord = { id: 1002, folder: 'MARK TWO', tm: 'TM-2', status: 'PENDING' };
-  const supabaseRecord = { id: 5, folder: 'MARK ONE', tm: 'TM-1', status: 'APPROVED' };
-
-  const merged = mergeRecordSources([sheetRecord, sheetOnlyRecord], [supabaseRecord]);
-
-  assert.equal(merged.length, 2);
-  assert.equal(merged.find((record) => record.folder === 'MARK ONE')?.status, 'APPROVED');
-  assert.equal(merged.find((record) => record.folder === 'MARK TWO')?.status, 'PENDING');
-});
-
-test('uses record IDs when both source identity fields are blank', () => {
-  const merged = mergeRecordSources(
-    [{ id: 1001, folder: '', tm: '', status: 'PENDING' }],
-    [{ id: 8, folder: '', tm: '', status: 'APPROVED' }],
-  );
-
-  assert.equal(merged.length, 2);
+test('Records API reads cases from Supabase only and reports read failures', () => {
+  assert.match(recordsApi, /from\('trademark_records'\)/);
+  assert.match(recordsApi, /source:\s*'supabase'/);
+  assert.match(recordsApi, /status:\s*502/);
+  assert.doesNotMatch(recordsApi, /proxyAppsScript|mergeRecordSources|NEXT_PUBLIC_SHEET_URL|getRecords/);
 });

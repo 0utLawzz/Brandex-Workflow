@@ -46,9 +46,8 @@ export default function ClientsPage() {
           setClientCode(String(Math.max(...codes) + 1).padStart(3, '0'));
         }
       }
-    } catch {
-      const local = standaloneDB.getClients();
-      setClients(local);
+    } catch (error: any) {
+      setErrorMsg(error?.message || 'Clients could not be loaded from Supabase.');
     } finally {
       setLoading(false);
     }

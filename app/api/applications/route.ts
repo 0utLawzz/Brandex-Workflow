@@ -1,4 +1,5 @@
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
+import { supabaseDB } from '@/lib/supabase-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +43,12 @@ export async function POST(request: Request) {
         return Response.json({ ok: false, error: 'Unknown action.' }, { status: 400 });
     }
 
-    const requiredTextFields = ['folder', 'classNo', 'appName', 'appTrade', 'year'];
+    const recordId = Number(payload.recordId);
+    if (!Number.isSafeInteger(recordId) || recordId < 1) {
+        return Response.json({ ok: false, error: 'A saved Supabase case ID is required before document generation.' }, { status: 400 });
+    }
+
+    const requiredTextFields = ['folder', 'classNo', 'appType', 'appName', 'appTrade', 'year'];
     for (const field of requiredTextFields) {
         if (typeof payload[field] !== 'string' || !payload[field].trim()) {
             return Response.json({ ok: false, error: `Missing required field: ${field}.` }, { status: 400 });
@@ -57,6 +63,12 @@ export async function POST(request: Request) {
     if (payload.caseNo !== undefined &&
         (typeof payload.caseNo !== 'string' || !/^\d{1,3}$/.test(payload.caseNo))) {
         return Response.json({ ok: false, error: 'Case number must contain up to 3 digits.' }, { status: 400 });
+    }
+
+    if (typeof payload.clientCode !== 'string' || !/^\d{1,3}$/.test(payload.clientCode) ||
+        typeof payload.selectionMenu !== 'string' || !/^[XANB]$/i.test(payload.selectionMenu) ||
+        typeof payload.caseNo !== 'string' || !/^\d{1,3}$/.test(payload.caseNo)) {
+        return Response.json({ ok: false, error: 'A valid client code, case series, and case number are required.' }, { status: 400 });
     }
 
     if (payload.imageBase64 !== undefined) {
@@ -102,5 +114,38 @@ export async function POST(request: Request) {
         }
     }
 
-    return proxyAppsScript(payload);
+    const { recordId: _recordId, ...generationPayload } = payload;
+    const generatedResponse = await proxyAppsScript(generationPayload);
+    if (!generatedResponse.ok) return generatedResponse;
+
+    const generated = await generatedResponse.clone().json().catch(() => null);
+    try {
+        if (!generated?.ok) throw new Error('Google Apps Script returned an invalid generation response.');
+        const updates: Record<string, unknown> = {};
+        if (typeof generated.serialNo === 'string' && generated.serialNo) updates.serialNo = generated.serialNo;
+        if (typeof generated.imageId === 'string' && generated.imageId) updates.img = generated.imageId;
+        if (Object.keys(updates).length) await supabaseDB.updateRecord(recordId, updates as any);
+
+        const documents = [
+            generated.tm1Url && { record_id: recordId, file_name: `${payload.folder} - TM-1`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm1Url },
+            generated.tm48Url && { record_id: recordId, file_name: `${payload.folder} - TM-48`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm48Url },
+            ...(Array.isArray(generated.attachments) ? generated.attachments.map((attachment: any) => ({
+                record_id: recordId,
+                file_name: attachment.name,
+                file_size: attachment.size,
+                file_type: attachment.mimeType,
+                file_url: attachment.url,
+            })) : []),
+        ].filter((document): document is NonNullable<typeof document> => Boolean(document?.file_url));
+        await supabaseDB.saveDocumentReferences(documents as any);
+        return generatedResponse;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown error';
+        return Response.json({
+            ok: false,
+            code: 'SUPABASE_DOCUMENT_REFERENCE_SAVE_FAILED',
+            generated: true,
+            error: `Google documents were generated, but the Supabase case update failed: ${message}`,
+        }, { status: 502, headers: { 'Cache-Control': 'no-store' } });
+    }
 }

@@ -2,6 +2,7 @@ import type { RecordItem } from './standalone-db';
 
 export interface GenerationRetryDraft {
   id: number;
+  serialNo: string;
   category: string;
   selectionMenu: string;
   clientCode: string;
@@ -58,13 +59,14 @@ function formatLocalDateTime(date: Date): string {
 }
 
 export function buildGenerationRetryDraft(record: RecordItem): GenerationRetryDraft {
-  const issueDate = toDateTimeLocalInput(record.date) || toDateTimeLocalInput(record.createdAt);
+  const issueDate = toDateTimeLocalInput(record.issueDate || record.date) || toDateTimeLocalInput(record.createdAt);
   return {
     id: Number(record.id),
+    serialNo: record.serialNo || '',
     category: record.category || 'INITIAL',
-    selectionMenu: record.selectionMenu || 'A',
-    clientCode: record.clientCode || '646',
-    caseNo: record.caseNo || '001',
+    selectionMenu: record.selectionMenu || '',
+    clientCode: record.clientCode || '',
+    caseNo: record.caseNo || '',
     clientId: record.clientId ?? null,
     classNo: record.classNo || '',
     classDesc: record.classDesc || '',

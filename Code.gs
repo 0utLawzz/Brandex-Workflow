@@ -8,7 +8,6 @@
 // 2. Click the editor (< >) and make sure "appsscript.json" has:
 //    "oauthScopes": [
 //      "https://www.googleapis.com/auth/documents",
-//      "https://www.googleapis.com/auth/spreadsheets",
 //      "https://www.googleapis.com/auth/drive"
 //    ]
 // 3. Select function "authorizeScript" in the toolbar dropdown and click "Run".
@@ -19,12 +18,9 @@
 //    (If you do not select "New version", the old deployment without permissions remains active!)
 // ═════════════════════════════════════════════════════════════════════
 
-/**
- * Run this function directly inside the Apps Script editor to trigger
- * the Google OAuth authorization prompt for DocumentApp, DriveApp, and SpreadsheetApp.
- */
+/** Run this function to authorize Google Docs and Drive document generation. */
 function authorizeScript() {
-  Logger.log("Testing permissions for DocumentApp, DriveApp, and SpreadsheetApp...");
+  Logger.log("Testing permissions for DocumentApp and DriveApp...");
   try {
     var user = Session.getActiveUser().getEmail();
     Logger.log("Active User: " + user);
@@ -72,20 +68,11 @@ function doPost(e) {
       return jsonResponse({
         ok: true,
         serialNo: result.serialNo,
-        row: result.row,
         folderUrl: result.folderUrl,
         tm1Url: result.tm1Url,
         tm48Url: result.tm48Url,
         attachments: result.attachments || [],
         imageWarning: result.imageWarning || ""
-      });
-    }
-
-    if (body.action === "getRecords") {
-      var records = getRecordsForView();
-      return jsonResponse({
-        ok: true,
-        records: records
       });
     }
 
@@ -188,47 +175,7 @@ var CONSULTANT_DATA = [
 
 var FILING_PROCESS_OPTIONS = ["PENDING", "IN REVIEW", "APPROVED", "REJECTED", "DISPATCHED", "DELIVERED"];
 
-// ─────────────────────────────────────────────────────────────────────
-// Spreadsheet Automation & Helpers
-// ─────────────────────────────────────────────────────────────────────
-
-function onEdit(e) {
-  try {
-    var range = e.range;
-    var sheet = range.getSheet();
-    if (sheet.getName() !== "Sheet1") return;
-    if (range.getNumRows() > 1 || range.getNumColumns() > 1) return;
-
-    var row = range.getRow();
-    var col = range.getColumn();
-    if (row < 2) return;
-
-    if (col === 7) { // G = CLASS
-      var classNum = parseInt(range.getValue().toString().replace(/\D/g, ""), 10);
-      var match = CLASS_DATA.filter(function (c) { return c.n === classNum; })[0];
-      sheet.getRange(row, 8).setValue(match ? match.desc.toUpperCase() : "");
-    } else if (col === 18) { // R = CON-NAME
-      var name = range.getValue().toString().trim();
-      var found = CONSULTANT_DATA.filter(function (c) { return c.name === name; })[0];
-      if (found) sheet.getRange(row, 19).setValue(found.addr);
-    }
-  } catch (err) {
-    Logger.log("onEdit error: " + err);
-  }
-}
-
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('📋 TRADEMARK TOOLS')
-    .addItem("📊 Setup Headers",   "setupSpreadsheet")
-    .addItem("🔽 Setup Dropdowns", "setupDropdowns")
-    .addSeparator()
-    .addItem("🎯 Process One",     "processOneApplication")
-    .addItem("⚡ Process All",     "processAllApplications")
-    .addToUi();
-}
-
-function generateUniqueSerial(sheet) {
+function generateUniqueSerial() {
   var prefix = "PB-ISB-";
   function makeRandom18() {
     var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -239,25 +186,7 @@ function generateUniqueSerial(sheet) {
     return result;
   }
 
-  var lastRow = sheet.getLastRow();
-  var existingSerials = {};
-
-  if (lastRow >= 2) {
-    var allSerials = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
-    allSerials.forEach(function(rowArr) {
-      var val = rowArr[0];
-      if (val) existingSerials[val.toString().trim()] = true;
-    });
-  }
-
-  var attempts = 0;
-  var newSerial;
-  do {
-    newSerial = prefix + makeRandom18();
-    attempts++;
-  } while (existingSerials[newSerial] && attempts < 10);
-
-  return newSerial;
+  return prefix + makeRandom18();
 }
 
 function getOrCreateClientFolder(parentFolder, rawFolderName) {
@@ -306,167 +235,45 @@ function saveAdditionalFiles(caseFolder, files, formData) {
   return saved;
 }
 
-function submissionIdentityKey(formData) {
-  if (!formData || !formData.clientCode || !formData.selectionMenu || !formData.caseNo) return "";
-  var identity = [formData.clientCode, formData.selectionMenu, formData.caseNo]
-    .map(function(value) { return String(value).trim().toUpperCase(); })
-    .join("|");
-  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, identity);
-  return "FORM_SUBMISSION_" + Utilities.base64EncodeWebSafe(digest).replace(/=+$/, "");
-}
-
-function submissionRowMatches(row, formData) {
-  var columns = [
-    [3, "tm"], [4, "folder"], [6, "classNo"], [7, "classDesc"], [8, "appType"],
-    [9, "appName"], [10, "appSo"], [11, "appCnic"], [12, "issueDate"], [13, "expiryDate"],
-    [14, "appTrade"], [15, "appAdd"], [16, "year"], [17, "conName"], [18, "conAdd"], [20, "noImg"]
-  ];
-  return columns.every(function(column) {
-    var expected = formData[column[1]] == null ? "" : String(formData[column[1]]).trim();
-    var actual = row[column[0]] == null ? "" : String(row[column[0]]).trim();
-    return actual === expected;
-  });
-}
-
-function findExistingSubmissionRow(sheet, formData, mappingKey) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return 0;
-
-  var allRows = sheet.getRange(2, 1, lastRow - 1, 22).getValues();
-  var properties = PropertiesService.getScriptProperties();
-  var mappedSerial = mappingKey ? properties.getProperty(mappingKey) : "";
-
-  if (mappedSerial) {
-    var mappedRows = [];
-    allRows.forEach(function(row, index) {
-      if (String(row[2] || "").trim() === mappedSerial) mappedRows.push({ row: row, number: index + 2 });
-    });
-    if (mappedRows.length === 1) {
-      if (!submissionRowMatches(mappedRows[0].row, formData)) {
-        throw new Error("This client/series/case number is already linked to different form data. Review the existing case before retrying.");
-      }
-      return mappedRows[0].number;
-    }
-    if (mappedRows.length > 1) throw new Error("The saved case reference matches multiple sheet rows. Manual review is required before retrying.");
-    properties.deleteProperty(mappingKey);
-  }
-
-  var matches = [];
-  allRows.forEach(function(row, index) {
-    if (submissionRowMatches(row, formData)) matches.push({ row: row, number: index + 2 });
-  });
-  if (matches.length > 1) throw new Error("Multiple sheet rows match this retry. Manual review is required before generating documents.");
-  if (matches.length === 1) {
-    if (mappingKey) properties.setProperty(mappingKey, String(matches[0].row[2] || ""));
-    return matches[0].number;
-  }
-  return 0;
-}
-
 function processFormSubmission(data) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Sheet1");
-  if (!sheet) throw new Error("Sheet1 not found");
-
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
-  var lastRow = null;
   try {
-    var mappingKey = submissionIdentityKey(data);
-    lastRow = findExistingSubmissionRow(sheet, data, mappingKey);
-    var serial;
-    if (lastRow) {
-      serial = sheet.getRange(lastRow, 3).getValue();
-      sheet.getRange(lastRow, 1).setValue("GENERATING");
-    } else {
-      lastRow = sheet.getLastRow() + 1;
-      serial = generateUniqueSerial(sheet);
-      var today = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
-      var rowValues = [
-        "START ‼", "STAGE 1", serial,
-        data.tm || "", data.folder || "", today,
-        data.classNo || "", data.classDesc || "", data.appType || "",
-        data.appName || "", data.appSo || "", data.appCnic || "",
-        data.issueDate || "", data.expiryDate || "", data.appTrade || "",
-        data.appAdd || "", data.year || "", data.conName || "", data.conAdd || "",
-        "", // T - imageId filled after upload into client folder
-        data.noImg || "[NO IMAGE PROVIDED]",
-        "PENDING" // V - FILING PROCESS
-      ];
-      sheet.getRange(lastRow, 1, 1, 22).setValues([rowValues]);
-      if (mappingKey) PropertiesService.getScriptProperties().setProperty(mappingKey, String(serial));
-      sheet.getRange(lastRow, 1).setValue("GENERATING");
-    }
-    SpreadsheetApp.flush();
-
+    var serial = data.serialNo || generateUniqueSerial(null);
+    var input = Object.assign({}, data, { serialNo: serial });
     var processResult = processRowAndReturnLinks(
-      sheet, lastRow, MAIN_FOLDER_ID, TM1_TEMPLATE_ID, TM48_TEMPLATE_ID, data
+      MAIN_FOLDER_ID, TM1_TEMPLATE_ID, TM48_TEMPLATE_ID, input
     );
-
-    sheet.getRange(lastRow, 1).setValue("DONE");
 
     return {
       serialNo: serial,
-      row: lastRow,
       folderUrl: processResult.folderUrl,
       tm1Url: processResult.tm1Url,
       tm48Url: processResult.tm48Url,
+      attachments: processResult.attachments || [],
       imageWarning: processResult.imageWarning
     };
   } catch (procErr) {
-    if (lastRow) sheet.getRange(lastRow, 1).setValue("ERROR");
     throw procErr;
   } finally {
     lock.releaseLock();
   }
 }
 
-function getRecordsForView() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Sheet1");
-  if (!sheet) throw new Error("Sheet1 not found");
-
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-
-  var dataRange = sheet.getRange(2, 1, lastRow - 1, 22);
-  var data = dataRange.getValues();
-
-  var records = [];
-  for (var i = 0; i < data.length; i++) {
-    var row = data[i];
-    records.push({
-      // Column A tracks document-generation state (START/GENERATING/DONE/ERROR).
-      // The records CMS filters the case's workflow stage, which lives in column V.
-      status: row[21] || "PENDING",
-      folder: row[4] || "",
-      tm: row[3] || "",
-      date: row[5] || "",
-      classNo: row[6] || "",
-      appName: row[9] || "",
-      appTrade: row[14] || "",
-      year: row[16] || "",
-      conName: row[17] || "",
-      img: row[19] || "",
-      noImg: row[20] || "",
-      filingProcess: row[21] || "PENDING"
-    });
+function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, formData) {
+  var rowData = formData;
+  if (!rowData.goodsServices) {
+    var classNumber = rowData.classNo ? parseInt(String(rowData.classNo).replace(/\D/g, ""), 10) : 0;
+    rowData.goodsServices = classNumber >= 1 && classNumber <= 34 ? "GOODS" : "SERVICES";
   }
-
-  return records.reverse();
-}
-
-function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48TemplateId, formData) {
-  var rowData = getRowData(sheet, row);
-  validateRequiredData(rowData, row);
+  if (rowData.date === undefined || !rowData.date) rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
+  validateRequiredData(rowData);
 
   if (!rowData.serialNo || rowData.serialNo.toString().trim() === "") {
-    rowData.serialNo = generateUniqueSerial(sheet);
-    sheet.getRange(row, 3).setValue(rowData.serialNo);
+    rowData.serialNo = generateUniqueSerial();
   }
   if (!rowData.date) {
     rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
-    sheet.getRange(row, 6).setValue(rowData.date);
   }
 
   var parentFolder = DriveApp.getFolderById(mainFolderId);
@@ -501,7 +308,6 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
       var file = existingLogo.hasNext() ? existingLogo.next() : newFolder.createFile(blob);
       imageId = file.getId();
       tmImageBlob = blob;
-      sheet.getRange(row, 20).setValue(imageId);
 
       Logger.log("Image saved in folder: " + newFolder.getName() + " | File: " + imageFileName);
     } catch (imgErr) {
@@ -509,6 +315,7 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
       Logger.log("Image upload warning: " + imgErr);
     }
   } else if (rowData.img) {
+    imageId = rowData.img;
     tmImageBlob = getImageFromDriveId(rowData.img);
   }
 
@@ -550,6 +357,7 @@ function processRowAndReturnLinks(sheet, row, mainFolderId, tm1TemplateId, tm48T
     tm1Url: tm1Doc ? tm1Doc.getUrl() : null,
     tm48Url: tm48Doc ? tm48Doc.getUrl() : null,
     attachments: attachments,
+    imageId: imageId || rowData.img || '',
     imageWarning: imageWarning
   };
 }
@@ -579,179 +387,15 @@ function generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob
   return doc;
 }
 
-function processAllApplications() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Sheet1");
-
-  try {
-    var lastRow = sheet.getLastRow();
-    var processRows = [];
-
-    for (var row = 2; row <= lastRow; row++) {
-      var processStatus = sheet.getRange(row, 1).getValue();
-      var triggerStatus = sheet.getRange(row, 2).getValue();
-
-      if (
-        processStatus && processStatus.toString().trim() === "START ‼" &&
-        triggerStatus  && triggerStatus.toString().trim()  === "STAGE 1"
-      ) {
-        processRows.push(row);
-      }
-    }
-
-    if (processRows.length === 0) {
-      SpreadsheetApp.getUi().alert("No Applications Found", "Koi application nahi mili jis mein 'START ‼' aur 'STAGE 1' ho.", SpreadsheetApp.getUi().ButtonSet.OK);
-      return;
-    }
-
-    var confirmMsg = "Found " + processRows.length + " applications.\nRows: " + processRows.join(", ") + "\nProceed?";
-    var response = SpreadsheetApp.getUi().alert("Confirm Bulk Processing", confirmMsg, SpreadsheetApp.getUi().ButtonSet.YES_NO);
-    if (response !== SpreadsheetApp.getUi().Button.YES) return;
-
-    var successCount = 0;
-    var errorCount   = 0;
-
-    for (var i = 0; i < processRows.length; i++) {
-      var currentRow = processRows[i];
-      try {
-        sheet.getRange(currentRow, 1).setValue("GENERATING");
-        SpreadsheetApp.flush();
-
-        processRow(sheet, currentRow, MAIN_FOLDER_ID, TM1_TEMPLATE_ID, TM48_TEMPLATE_ID);
-        sheet.getRange(currentRow, 1).setValue("DONE");
-        successCount++;
-      } catch (error) {
-        sheet.getRange(currentRow, 1).setValue("ERROR");
-        errorCount++;
-      }
-      if (i < processRows.length - 1) Utilities.sleep(500);
-    }
-
-    var summary = "Processing Complete!\nSuccessfully processed: " + successCount + "\nErrors: " + errorCount;
-    SpreadsheetApp.getUi().alert("Results", summary, SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (error) {
-    SpreadsheetApp.getUi().alert("Critical Error", error.message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }
-}
-
-function processOneApplication() {
-  var ss    = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("Sheet1");
-
-  try {
-    var lastRow = sheet.getLastRow();
-    for (var row = 2; row <= lastRow; row++) {
-      var processStatus = sheet.getRange(row, 1).getValue();
-      var triggerStatus = sheet.getRange(row, 2).getValue();
-
-      if (
-        processStatus && processStatus.toString().trim() === "START ‼" &&
-        triggerStatus  && triggerStatus.toString().trim()  === "STAGE 1"
-      ) {
-        sheet.getRange(row, 1).setValue("GENERATING");
-        SpreadsheetApp.flush();
-
-        processRow(sheet, row, MAIN_FOLDER_ID, TM1_TEMPLATE_ID, TM48_TEMPLATE_ID);
-        sheet.getRange(row, 1).setValue("DONE");
-
-        SpreadsheetApp.getUi().alert("Done", "Row " + row + " successfully processed!", SpreadsheetApp.getUi().ButtonSet.OK);
-        return;
-      }
-    }
-
-    SpreadsheetApp.getUi().alert("Not Found", "Koi eligible application nahi mili.", SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (error) {
-    try {
-      if (typeof row !== "undefined") sheet.getRange(row, 1).setValue("ERROR");
-    } catch (e2) {}
-    SpreadsheetApp.getUi().alert("Error", error.message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }
-}
-
-function processRow(sheet, row, mainFolderId, tm1TemplateId, tm48TemplateId) {
-  var rowData = getRowData(sheet, row);
-  validateRequiredData(rowData, row);
-
-  if (!rowData.serialNo || rowData.serialNo.toString().trim() === "") {
-    rowData.serialNo = generateUniqueSerial(sheet);
-    sheet.getRange(row, 3).setValue(rowData.serialNo);
-  }
-
-  if (!rowData.date) {
-    rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
-    sheet.getRange(row, 6).setValue(rowData.date);
-  }
-
-  var parentFolder = DriveApp.getFolderById(mainFolderId);
-  var newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
-
-  var tmImageBlob = getImageFromDriveId(rowData.img);
-  generateDocuments(rowData, newFolder, tm1TemplateId, tm48TemplateId, tmImageBlob);
-}
-
-function getRowData(sheet, row) {
-  var range  = sheet.getRange(row, 1, 1, 21);
-  var values = range.getValues()[0];
-
-  var dateVal = values[5];
-  if (dateVal instanceof Date) {
-    dateVal = Utilities.formatDate(dateVal, "Asia/Karachi", "EEEE, dd MMMM yyyy");
-  } else if (dateVal) {
-    dateVal = dateVal.toString();
-  }
-
-  var issueDateVal = values[12];
-  if (issueDateVal instanceof Date) {
-    issueDateVal = Utilities.formatDate(issueDateVal, "Asia/Karachi", "dd-MMM-yyyy, hh:mm:ss a").toUpperCase();
-  } else if (issueDateVal) {
-    issueDateVal = issueDateVal.toString();
-  }
-
-  var expiryDateVal = values[13];
-  if (expiryDateVal instanceof Date) {
-    expiryDateVal = Utilities.formatDate(expiryDateVal, "Asia/Karachi", "dd-MMM-yyyy, hh:mm:ss a").toUpperCase();
-  } else if (expiryDateVal) {
-    expiryDateVal = expiryDateVal.toString();
-  }
-
-  var classNumber = values[6] ? parseInt(values[6].toString().replace(/\D/g, "")) : 0;
-  var goodsServices = (classNumber >= 1 && classNumber <= 34) ? "GOODS" : "SERVICES";
-
-  return {
-    process: values[0],
-    trigger: values[1],
-    serialNo: values[2],
-    tm: values[3],
-    folder: values[4],
-    date: dateVal,
-    classNo: values[6],
-    classDesc: values[7],
-    appType: values[8],
-    appName: values[9],
-    appSo: values[10],
-    appCnic: values[11],
-    issueDate: issueDateVal,
-    expiryDate: expiryDateVal,
-    appTrade: values[14],
-    appAdd: values[15],
-    year: values[16],
-    conName: values[17],
-    conAdd: values[18],
-    img: values[19],
-    noImg: values[20] || "[NO IMAGE PROVIDED]",
-    goodsServices: goodsServices
-  };
-}
-
-function validateRequiredData(rowData, row) {
+function validateRequiredData(rowData) {
   var missing = [];
-  if (!rowData.folder)  missing.push("FOLDER (Col E)");
-  if (!rowData.classNo) missing.push("CLASS (Col G)");
-  if (!rowData.appType) missing.push("APP-TYPE (Col I)");
-  if (!rowData.appName) missing.push("APP-NAME (Col J)");
+  if (!rowData.folder)  missing.push("mark/folder");
+  if (!rowData.classNo) missing.push("class");
+  if (!rowData.appType) missing.push("application type");
+  if (!rowData.appName) missing.push("applicant");
 
   if (missing.length > 0) {
-    throw new Error("Row " + row + " — Missing: " + missing.join(", "));
+    throw new Error("Missing required case fields: " + missing.join(", "));
   }
 }
 
@@ -850,67 +494,4 @@ function replaceTextWithImage(body, placeholder, imageBlob) {
 
 function escapeRegex(str) {
   return str.replace(/[{}]/g, "\\$&");
-}
-
-function setupSpreadsheet() {
-  var sheet = SpreadsheetApp.getActiveSheet();
-  var headers = [
-    "STATUS", "STAGE", "SR NO", "TM-NO", "NAME", "DATE L",
-    "CLASS", "CLASS-DESC", "APP-TYPE", "APP-NAME",
-    "APP-SO", "APP-CNIC", "ISSUE-DATE", "EXPIRY-DATE",
-    "APP-TRADE", "APP-ADD", "YEAR", "CON-NAME", "CON-ADD",
-    "IMG", "NO-IMG",
-    "FILING PROCESS"
-  ];
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sheet.getRange(1, 1, 1, headers.length)
-    .setBackground("#1a1a2e").setFontColor("#e94560").setFontWeight("bold")
-    .setFontFamily("Ysabeau SC");
-  sheet.setFrozenRows(1);
-
-  var maxRows = Math.max(sheet.getMaxRows(), 500);
-  sheet.getRange(2, 1, maxRows - 1, headers.length)
-    .setFontFamily("Times New Roman")
-    .setHorizontalAlignment("left")
-    .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
-
-  sheet.toast("Spreadsheet headers set up successfully.", "Setup Complete", 5);
-}
-
-function setupDropdowns() {
-  var sheet   = SpreadsheetApp.getActiveSheet();
-  var lastRow = Math.max(sheet.getLastRow(), 100);
-  try {
-    sheet.getRange(2, 1, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(["START ‼", "GENERATING", "DONE", "ERROR"]).setAllowInvalid(false).build()
-    );
-    sheet.getRange(2, 2, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(["STAGE 1"]).setAllowInvalid(false).build()
-    );
-
-    var classNumbers = CLASS_DATA.map(function (c) { return c.n.toString(); });
-    sheet.getRange(2, 7, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(classNumbers).setAllowInvalid(false).build()
-    );
-
-    sheet.getRange(2, 9, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(["SOLE PROPRIETOR", "PARTNERS", "A PAKISTANI COMPANY"]).setAllowInvalid(false).build()
-    );
-    sheet.getRange(2, 17, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(["2022", "2023", "2024", "2025", "2026"]).setAllowInvalid(false).build()
-    );
-
-    var consultantNames = CONSULTANT_DATA.map(function (c) { return c.name; });
-    sheet.getRange(2, 18, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(consultantNames).setAllowInvalid(true).build()
-    );
-
-    sheet.getRange(2, 22, lastRow - 1, 1).setDataValidation(
-      SpreadsheetApp.newDataValidation().requireValueInList(FILING_PROCESS_OPTIONS).setAllowInvalid(false).build()
-    );
-
-    sheet.toast("Dropdowns set successfully.", "Ready", 5);
-  } catch (error) {
-    SpreadsheetApp.getUi().alert("Error", error.message, SpreadsheetApp.getUi().ButtonSet.OK);
-  }
 }

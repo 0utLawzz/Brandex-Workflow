@@ -5,10 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES, SHEET_URL } from '@/lib/data';
-import { standaloneDB } from '@/lib/standalone-db';
+import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
 import { supabaseDB } from '@/lib/supabase-db';
-import { getSupabaseCredentials } from '@/lib/supabase';
 import { buildGenerationRetryDraft } from '@/lib/generation-retry';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
@@ -64,6 +62,7 @@ export default function TrademarkApplicationPage() {
   const [copiedManifest, setCopiedManifest] = useState(false);
   const [copiedScript, setCopiedScript] = useState(false);
   const [lastSavedCaseId, setLastSavedCaseId] = useState<number | null>(null);
+  const [lastSavedSerialNo, setLastSavedSerialNo] = useState('');
   const [lastSavedFolder, setLastSavedFolder] = useState<string>('');
   const [lastSavedToSupabase, setLastSavedToSupabase] = useState(false);
   const [lastSavedToAppsScript, setLastSavedToAppsScript] = useState(false);
@@ -123,9 +122,10 @@ export default function TrademarkApplicationPage() {
       try {
         const res = await supabaseDB.getClients();
         setSavedClients(res.clients);
-      } catch {
-        const clients = standaloneDB.getClients();
-        setSavedClients(clients);
+      } catch (error) {
+        setSavedClients([]);
+        setStatusType('error');
+        setStatusMsg(error instanceof Error ? error.message : 'Clients could not be loaded from Supabase.');
       }
     }
     fetchClients();
@@ -140,11 +140,12 @@ export default function TrademarkApplicationPage() {
           const retryTm = search.get('retryTm') || '';
           const response = await fetch('/api/records', { cache: 'no-store' });
           const result = await response.json();
-          const existing = response.ok && result?.ok && Array.isArray(result.records)
+          let existing = response.ok && result?.ok && Array.isArray(result.records)
             ? result.records.find((record: any) => retryFolder || retryTm
               ? String(record.folder || '').trim() === retryFolder.trim() && String(record.tm || '').trim() === retryTm.trim()
               : Number(record.id) === retryId)
             : null;
+          let recordSource = String(result?.source || '');
           if (!existing) {
             setStatusType('error');
             setStatusMsg('This case could not be found in the connected records. No new case was created.');
@@ -183,9 +184,10 @@ export default function TrademarkApplicationPage() {
           setRetryImageData(draft.imageData);
           setPreviewSrc(draft.imageData || null);
           setLastSavedCaseId(retryId);
+          setLastSavedSerialNo(draft.serialNo);
           setLastSavedFolder(draft.folder);
           setLastSavedToSupabase(isSupabaseRecord);
-          setLastSavedToAppsScript(String(result.source || '').includes('apps-script'));
+          setLastSavedToAppsScript(recordSource.includes('apps-script'));
           setGenerationPending(true);
           setStatusType('info');
           setStatusMsg('Existing case loaded for document retry. Missing applicant details must be completed below. Reattach any additional files because those are not stored in the case record.');
@@ -206,16 +208,9 @@ export default function TrademarkApplicationPage() {
           }
         });
         setCaseNo(String(maxCase + 1).padStart(3, '0'));
-      } catch {
-        const records = standaloneDB.getRecords();
-        let maxCase = 0;
-        records.forEach(r => {
-          if (r.caseNo) {
-            const num = parseInt(r.caseNo, 10);
-            if (!isNaN(num) && num > maxCase) maxCase = num;
-          }
-        });
-        setCaseNo(String(maxCase + 1).padStart(3, '0'));
+      } catch (error) {
+        setStatusType('error');
+        setStatusMsg(error instanceof Error ? error.message : 'Cases could not be loaded from Supabase.');
       }
     }
     fetchLatestCaseNo();
@@ -340,6 +335,9 @@ export default function TrademarkApplicationPage() {
     if (retryGeneration) {
       const missing = [
         !folder.trim() && 'case folder',
+        !/^\d{1,3}$/.test(clientCode) && 'client code',
+        !/^[XANB]$/.test(selectionMenu.toUpperCase()) && 'case series (X, A, N, or B)',
+        !/^\d{1,3}$/.test(caseNo) && 'case number',
         !classNo.trim() && 'class',
         !appName.trim() && 'applicant name',
         !appSo.trim() && 'father name',
@@ -389,8 +387,8 @@ export default function TrademarkApplicationPage() {
     setProgressLabel('Preparing request');
     setStatusType('info');
     setStatusMsg(retryGeneration
-      ? 'Retrying document generation for the saved case...'
-      : 'Saving a local browser copy and sending the application to Google Apps Script...');
+      ? 'Retrying document generation for the saved Supabase case...'
+      : 'Saving the case in Supabase, then generating its documents in Google Drive...');
     setStatusLinks(null);
 
     progressTimerRef.current = setInterval(() => {
@@ -435,8 +433,7 @@ export default function TrademarkApplicationPage() {
       let insertedRecordId = retryGeneration && !lastSavedToSupabase ? null : lastSavedCaseId;
       if (!retryGeneration) {
         setProgressPercent(30);
-        recordSavedToSupabase = getSupabaseCredentials().isConfigured;
-        setProgressLabel(recordSavedToSupabase ? 'Saving record in Supabase Database' : 'Saving local browser copy');
+        setProgressLabel('Saving record in Supabase Database');
         const newRec = await supabaseDB.addRecord({
         clientId: selectedClientId ? Number(selectedClientId) : undefined,
         category: selectedCategory,
@@ -464,14 +461,19 @@ export default function TrademarkApplicationPage() {
         noImg,
         filingProcess: 'PENDING',
         });
+        if (!newRec?.id) throw new Error('Supabase did not confirm the new case ID.');
+        recordSavedToSupabase = true;
         insertedRecordId = newRec.id;
         setLastSavedCaseId(insertedRecordId);
+        setLastSavedSerialNo(newRec.serialNo || '');
         setLastSavedFolder(payload.folder);
         setLastSavedToSupabase(recordSavedToSupabase);
         setLastSavedToAppsScript(false);
       }
 
       if (!retryGeneration && !insertedRecordId) throw new Error('The saved case could not be found for document generation.');
+      payload.recordId = insertedRecordId;
+      payload.serialNo = retryGeneration ? lastSavedSerialNo : '';
 
       setProgressPercent(60);
       setProgressLabel('Generating documents via Google Apps Script');
@@ -493,49 +495,24 @@ export default function TrademarkApplicationPage() {
         } catch {}
 
         if (res.ok && data && data.ok === true) {
-          if (data.serialNo && insertedRecordId) await supabaseDB.updateRecord(insertedRecordId, { serialNo: String(data.serialNo) });
-          let attachmentWarning = '';
-          const savedRecordId = insertedRecordId;
-          if (savedRecordId) {
-            for (const attachment of data.attachments || []) {
-              try {
-                await supabaseDB.addDocument({
-                  record_id: savedRecordId,
-                  file_name: attachment.name,
-                  file_size: attachment.size,
-                  file_type: attachment.mimeType,
-                  file_url: attachment.url,
-                });
-              } catch (error) {
-                console.error('[Application] Attachment reference could not be saved:', error);
-                attachmentWarning = ' One or more files are in Drive, but their database references could not be saved.';
-              }
-            }
-          }
           clearInterval(progressTimerRef.current as NodeJS.Timeout);
           setProgressPercent(100);
           setProgressLabel('Completed');
 
           setStatusType('success');
-          const savedLocation = recordSavedToSupabase
-            ? 'Case saved to Supabase.'
-            : retryGeneration && lastSavedToAppsScript
-              ? 'Existing case remains in Google Sheets.'
-              : 'Case saved in this browser only; Supabase is not configured.';
+          const savedLocation = 'Case saved to Supabase; documents saved in Google Drive.';
           setStatusMsg(
             `✅ Success! Documents generated. ${savedLocation}\n` +
             `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
             `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
-            (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '') + attachmentWarning
+            (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
           );
           setStatusLinks({
             folderUrl: data.folderUrl,
             tm1Url: data.tm1Url,
             tm48Url: data.tm48Url
           });
-          notifyResult(true, recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
-            ? `${payload.folder} — saved case and generated documents.`
-            : `${payload.folder} — documents generated; case is only saved in this browser.`);
+          notifyResult(true, `${payload.folder} — saved case and generated documents.`);
           setGenerationPending(false);
           return;
         } else {
@@ -550,8 +527,8 @@ export default function TrademarkApplicationPage() {
           const savedStatus = recordSavedToSupabase
             ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.`
             : retryGeneration && lastSavedToAppsScript
-              ? `✅ EXISTING CASE FOUND IN GOOGLE SHEETS.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) remains in the connected Apps Script records.`
-              : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
+              ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) cannot be retried as a Supabase case.`
+              : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) was not saved to the system of record.`;
           setStatusMsg(
             `${savedStatus}\n` +
             `Note on Document Generation: ${errMsg}.` +
@@ -567,8 +544,8 @@ export default function TrademarkApplicationPage() {
         const savedStatus = recordSavedToSupabase
           ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.`
           : retryGeneration && lastSavedToAppsScript
-            ? `✅ EXISTING CASE FOUND IN GOOGLE SHEETS.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) remains in the connected Apps Script records.`
-            : `⚠ CASE SAVED IN THIS BROWSER ONLY.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is not confirmed in Supabase because the browser Supabase key is not configured.`;
+            ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) cannot be retried as a Supabase case.`
+            : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) was not saved to the system of record.`;
         setStatusMsg(
           `${savedStatus}\n` +
           `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
@@ -1261,7 +1238,6 @@ export default function TrademarkApplicationPage() {
                           runtimeVersion: "V8",
                           oauthScopes: [
                             "https://www.googleapis.com/auth/documents",
-                            "https://www.googleapis.com/auth/spreadsheets",
                             "https://www.googleapis.com/auth/drive"
                           ]
                         }, null, 2);

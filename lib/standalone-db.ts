@@ -3,9 +3,8 @@
 import Papa from 'papaparse';
 
 // =========================================================================
-// BRANDEX LAW ASSOCIATES — STANDALONE IN-APP DATABASE ENGINE
-// 100% Client-Side Persistent Storage (localStorage + in-memory cache)
-// Zero External Database Dependencies · 0ms Latency · Full Data Sovereignty
+// BRANDEX LAW ASSOCIATES — CSV AND BACKUP UTILITIES
+// Supabase is the source of truth; these helpers handle CSV and backup formats.
 // =========================================================================
 
 export interface RecordItem {
@@ -14,6 +13,7 @@ export interface RecordItem {
   serialNo?: string | null;
   category?: string | null;
   date: string;
+  issueDate?: string;
   folder: string;
   tm: string;
   classNo: string;
@@ -314,7 +314,9 @@ class StandaloneDB {
     const data = records.map(r => [
       r.id,
       r.date || '',
-      `${r.clientCode || '000'}-${r.selectionMenu || 'A'}-${r.caseNo || '001'}`,
+      r.clientCode && r.selectionMenu && r.caseNo
+        ? `${r.clientCode}-${r.selectionMenu}-${r.caseNo}`
+        : '',
       r.folder || '',
       r.tm || '',
       r.classNo ? String(r.classNo).replace(/\D/g, '') : '',
@@ -550,8 +552,8 @@ class StandaloneDB {
           dispatchedNote: val(colDispNote),
           deliveredDate: val(colDelivDate),
           receiverName: val(colReceiver).toUpperCase(),
-          clientCode: val(colClientCode) || caseReferenceMatch?.[1] || '646',
-          selectionMenu: caseReferenceMatch?.[2] || 'A',
+          clientCode: val(colClientCode) || caseReferenceMatch?.[1] || '',
+          selectionMenu: caseReferenceMatch?.[2] || '',
           caseNo: caseReferenceMatch?.[3] || '',
           cnic: val(colCnic),
           address: val(colAddress).toUpperCase(),

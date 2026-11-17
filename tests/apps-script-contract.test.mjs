@@ -15,9 +15,13 @@ test('Apps Script keeps authenticated form generation and document outputs', () 
   assert.match(code, /TM48_TEMPLATE_ID/);
 });
 
-test('Apps Script preserves bulk processing and always releases its form-submission lock', () => {
-  assert.match(code, /function processAllApplications\(\)/);
-  assert.match(code, /function processOneApplication\(\)/);
+test('bulk generation is controlled by the web app and Apps Script has no Sheets permissions', async () => {
+  const databaseApi = await readFile(new URL('../app/api/database/route.ts', import.meta.url), 'utf8');
+  const manifest = await readFile(new URL('../appsscript.json', import.meta.url), 'utf8');
+  assert.match(databaseApi, /bulkGenerateDocuments/);
+  assert.match(databaseApi, /from\('trademark_records'\)/);
+  assert.doesNotMatch(code, /SpreadsheetApp|spreadsheet|sheet\.getRange/);
+  assert.doesNotMatch(manifest, /auth\/spreadsheets/);
   assert.match(code, /LockService\.getScriptLock\(\)/);
   assert.match(code, /finally\s*\{\s*lock\.releaseLock\(\);\s*\}/);
 });
@@ -34,51 +38,7 @@ test('document retries reuse existing named documents in the case folder', () =>
   assert.match(code, /existingLogo\.hasNext\(\) \? existingLogo\.next\(\) : newFolder\.createFile\(blob\)/);
 });
 
-test('Apps Script generation retries reuse the exact existing sheet row and fail closed on ambiguity', () => {
-  const formData = {
-    tm: 'TM-1', folder: 'TEST MARK', classNo: '3', classDesc: 'COSMETICS', appType: 'SOLE PROPRIETOR',
-    appName: 'TEST APPLICANT', appSo: 'TEST FATHER', appCnic: '12345-1234567-1',
-    issueDate: '17-NOV-2026 12:04 PM', expiryDate: '24-NOV-2026 12:04 PM', appTrade: 'TEST BRAND',
-    appAdd: 'TEST ADDRESS', year: '2026', conName: 'BRANDEX LAW ASSOCIATES',
-    conAdd: 'TEST OFFICE', noImg: '[TEXT HERE]'
-  };
-  const row = Array(22).fill('');
-  row[2] = 'PB-ISB-TEST';
-  for (const [index, field] of [[3, 'tm'], [4, 'folder'], [6, 'classNo'], [7, 'classDesc'], [8, 'appType'],
-    [9, 'appName'], [10, 'appSo'], [11, 'appCnic'], [12, 'issueDate'], [13, 'expiryDate'],
-    [14, 'appTrade'], [15, 'appAdd'], [16, 'year'], [17, 'conName'], [18, 'conAdd'], [20, 'noImg']]) {
-    row[index] = formData[field];
-  }
-  const values = [row];
-  const properties = new Map([['retry-key', 'PB-ISB-TEST']]);
-  const sheet = {
-    getLastRow: () => values.length + 1,
-    getRange: (_startRow, _startColumn, rowCount, columnCount) => ({
-      getValues: () => values.slice(0, rowCount).map(value => value.slice(0, columnCount)),
-    }),
-  };
-  const context = {
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: key => properties.get(key) || null,
-        setProperty: (key, value) => properties.set(key, value),
-        deleteProperty: key => properties.delete(key),
-      }),
-    },
-  };
-  const matchFunction = code.match(/function submissionRowMatches\([\s\S]*?\n\}/)?.[0];
-  const findFunction = code.match(/function findExistingSubmissionRow\([\s\S]*?\n\}/)?.[0];
-  const find = vm.runInNewContext(`${matchFunction}\n${findFunction}\nfindExistingSubmissionRow`, context);
-
-  assert.equal(find(sheet, formData, 'retry-key'), 2);
-  assert.throws(() => find(sheet, { ...formData, appName: 'OTHER APPLICANT' }, 'retry-key'), /different form data/);
-
-  values.push([...row]);
-  properties.delete('retry-key');
-  assert.throws(() => find(sheet, formData, ''), /Multiple sheet rows match/);
-});
-
-test('a failed Apps Script run can be retried without appending another sheet row', () => {
+test('a failed Apps Script run can be retried without reading or appending a sheet row', () => {
   const formData = {
     action: 'generateFromForm', clientCode: '222', selectionMenu: 'A', caseNo: '054',
     tm: '', folder: 'SADFSADSAD', classNo: '3', classDesc: 'COSMETICS', appType: 'SOLE PROPRIETOR',
@@ -86,46 +46,12 @@ test('a failed Apps Script run can be retried without appending another sheet ro
     expiryDate: '24-NOV-2026', appTrade: 'TRADING', appAdd: 'ADDRESS', year: '2026',
     conName: 'BRANDEX LAW ASSOCIATES', conAdd: 'OFFICE', noImg: '[TEXT HERE]'
   };
-  const rows = [Array(22).fill('HEAD')];
-  const properties = new Map();
   let generationAttempts = 0;
-  const sheet = {
-    getLastRow: () => rows.length,
-    getRange(startRow, startColumn, rowCount = 1, columnCount = 1) {
-      return {
-        getValues: () => rows.slice(startRow - 1, startRow - 1 + rowCount)
-          .map(row => row.slice(startColumn - 1, startColumn - 1 + columnCount)),
-        getValue: () => rows[startRow - 1]?.[startColumn - 1],
-        setValues: values => values.forEach((value, offset) => { rows[startRow - 1 + offset] = [...value]; }),
-        setValue: value => { rows[startRow - 1][startColumn - 1] = value; },
-      };
-    },
-  };
   const helpers = [
-    code.match(/function submissionIdentityKey\([\s\S]*?\n\}/)?.[0],
-    code.match(/function submissionRowMatches\([\s\S]*?\n\}/)?.[0],
-    code.match(/function findExistingSubmissionRow\([\s\S]*?\n\}/)?.[0],
     code.match(/function processFormSubmission\([\s\S]*?\n\}/)?.[0],
   ].join('\n');
   const context = {
-    SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({ getSheetByName: () => sheet }),
-      flush() {},
-    },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: key => properties.get(key) || null,
-        setProperty: (key, value) => properties.set(key, value),
-        deleteProperty: key => properties.delete(key),
-      }),
-    },
-    Utilities: {
-      DigestAlgorithm: { SHA_256: 'SHA_256' },
-      computeDigest: () => [1, 2, 3],
-      base64EncodeWebSafe: () => 'AQID=',
-      formatDate: () => 'TUESDAY, 17 NOVEMBER 2026',
-    },
     MAIN_FOLDER_ID: 'main-folder',
     TM1_TEMPLATE_ID: 'tm1-template',
     TM48_TEMPLATE_ID: 'tm48-template',
@@ -139,12 +65,9 @@ test('a failed Apps Script run can be retried without appending another sheet ro
   const process = vm.runInNewContext(`${helpers}\nprocessFormSubmission`, context);
 
   assert.throws(() => process(formData), /temporary Docs failure/);
-  assert.equal(rows.length, 2);
-  assert.equal(rows[1][0], 'ERROR');
   const retryResult = process(formData);
-  assert.equal(retryResult.row, 2);
-  assert.equal(rows.length, 2);
-  assert.equal(rows[1][0], 'DONE');
+  assert.equal(retryResult.serialNo, 'PB-ISB-TEST');
+  assert.equal(retryResult.folderUrl, 'folder');
   assert.equal(generationAttempts, 2);
 });
 
@@ -157,25 +80,19 @@ test('form retries resend the original logo and attachments through idempotent A
   assert.match(app, /address: appAdd\.trim\(\)\.toUpperCase\(\)/);
 });
 
-test('records retrieval uses the filing stage instead of document-generation state', () => {
-  const functionSource = code.match(/function getRecordsForView\(\) \{[\s\S]*?\n\}/)?.[0];
-  assert.ok(functionSource, 'getRecordsForView must exist');
+test('Apps Script has no Sheet records endpoint and keeps bulk generation routed to the Supabase dashboard', () => {
+  assert.doesNotMatch(code, /getRecordsForView|body\.action === "getRecords"/);
+  assert.doesNotMatch(code, /function processAllApplications\(|function processOneApplication\(/);
+});
 
-  const row = Array(22).fill('');
-  row[0] = 'DONE';
-  row[4] = 'TEST MARK';
-  row[21] = 'PENDING';
-  const sheet = {
-    getLastRow: () => 2,
-    getRange: () => ({ getValues: () => [row] }),
-  };
-  const context = {
-    SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({ getSheetByName: () => sheet }),
-    },
-  };
-
-  const records = vm.runInNewContext(`${functionSource}\ngetRecordsForView()`, context);
-  assert.equal(records[0].status, 'PENDING');
-  assert.equal(records[0].filingProcess, 'PENDING');
+test('generated TM documents and attachments are saved to Supabase references without duplicates', async () => {
+  const database = await readFile(new URL('../lib/supabase-db.ts', import.meta.url), 'utf8');
+  const form = await readFile(new URL('../app/trademark-application/page.tsx', import.meta.url), 'utf8');
+  const api = await readFile(new URL('../app/api/database/route.ts', import.meta.url), 'utf8');
+  const generationRoute = await readFile(new URL('../app/api/applications/route.ts', import.meta.url), 'utf8');
+  assert.match(database, /select\('file_url'\)\.eq\('record_id', recordId\)/);
+  assert.match(database, /uniqueNew\.set\(document\.file_url, document\)/);
+  assert.match(generationRoute, /generated\.tm1Url[\s\S]*generated\.tm48Url[\s\S]*saveDocumentReferences/);
+  assert.match(api, /case 'saveDocumentReferences'/);
+  assert.doesNotMatch(form, /saveDocumentReferences/);
 });

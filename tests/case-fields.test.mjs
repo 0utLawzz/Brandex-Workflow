@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapCaseFieldsFromRow, mapCaseFieldsToRow } from '../lib/case-fields.ts';
+import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from '../lib/case-fields.ts';
 
 test('maps all case identity and application fields to existing Supabase columns', () => {
   const fields = {
@@ -27,4 +27,12 @@ test('maps all case identity and application fields to existing Supabase columns
 test('does not replace omitted fields during a partial case update', () => {
   assert.deepEqual(mapCaseFieldsToRow({ classDesc: '' }), { class_desc: '' });
   assert.deepEqual(mapCaseFieldsToRow({}), {});
+});
+
+test('preserves fallback text and case notes together in existing Supabase notes column', () => {
+  const stored = encodeCaseNotesAndNoImage('Case note stays visible.', '[FALLBACK TEXT]');
+  assert.deepEqual(decodeCaseNotesAndNoImage(stored), {
+    notes: 'Case note stays visible.',
+    noImg: '[FALLBACK TEXT]',
+  });
 });

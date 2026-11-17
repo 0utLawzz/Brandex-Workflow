@@ -8,6 +8,29 @@ const CASE_FIELD_COLUMNS = {
   conAddr: 'consultant_addr',
 } as const;
 
+const NO_IMAGE_NOTES_PREFIX = '__BRANDEX_NO_IMAGE_TEXT_V1__\n';
+const CASE_NOTES_SEPARATOR = '\n__BRANDEX_CASE_NOTES_V1__\n';
+
+export function decodeCaseNotesAndNoImage(notesValue: unknown, directNoImageValue?: unknown): { notes: string; noImg: string } {
+  const storedNotes = String(notesValue || '');
+  const directNoImage = String(directNoImageValue || '');
+  if (!storedNotes.startsWith(NO_IMAGE_NOTES_PREFIX)) return { notes: storedNotes, noImg: directNoImage };
+
+  const separatorIndex = storedNotes.indexOf(CASE_NOTES_SEPARATOR, NO_IMAGE_NOTES_PREFIX.length);
+  if (separatorIndex < 0) return { notes: storedNotes, noImg: directNoImage };
+  try {
+    const noImg = decodeURIComponent(storedNotes.slice(NO_IMAGE_NOTES_PREFIX.length, separatorIndex));
+    const notes = storedNotes.slice(separatorIndex + CASE_NOTES_SEPARATOR.length);
+    return { notes, noImg: directNoImage || noImg };
+  } catch {
+    return { notes: storedNotes, noImg: directNoImage };
+  }
+}
+
+export function encodeCaseNotesAndNoImage(notes: string | undefined, noImg: string): string {
+  return `${NO_IMAGE_NOTES_PREFIX}${encodeURIComponent(noImg)}${CASE_NOTES_SEPARATOR}${notes || ''}`;
+}
+
 type CaseField = keyof typeof CASE_FIELD_COLUMNS;
 export type CaseFields = {
   clientId?: number | null;

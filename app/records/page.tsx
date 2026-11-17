@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { SHEET_URL } from '@/lib/data';
 import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import {
@@ -103,6 +102,7 @@ export default function RecordsPage() {
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkNotice, setBulkNotice] = useState<string | null>(null);
+  const [bulkGenerating, setBulkGenerating] = useState(false);
   const [selectedClientForAssign, setSelectedClientForAssign] = useState<string>('');
 
   // Floating Action Button & Modals
@@ -194,42 +194,8 @@ export default function RecordsPage() {
       setSavedClients(clientsResult.clients);
       setDbSource(recordsResult.source);
 
-      // Background sync check with Apps Script
-      let sheetRecords: RecordItem[] = [];
-      try {
-        const res = await fetch('/api/records', {
-          method: 'GET',
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.ok && Array.isArray(data.records)) {
-            sheetRecords = data.records.map((r: any, idx: number) => ({
-              id: 1000 + idx,
-              date: r.date || '',
-              folder: r.folder || '',
-              tm: r.tm || '',
-              classNo: r.classNo || '',
-              appName: r.appName || '',
-              appTrade: r.appTrade || '',
-              year: r.year || '',
-              conName: r.conName || 'BRANDEX LAW ASSOCIATES',
-              lawFirm: r.conName || 'BRANDEX LAW ASSOCIATES',
-              img: r.img || '',
-              noImg: r.noImg || '',
-              status: r.status || 'PENDING',
-              filingProcess: r.filingProcess || '',
-              trackingId: r.trackingId || '',
-            }));
-          }
-        }
-      } catch { }
-
-      const map = new Map<string, RecordItem>();
-      sheetRecords.forEach(r => map.set(`${r.folder}__${r.tm}`, r));
-      recordsResult.records.forEach(r => map.set(`${r.folder}__${r.tm || r.id}`, r));
-
-      setAllRecords(Array.from(map.values()));
+      if (recordsResult.error) throw new Error(`Supabase records could not be loaded: ${recordsResult.error}`);
+      setAllRecords(recordsResult.records);
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load records');
     } finally {
@@ -477,6 +443,29 @@ export default function RecordsPage() {
       setErrorMsg(err.message || 'Failed to reassign selected cases');
     }
     setTimeout(() => setBulkNotice(null), 4000);
+  };
+
+  const handleBulkGenerateDocuments = async () => {
+    if (!selectedIds.length || bulkGenerating) return;
+    if (selectedIds.length > 50) {
+      setErrorMsg('Generate documents for up to 50 selected cases at a time.');
+      return;
+    }
+    setBulkGenerating(true);
+    setErrorMsg('');
+    try {
+      const results = await supabaseDB.bulkGenerateDocuments(selectedIds);
+      const succeeded = results.filter(result => result.ok).length;
+      const failed = results.filter(result => !result.ok);
+      setBulkNotice(`Document generation complete: ${succeeded} succeeded, ${failed.length} failed.`);
+      if (failed.length) setErrorMsg(failed.map(result => `Case #${result.id}: ${result.error || 'Generation failed'}`).join('\n'));
+      await loadAllRecords();
+      setSelectedIds([]);
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Bulk document generation failed.');
+    } finally {
+      setBulkGenerating(false);
+    }
   };
 
   // Stage Transition Triggers:
@@ -1071,6 +1060,10 @@ export default function RecordsPage() {
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
+              <button type="button" onClick={handleBulkGenerateDocuments} disabled={bulkGenerating || selectedIds.length > 50}
+                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-1.5 px-3 bg-[#C94A00] text-white border border-[#FAF6EE] rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                {bulkGenerating ? 'Generating documents…' : 'Generate Google Documents'}
+              </button>
               {/* Stage Transition Buttons */}
               <button
                 type="button"
