@@ -17,6 +17,7 @@ Last updated: 2026-11-17
 - New deployment `dpl_3m5c9pB5Fr2psVXZi3ic4RTQrd2w` reached `READY`; the production application page loads and displays all existing series options and form controls.
 - Added a 10-second timeout to Supabase connection, record, and client reads so a stalled Supabase request falls back instead of leaving the Records screen indefinitely loading.
 - Pushed commit `0cb3e4c` to `origin/main`; production deployment `dpl_Bw8dB1KAnXPFkCVVpvnHPMdxLKkE` is READY and aliased to `https://br-workflow.vercel.app`.
+- Verified the previously configured newer Apps Script URL returned Google 404, while the repository fallback deployment URL returned the expected JSON `Authentication required` response. Restored both Vercel Production variables (`NEXT_APPS_SCRIPT_URL` and `NEXT_PUBLIC_APPS_SCRIPT_URL`) to the working deployment URL and redeployed as `dpl_BckpXtxmf7Gq9866hjCoNSvPRZ5c` (READY).
 
 ## Working rules
 
