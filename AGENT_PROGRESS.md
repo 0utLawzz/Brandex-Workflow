@@ -192,4 +192,6 @@ Before the live correction below, no production database, Supabase project, Apps
 - The optimized production page loaded the 510-case combined result within about five seconds after the reload. The live CMS currently shows 46 pending/in-review, 5 approved/rejected, and 459 dispatched/delivered cases.
 - Keep the Supabase permissive-RLS issue and browser local-storage quota failure open. Neither was changed by this deployment. No production data row was edited, imported, or deleted during this retrieval fix.
 - End-to-end generation for the screenshot's specific failed case remains unverified. The folder mentioned above contains TM-1 and TM-48 outputs, but it was not proven to correspond to that failed case; retry the existing case only when its current record can be identified without creating a duplicate.
+- A read-only Google Drive search found no folder named `222-A-054` and no Drive item matching the screenshot's case name `SADFSADSAD`. The earlier `325-A-056` output folder is unrelated evidence and must not be treated as generation success for `222-A-054`.
+- The authenticated Records API now returns Apps Script/Sheet records alongside Supabase records (510 combined records observed), which confirms the Vercel backend token is accepted by the renamed Apps Script property. Secret values were never displayed or changed.
 
