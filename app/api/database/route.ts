@@ -150,6 +150,10 @@ export async function POST(request: Request) {
         if (!Number.isSafeInteger(Number(body.id))) return invalidPayload('A valid client ID is required.');
         result = await supabaseDB.deleteClient(Number(body.id));
         break;
+      case 'getDocumentReferences':
+        if (!Number.isSafeInteger(Number(body.recordId))) return invalidPayload('A valid case ID is required.');
+        result = await supabaseDB.getDocumentReferences(Number(body.recordId));
+        break;
       case 'getHistory':
         if (!Number.isSafeInteger(Number(body.recordId))) return invalidPayload('A valid case ID is required.');
         result = await supabaseDB.getHistory(Number(body.recordId));
