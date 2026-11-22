@@ -284,12 +284,18 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
     var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
     var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName;
+    var clientCity = String(formData.clientCity || "").toUpperCase().trim();
+    var clientReference = String(formData.clientFolderReference || "").toUpperCase().trim();
+    var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
+      + (clientCity ? " " + clientCity : "")
+      + (clientReference ? " " + clientReference : "");
     var caseIdentity = caseSeries + clientCode + "-" + caseNo;
     var caseFolderName = caseIdentity + " " + String(rowData.folder || "UNTITLED CASE").toUpperCase()
       + (rowData.tm && rowData.tm !== "PENDING" ? " " + rowData.tm : "")
       + (rowData.classNo ? " C" + String(rowData.classNo).replace(/\D/g, "") : "");
-    var clientFolder = getOrCreateClientFolder(parentFolder, clientFolderName);
+    var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
+    var clientRootFolder = getOrCreateClientFolder(parentFolder, clientRootName);
+    var clientFolder = getOrCreateClientFolder(clientRootFolder, clientFolderName);
     newFolder = getOrCreateClientFolder(clientFolder, caseFolderName);
   } else {
     newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);

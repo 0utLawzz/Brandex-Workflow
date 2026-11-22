@@ -21,6 +21,8 @@ export default function TrademarkApplicationPage() {
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedClientName, setSelectedClientName] = useState('');
   const [selectedClientPrefix, setSelectedClientPrefix] = useState('A');
+  const [selectedClientCity, setSelectedClientCity] = useState('');
+  const [selectedClientFolderReference, setSelectedClientFolderReference] = useState('');
 
   const [classNo, setClassNo] = useState('3');
   const [classList] = useState(CLASS_DATA);
@@ -235,6 +237,8 @@ export default function TrademarkApplicationPage() {
       const prefix = String(client.client_prefix || 'A').toUpperCase();
       setSelectedClientPrefix(prefix);
       setSelectedClientName(client.client_name || client.name || '');
+      setSelectedClientCity(client.city || '');
+      setSelectedClientFolderReference(client.folder_reference || '');
       setSelectionMenu(prefix);
       if (client.client_code) {
         setClientCode(String(client.client_code).replace(/\D/g, '').padStart(3, '0'));
@@ -378,6 +382,8 @@ export default function TrademarkApplicationPage() {
       caseNo: String(caseNo).replace(/\D/g, '').padStart(3, '0'),
       clientName: selectedClientName,
       clientPrefix: selectedClientPrefix,
+      clientCity: selectedClientCity,
+      clientFolderReference: selectedClientFolderReference,
       folder: folder.trim().toUpperCase(),
       tm: tm.trim().toUpperCase(),
       classNo: classNo.trim().toUpperCase(),
