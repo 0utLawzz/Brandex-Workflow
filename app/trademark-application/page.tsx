@@ -6,14 +6,17 @@ import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
-import { supabaseDB } from '@/lib/supabase-db';
+import { supabaseDB, type CaseSeries } from '@/lib/supabase-db';
 import { buildGenerationRetryDraft } from '@/lib/generation-retry';
 import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
   const [selectedCategory, setSelectedCategory] = useState('INITIAL');
-  const [selectionMenu, setSelectionMenu] = useState('A'); // X, A, N, B
+  const [selectionMenu, setSelectionMenu] = useState('A');
+  const [seriesOptions, setSeriesOptions] = useState<CaseSeries[]>([]);
+  const [seriesLoading, setSeriesLoading] = useState(true);
+  const [seriesLoadError, setSeriesLoadError] = useState('');
   const [clientCode, setClientCode] = useState('646');
   const [caseNo, setCaseNo] = useState('001');
 
@@ -78,6 +81,36 @@ export default function TrademarkApplicationPage() {
   const multiFileInputRef = useRef<HTMLInputElement>(null);
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const retryMode = new URLSearchParams(window.location.search).has('retryId');
+    supabaseDB.getSeries()
+      .then(rows => {
+        if (!active) return;
+        setSeriesOptions(rows);
+        const enabled = rows.filter(item => item.is_active);
+        if (!retryMode) {
+          if (enabled.length === 0) {
+            setSeriesLoadError('No active case series are configured. Ask an administrator to activate a series in Settings.');
+            return;
+          }
+          setSeriesLoadError('');
+          const nextSeries = enabled.some(item => item.series_code === selectionMenu) ? selectionMenu : enabled[0].series_code;
+          setSelectionMenu(nextSeries);
+          void refreshCaseNumber(clientCode, nextSeries);
+        }
+      })
+      .catch(error => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : 'Shared case series could not be loaded.';
+        setSeriesLoadError(message);
+        setStatusType('error');
+        setStatusMsg(message + ' Case creation is disabled until the shared series list is available.');
+      })
+      .finally(() => { if (active) setSeriesLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   const formatDisplayDate = (d: Date) => {
     const MONTHS_SHORT = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
@@ -377,7 +410,9 @@ export default function TrademarkApplicationPage() {
   const submitApplication = async (retryGeneration: boolean) => {
     if (submitting) return;
     if (retryGeneration) {
+      const selectedSeries = seriesOptions.find(item => item.series_code === selectionMenu);
       const missing = [
+        (!selectedSeries || (!selectedSeries.is_active && !generationPending) || !!seriesLoadError) && 'active shared case series',
         !folder.trim() && 'case folder',
         !/^\d{1,3}$/.test(clientCode) && 'client code',
         !/^[A-Z][A-Z0-9]{0,7}$/.test(selectionMenu.toUpperCase()) && 'case series (A, X, N, B or custom)',
