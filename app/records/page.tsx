@@ -5,10 +5,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { RecordItem, ClientProfile } from '@/lib/standalone-db';
+import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
+import { validateWorkflowTransition } from '@/lib/case-workflow';
 import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
@@ -177,10 +178,25 @@ export default function RecordsPage() {
   // Edit Single Record Modal
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
   const [savingRecord, setSavingRecord] = useState(false);
+  const [editingDocuments, setEditingDocuments] = useState<DocumentAttachment[]>([]);
+  const [loadingEditingDocuments, setLoadingEditingDocuments] = useState(false);
+  const [newDocumentName, setNewDocumentName] = useState('');
+  const [newDocumentUrl, setNewDocumentUrl] = useState('');
 
   // File input refs
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editingRecord?.id) { setEditingDocuments([]); return; }
+    let active = true;
+    setLoadingEditingDocuments(true);
+    supabaseDB.getDocumentReferences(editingRecord.id)
+      .then(documents => { if (active) setEditingDocuments(documents); })
+      .catch(error => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Case attachments could not be loaded.'); })
+      .finally(() => { if (active) setLoadingEditingDocuments(false); });
+    return () => { active = false; };
+  }, [editingRecord?.id]);
 
   useEffect(() => {
     const preferences = readWorkspacePreferences();
@@ -410,6 +426,9 @@ export default function RecordsPage() {
     const current = (record.status || '').toUpperCase();
 
     if (targetStage === 'APPROVED_OR_REJECTED') {
+      const approved = validateWorkflowTransition(current, 'APPROVED');
+      const rejected = validateWorkflowTransition(current, 'REJECTED');
+      if (!approved.valid && !rejected.valid) { setErrorMsg(approved.error || rejected.error || 'This case cannot be advanced from its current status.'); return; }
       setApproveRejectModal({
         open: true,
         record,
@@ -417,6 +436,7 @@ export default function RecordsPage() {
         notes: ''
       });
     } else if (targetStage === 'DISPATCHED') {
+      if (current !== 'APPROVED') { setErrorMsg('Only APPROVED cases can be dispatched.'); return; }
       setDispatchModal({
         open: true,
         record,
@@ -428,6 +448,7 @@ export default function RecordsPage() {
         dispatchedDocType: record.dispatchedDocType || ''
       });
     } else if (targetStage === 'DELIVERED') {
+      if (current !== 'DISPATCHED') { setErrorMsg('Only DISPATCHED cases can be marked delivered.'); return; }
       setDeliveredModal({
         open: true,
         record,
@@ -486,6 +507,7 @@ export default function RecordsPage() {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note,
+        trackingId: dispatchModal.trackingId,
         dispatchedImage: dispatchModal.dispatchedImage,
         dispatchedDocName: dispatchModal.dispatchedDocName,
         dispatchedDocType: dispatchModal.dispatchedDocType
@@ -543,6 +565,7 @@ export default function RecordsPage() {
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 12 * 1024 * 1024) { setErrorMsg('Delivery receipt must be an image no larger than 12 MB.'); e.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
@@ -575,6 +598,24 @@ export default function RecordsPage() {
     e.target.value = '';
   };
 
+  const handleAddDocumentReference = async () => {
+    if (!editingRecord) return;
+    const name = newDocumentName.trim();
+    const rawUrl = newDocumentUrl.trim();
+    if (!name || !rawUrl) { setErrorMsg('Enter both an attachment name and a secure document URL.'); return; }
+    let parsed: URL;
+    try { parsed = new URL(rawUrl); } catch { setErrorMsg('Enter a valid HTTPS document URL.'); return; }
+    if (parsed.protocol !== 'https:') { setErrorMsg('Only secure HTTPS document links are accepted.'); return; }
+    try {
+      await supabaseDB.saveDocumentReferences([{ record_id: editingRecord.id, file_name: name, file_type: 'application/octet-stream', file_url: parsed.toString() }]);
+      setEditingDocuments(await supabaseDB.getDocumentReferences(editingRecord.id));
+      setNewDocumentName('');
+      setNewDocumentUrl('');
+      setBulkNotice('Attachment link saved. Existing documents were preserved.');
+      setTimeout(() => setBulkNotice(null), 4000);
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Attachment link could not be saved.'); }
+  };
+
   // Handle single record edit save
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -585,7 +626,7 @@ export default function RecordsPage() {
       await supabaseDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in CMS');
       setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
       setEditingRecord(null);
-      loadAllRecords();
+      await loadAllRecords();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update record');
     } finally {
@@ -1218,6 +1259,7 @@ export default function RecordsPage() {
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"
+                              disabled={!['PENDING', 'IN REVIEW', 'IN_REVIEW', 'PENDING / IN REVIEW'].includes(String(r.status || '').toUpperCase())}
                               onClick={() => handleOpenStageTransition(r, 'APPROVED_OR_REJECTED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#FFE066] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Approve or Reject"
@@ -1227,6 +1269,7 @@ export default function RecordsPage() {
 
                             <button
                               type="button"
+                              disabled={String(r.status || '').toUpperCase() !== 'APPROVED'}
                               onClick={() => handleOpenStageTransition(r, 'DISPATCHED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#e0f2fe] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Mark Dispatched"
@@ -1236,6 +1279,7 @@ export default function RecordsPage() {
 
                             <button
                               type="button"
+                              disabled={String(r.status || '').toUpperCase() !== 'DISPATCHED'}
                               onClick={() => handleOpenStageTransition(r, 'DELIVERED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#EBF7F2] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Mark Delivered"
