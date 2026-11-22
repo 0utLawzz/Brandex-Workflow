@@ -23,7 +23,7 @@ export function validateWorkflowTransition(
   if (current === target) return { valid: true };
 
   if (target === 'APPROVED' || target === 'REJECTED') {
-    if (current === 'PENDING' || current === 'IN REVIEW' || current === 'PENDING / IN REVIEW') return { valid: true };
+    if (current === 'PENDING' || current === 'IN REVIEW' || current === 'PENDING / IN REVIEW' || current === 'PENDING IN REVIEW') return { valid: true };
     return { valid: false, error: `Only pending or in-review cases can be marked ${target} (current: ${current || 'UNKNOWN'}).` };
   }
 
