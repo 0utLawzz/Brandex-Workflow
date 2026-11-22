@@ -423,4 +423,18 @@ Before the live correction below, no production database, Supabase project, Apps
 - Next implementation gate: design and test an additive, transaction-safe restore strategy plus an approved client relationship migration; do not run a production migration or restore until separately reviewed and authorized.
 
 - CI run 45040265099 for commit 8eaadee0803cdecd4ee2116bd3676a6ab6fa4767 passed: 32/32 tests; npm audit found 0 vulnerabilities; Apps Script syntax check passed; lint passed with 0 errors and one pre-existing React Hook dependency warning; Next.js production build and required-document checks passed.
-- PR #5 remains open for review. No deployment or production mutation was performed.
+- PR #5 was subsequently approved and merged on 2026-11-22 (merge commit `34ddbfe9ed1a1aed50c7c60e39ed4a7c1a2d2386`). No deployment or production mutation was performed by that merge.
+
+
+## Consolidated UI pass — 2026-11-22
+
+- User confirmed PR #5 is approved/merged and stated that an independent historical case backup already exists. Preserve that backup; do not overwrite or delete it.
+- Created one consolidated implementation branch: `feat/brandex-single-pass-ui`. The intended review unit is one PR rather than a sequence of small PRs.
+- Root Home route now redirects to `/records`, making Records the default workspace and removing the redundant landing hero/logo/quick-links page.
+- Primary navigation simplified to Home, Clients, Cases, and Create Case. Settings is a compact gear link; the navbar backup button/modal was removed.
+- Header logo changed from circular to square with rounded corners.
+- Settings now includes the backup modal entry and client CSV template/import/export tools. Existing CSV functions are retained in a dedicated Settings component.
+- Client page now uses the concise `Client Profiles` heading, a collapsible New Client form, and no Address table column. Address remains in create/edit and export data.
+- Case Generator heading shortened. No case reference, series, client prefix, client code, historical records, or database values were rewritten.
+- No Supabase schema/row writes, Google Drive operations, Apps Script deployment, or Vercel production deployment were performed.
+- CI and runtime verification for this consolidated PR are pending. Do not mark the overall Phase 2 scope complete: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full backup/restore remain open.
