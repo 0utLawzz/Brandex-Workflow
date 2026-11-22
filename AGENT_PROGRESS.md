@@ -329,3 +329,42 @@ Before the live correction below, no production database, Supabase project, Apps
 - No Vercel deployment performed.
 - The ADR is marked Proposed because implementation and migration design still require the Phase 0 audit.
 - Do not treat the plan branch as a production release. Continue from its branch after review; merge only after PR review and checks.
+
+
+### 2026-11-22 Phase 0 — initial read-only source and Supabase audit
+
+<badge>PARTIAL — no production changes</badge>
+
+**Confirmed live Supabase baseline**
+- Project: `pjthtvkzuthxwpvcdqxy` (Brandex-Workflow), `ACTIVE_HEALTHY`, PostgreSQL `17.11.0.018`.
+- Current counts: 6 clients, 480 trademark records, 131 history rows, 26 document-reference rows.
+- RLS is enabled on `clients`, `trademark_records`, `trademark_history`, and `trademark_documents`. Read-only `pg_policies` query returned zero policies for those four tables. Current application access is through protected server-side API routes using the server-only service role.
+- All 6 current clients have a client prefix and client code.
+- A read-only duplicate scan of populated client-code + series + case-number tuples returned no duplicate groups.
+- Status tracks are mixed in production: 420 records have `status=DISPATCHED` and `filing_process=DISPATCHED`; 50 DELIVERED/DELIVERED; 4 PENDING/PENDING; 4 REJECTED/REJECTED; 1 APPROVED/APPLICATION FILED; 1 IN REVIEW/APPLICATION FILED. Do not mass-normalize these legacy values. Build and verify an explicit mapping first.
+- Live `trademark_records` currently has no `client_id`, `dispatched_image`, `dispatched_doc_name`, or `dispatched_doc_type` columns. However, the application field mapper maps `clientId` to `client_id`, and UI code refers to dispatch proof metadata. The current migration file adds client folder metadata and the uniqueness index only; it does not add these record columns. This mismatch must be resolved before relying on those edit/save features.
+- Current schema template `supabase_schema.sql` contains a stale project URL comment and placeholder JWT ref `zbkgerbdnjmctqqnoqnd`, while the actual application default and connected project are `pjthtvkzuthxwpvcdqxy`. Correct this during schema reconciliation; never use the placeholder JWT as a real key.
+- Supabase changelog reviewed: on 2026-10-30 the Data API default changed so new public tables are no longer automatically exposed. Future tables need explicit reviewed grants and RLS. Current architecture uses server-side API access; do not create permissive public policies.
+
+**Confirmed source-level findings**
+- Current formatter still uses the case series as the visible first reference segment. New requirement is client prefix + client code + case number (`N-333-001`), with series independent and excluded from the displayed reference.
+- The current case edit modal labels the first field “Series / Prefix”, confirming the concepts are visually merged.
+- The application form defaults `status` to `GENERATING APPLICATION`; the main status default must become IN REVIEW, with generation represented as an operation outcome/notification.
+- Current `WORKFLOW_STATUSES` mixes generation, review, approval/rejection, dispatch, and delivery values.
+- Current delivery modal has date, receiver name, and receipt image; tracking ID is currently part of dispatch modal. The requested final UX must make tracking number and receiver/person details available at the correct delivery step while retaining existing values.
+- Current `mapRecordToRow` does not map dispatch image/document-name/document-type fields even though the UI has controls for them. This is a confirmed persistence gap to fix and test.
+- Law firm dropdown data already exists in `lib/data.ts` as `CONSULTANT_DATA`; reuse this list rather than duplicating values.
+- Client page currently includes address in the table and shows Sample CSV / Import CSV / Export CSV controls directly on the page.
+- Settings currently stores only page size and law-firm widget visibility in browser localStorage; organization-wide brand and series settings need a secure persistent design.
+- Google Apps Script currently creates output under the configured main root/client folder logic. Selected-folder Picker flow is not implemented or verified.
+
+**Phase 0 completion state**
+- [x] Verify latest GitHub main and merged PR status.
+- [x] Read current homepage, navbar, settings, client page, records status/edit sections, application payload, case reference helper, data master values, database field mapper/API route, Apps Script folder generation sections, schema template, and current migration file.
+- [x] Read-only live Supabase project, schema columns, RLS/policies, row counts, status distribution, client prefix coverage, and duplicate identity scan.
+- [ ] Complete full Records edit-field audit and export/import round-trip inspection.
+- [ ] Complete all API route and Apps Script folder naming/auth audit.
+- [ ] Verify production runtime configuration and actual document generation path through a safe authenticated test session.
+- [ ] Produce final source-to-runtime field map and Phase 1 migration proposal.
+
+**Important safety note:** no SQL writes, schema changes, policy changes, record updates, Drive operations, Apps Script deployment, or Vercel deployment were performed during this read-only audit.
