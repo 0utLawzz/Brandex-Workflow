@@ -59,6 +59,7 @@ export interface ClientProfile {
   address: string;
   consultant_name: string;
   client_code: string;
+  client_prefix?: string;
   total_cases: number;
   created_at: string;
 }
@@ -315,7 +316,7 @@ class StandaloneDB {
       r.id,
       r.date || '',
       r.clientCode && r.selectionMenu && r.caseNo
-        ? `${r.clientCode}-${r.selectionMenu}-${r.caseNo}`
+        ? `${r.selectionMenu}${String(r.clientCode).padStart(3, '0')}-${String(r.caseNo).padStart(3, '0')}`
         : '',
       r.folder || '',
       r.tm || '',
@@ -532,7 +533,8 @@ class StandaloneDB {
         // Restore it so an export/import round-trip preserves X/A/N/B and the
         // original case identity instead of silently defaulting to series A.
         const caseReference = val(colCaseRef).toUpperCase();
-        const caseReferenceMatch = /^(\d{1,3})-([XANB])-(\d{1,3})$/.exec(caseReference);
+        const caseReferenceMatch = /^([A-Z][A-Z0-9]{0,7})(\d{1,3})-(\d{1,3})$/.exec(caseReference);
+        const legacyCaseReferenceMatch = /^(\d{1,3})-([A-Z][A-Z0-9]{0,7})-(\d{1,3})$/.exec(caseReference);
 
         maxId++;
         const newRec: RecordItem = {
@@ -552,9 +554,9 @@ class StandaloneDB {
           dispatchedNote: val(colDispNote),
           deliveredDate: val(colDelivDate),
           receiverName: val(colReceiver).toUpperCase(),
-          clientCode: val(colClientCode) || caseReferenceMatch?.[1] || '',
-          selectionMenu: caseReferenceMatch?.[2] || '',
-          caseNo: caseReferenceMatch?.[3] || '',
+          clientCode: val(colClientCode) || caseReferenceMatch?.[2] || legacyCaseReferenceMatch?.[1] || '',
+          selectionMenu: caseReferenceMatch?.[1] || legacyCaseReferenceMatch?.[2] || '',
+          caseNo: caseReferenceMatch?.[3] || legacyCaseReferenceMatch?.[3] || '',
           cnic: val(colCnic),
           address: val(colAddress).toUpperCase(),
           notes: val(colNotes),

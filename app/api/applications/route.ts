@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     }
 
     if (typeof payload.clientCode !== 'string' || !/^\d{1,3}$/.test(payload.clientCode) ||
-        typeof payload.selectionMenu !== 'string' || !/^[XANB]$/i.test(payload.selectionMenu) ||
+        typeof payload.selectionMenu !== 'string' || !/^[A-Z][A-Z0-9]{0,7}$/i.test(payload.selectionMenu) ||
         typeof payload.caseNo !== 'string' || !/^\d{1,3}$/.test(payload.caseNo)) {
         return Response.json({ ok: false, error: 'A valid client code, case series, and case number are required.' }, { status: 400 });
     }

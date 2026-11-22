@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS client_prefix TEXT DEFAULT 'A';
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS father_name TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS consultant_name TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS total_cases INT DEFAULT 0;
