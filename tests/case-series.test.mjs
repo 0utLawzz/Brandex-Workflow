@@ -27,4 +27,5 @@ test('series updates reject unknown fields, invalid types, and empty updates', (
   assert.throws(() => validateSeriesUpdate({ is_active: 'false' }));
   assert.throws(() => validateSeriesUpdate({ sort_order: -1 }));
   assert.throws(() => validateSeriesUpdate({ sort_order: 1.5 }));
+  assert.throws(() => validateSeriesUpdate({ sort_order: '2' }));
 });
