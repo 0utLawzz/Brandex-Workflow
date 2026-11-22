@@ -13,7 +13,7 @@ export default function Footer() {
     <footer className="bx-footer bg-[#0C0C0C] px-3 py-4 text-[#FFF9F0]">
       <div className="mx-auto flex w-full max-w-[1500px] flex-col items-center justify-between gap-3 sm:flex-row">
         <div className="text-center font-['DM_Mono',monospace] text-[0.58rem] tracking-[1px] sm:text-left">
-          BRANDEX LAW ASSOCIATES · WWW.BRANDEX.PK · INFO@BRANDEX.PK · ISLAMABAD · KARACHI · LAHORE · MULTAN · RAWALPINDI
+          BRANDEX LAW ASSOCIATES · WWW.BRANDEX.PK · INFO@BRANDEX.PK · +92 336 0015009 · ISLAMABAD · KARACHI · LAHORE · MULTAN · RAWALPINDI
         </div>
         <nav aria-label="Brandex repositories" className="flex flex-wrap items-center justify-center gap-2">
           {BRANDEX_REPOSITORIES.map(repo => (
