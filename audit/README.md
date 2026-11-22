@@ -81,5 +81,6 @@ Add implementation commit(s), PR, deployment status, and any deviations after th
 - [ADR 0004: Phase-two workspace, series, workflow, and Drive plan](0004-phase-two-workspace-series-workflow-drive.md)
 - [ADR 0005: Full-fidelity case backup and safe restore](0005-full-fidelity-case-backup-restore.md)
 - [ADR 0006: Shared independent case-series management](0006-shared-independent-case-series.md)
+- [ADR 0007: Complete case editing and guarded workflow transitions](0007-complete-case-edit-workflow.md)
 
 New ADRs should be added to this index.
