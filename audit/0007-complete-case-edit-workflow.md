@@ -20,7 +20,7 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 ## 3. Decision
 
 1. Extend the existing Edit Case experience to cover the application metadata already represented in the application/database model: applicant and father/representative names, CNIC, address, trading name, class, trademark number, filing/issue and expiry dates, year, law-firm details, notes, applicant image, dispatch proof, delivery proof, and linked attachments where the current storage contract supports them.
-2. Keep the visible case identity `SERIES-CLIENTCODE-CASENUMBER` separate from the client's category prefix. Do not auto-change series, client code, case number, client relationship, or historical references when editing unrelated metadata.
+2. Keep the visible case identity `SERIES-CLIENTCODE-CASENUMBER` separate from the client's category prefix. Preserve every existing segment when editing unrelated metadata. Reference segments remain editable only through explicit operator input, with the existing per-client-and-series uniqueness check; never auto-recalculate them or merge the client prefix into Series.
 3. Keep three distinct lifecycle concepts separate: document-generation outcome, main application workflow status, and legal filing stage (`filing_process`).
 4. Main workflow transitions are forward-gated: `IN REVIEW/PENDING → APPROVED or REJECTED → DISPATCHED → DELIVERED`. Rejected cases cannot be dispatched. Dispatch requires an approved case and dispatch date plus tracking/reference details; delivery requires a dispatched case, delivery date, and receiver name. Existing proof fields and history remain retained.
 5. Apply transition checks in the server-side data layer as well as the UI so direct API requests cannot bypass them. Bulk operations must apply the same eligibility rules to every selected case and report failures clearly.
@@ -56,7 +56,7 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - **Missing dispatch/delivery metadata:** validate required fields before saving.
 - **Bulk mixed eligibility:** reject ineligible selections with case-specific errors rather than silently skipping cases.
 - **Partial history failure:** report the persistence failure clearly; never claim an audit event was recorded if it was not.
-- **Identity drift:** keep identity fields outside ordinary edit payloads and preserve existing references by default.
+- **Identity drift:** preserve identity fields by default; explicit reference edits remain subject to the per-client-and-series uniqueness check.
 - **Large images/proofs:** enforce the existing 12 MB upload ceiling and accepted image/PDF MIME types.
 - **Legacy schema drift:** do not add production columns in this PR; stop and document any unsupported field.
 
