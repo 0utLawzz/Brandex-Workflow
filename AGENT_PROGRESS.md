@@ -265,3 +265,142 @@ Before the live correction below, no production database, Supabase project, Apps
 - Full local verification passed: 22/22 tests, lint, type check, Apps Script syntax, diff check, and production build.
 - End-to-end production retry is now verified on existing Supabase case ID 242 (client 889, series X, case 1): the authenticated Records/form UI returned success; Apps Script created/reused the two Google Docs; Supabase stores two unique Google Docs references for that record; Drive metadata confirms both TM-1 and TM-48 files exist. The user confirmed the documents are inside the `889` folder shown in their Drive screenshot. The case count remains 474 and case 242's serial/status remain unchanged, so retry created no duplicate case and retained `DISPATCHED` workflow status.
 - Final current validation: `npm test` 22/22 pass; lint, TypeScript, Apps Script syntax, `git diff --check`, and production build pass. Latest application deployment is READY. Production data now has 474 migrated case rows and 2 generated document references for the verified retry. The source Google Sheet remains unchanged; Apps Script/Drive are used for document generation only.
+
+
+---
+
+## 2026-11-22 Phase-two user requirements and implementation handover
+
+### Current baseline verified for this phase
+
+- Current `main` commit at planning time: `d2b38ad2561078117783d8e7fc5188e2dcf60ef3`.
+- PR #1 (client/case naming and workflow), PR #2 (ADR process), and PR #3 (Records-first UI) are all merged. PR #1 merge was explicitly verified through GitHub PR metadata; its merge commit is `473da572b3ca4372cba80644aef30e14fd21eba8`.
+- Current main commit's GitHub combined status reports Vercel success.
+- Current source inspection confirms:
+  - `app/page.tsx` still renders a separate landing page with a large logo hero and quick links.
+  - `app/components/Navbar.tsx` currently has a circular logo, navigation order Records/Application/Clients/Settings/Home, and a visible Backup button.
+  - `app/settings/page.tsx` currently covers only a limited set of browser-local workspace preferences.
+  - `app/clients/page.tsx` currently exposes import/export controls, a large form, and an Address table column.
+  - `lib/case-reference.ts` currently builds the first reference segment from the case series, not the client category/prefix.
+  - `app/trademark-application/page.tsx` defaults the status field to `GENERATING APPLICATION`.
+  - `app/records/page.tsx` contains status transition, dispatch/delivery, pagination, and CSV import/export logic that must be regression-tested before editing.
+  - `lib/data.ts` contains law-firm/consultant master data suitable for reuse in a dropdown.
+  - `Code.gs` currently uses a configured main Drive folder ID; a user-selected Drive Picker folder flow is not yet verified.
+- Root `AGENT.md` was absent before this phase. It is now added on the planning branch as the agent operating guide and full implementation plan.
+- The existing `AGENT_PROGRESS.md` history has been preserved; this section is appended rather than replacing prior deployment/migration notes.
+
+### New user-approved clarifications
+
+- Visible reference is `N-333-001`: selected series, client code, case number. Client category/prefix remains a separate client-profile attribute.
+- Series is a separate grouping field; it is not the client category and is not part of the visible three-segment reference.
+- Keep per-client + per-series case numbering unless a later ADR changes it.
+- A single client can contain multiple people/applicants and different applicant names across cases; applicant/person data remains case-specific.
+- Document generation outcome is separate from main application status.
+- Main application status defaults to `IN REVIEW`; approval/rejection follows review. Rejected cases do not proceed to dispatch. Approved cases remain approved until staff starts dispatch.
+- Dispatch asks for date and optionally proof image. Delivery retains tracking number and recipient/person details. All form fields, notes, job details, images, and attachments must be editable.
+- Records is the Home destination after login. Primary navigation order: Home, Clients, Cases, Create Case; Settings opens from a compact gear/settings menu.
+- Settings is the home for brand identity, independent series management, backup/restore, import/export, spreadsheet template creation, display/sound/notification settings, and Drive setup.
+- UI should be compact, with breadcrumbs, pagination, expandable details, concise labels, boxed records alignment, and compact repository footer links.
+- New square/rounded logo mark and editable display name/prefix/tagline are required.
+- Drive Picker folder assignment and generation into the selected folder must be investigated and tested securely.
+- Spreadsheet template and CSV/JSON import/export must match the latest fields and be round-trip verified.
+
+### Documentation-first work completed on branch `feat/brandex-workflow-phase2-plan`
+
+- [x] Created proposed ADR 0004: `audit/0004-phase-two-workspace-series-workflow-drive.md`.
+- [x] Added ADR 0004 to `audit/README.md`.
+- [x] Created root `AGENT.md` with engineering constraints, approved rules, phased implementation checklist, Drive Picker setup prerequisites, and handover rules.
+- [x] Preserved all previous progress history and appended this phase-two baseline and handover.
+- [ ] Review documentation branch and open PR for the plan.
+- [ ] Implement Phase 0 source/runtime/schema audit.
+- [ ] Implement Phase 1 identity/reference/independent series.
+- [ ] Implement Phase 2 generation-vs-application workflow and complete edit support.
+- [ ] Implement Phase 3 navigation, breadcrumbs, pagination, compact page layouts.
+- [ ] Implement Phase 4 Settings, brand identity, backup/import/export, spreadsheet template, feedback preferences.
+- [ ] Implement Phase 5 Google Picker and selected-folder document generation.
+- [ ] Implement Phase 6 schema reconciliation/migration and import/export round-trip verification.
+- [ ] Implement Phase 7 full CI, handover, and authorized deployment verification.
+
+### Safety and deployment status for this phase
+
+- No application source code changed.
+- No Supabase schema or production records changed.
+- No Google Apps Script deployment or Google Drive file/folder changes performed.
+- No Vercel deployment performed.
+- The ADR is marked Proposed because implementation and migration design still require the Phase 0 audit.
+- Do not treat the plan branch as a production release. Continue from its branch after review; merge only after PR review and checks.
+
+
+### 2026-11-22 Phase 0 — initial read-only source and Supabase audit
+
+**PARTIAL — no production changes**
+
+**Confirmed live Supabase baseline**
+- Project: `pjthtvkzuthxwpvcdqxy` (Brandex-Workflow), `ACTIVE_HEALTHY`, PostgreSQL `17.11.0.018`.
+- Current counts: 6 clients, 480 trademark records, 131 history rows, 26 document-reference rows.
+- RLS is enabled on `clients`, `trademark_records`, `trademark_history`, and `trademark_documents`. Read-only `pg_policies` query returned zero policies for those four tables. Current application access is through protected server-side API routes using the server-only service role.
+- All 6 current clients have a client prefix and client code.
+- A read-only duplicate scan of populated client-code + series + case-number tuples returned no duplicate groups.
+- Status tracks are mixed in production: 420 records have `status=DISPATCHED` and `filing_process=DISPATCHED`; 50 DELIVERED/DELIVERED; 4 PENDING/PENDING; 4 REJECTED/REJECTED; 1 APPROVED/APPLICATION FILED; 1 IN REVIEW/APPLICATION FILED. Do not mass-normalize these legacy values. Build and verify an explicit mapping first.
+- Live `trademark_records` currently has no `client_id`, `dispatched_image`, `dispatched_doc_name`, or `dispatched_doc_type` columns. However, the application field mapper maps `clientId` to `client_id`, and UI code refers to dispatch proof metadata. The current migration file adds client folder metadata and the uniqueness index only; it does not add these record columns. This mismatch must be resolved before relying on those edit/save features.
+- Current schema template `supabase_schema.sql` contains a stale project URL comment and placeholder JWT ref `zbkgerbdnjmctqqnoqnd`, while the actual application default and connected project are `pjthtvkzuthxwpvcdqxy`. Correct this during schema reconciliation; never use the placeholder JWT as a real key.
+- Supabase changelog reviewed: on 2026-10-30 the Data API default changed so new public tables are no longer automatically exposed. Future tables need explicit reviewed grants and RLS. Current architecture uses server-side API access; do not create permissive public policies.
+
+**Confirmed source-level findings**
+- Current formatter still uses the case series as the visible first reference segment. New requirement is client prefix + client code + case number (`N-333-001`), with series independent and excluded from the displayed reference.
+- The current case edit modal labels the first field “Series / Prefix”, confirming the concepts are visually merged.
+- The application form defaults `status` to `GENERATING APPLICATION`; the main status default must become IN REVIEW, with generation represented as an operation outcome/notification.
+- Current `WORKFLOW_STATUSES` mixes generation, review, approval/rejection, dispatch, and delivery values.
+- Current delivery modal has date, receiver name, and receipt image; tracking ID is currently part of dispatch modal. The requested final UX must make tracking number and receiver/person details available at the correct delivery step while retaining existing values.
+- Current `mapRecordToRow` does not map dispatch image/document-name/document-type fields even though the UI has controls for them. This is a confirmed persistence gap to fix and test.
+- Law firm dropdown data already exists in `lib/data.ts` as `CONSULTANT_DATA`; reuse this list rather than duplicating values.
+- Client page currently includes address in the table and shows Sample CSV / Import CSV / Export CSV controls directly on the page.
+- Settings currently stores only page size and law-firm widget visibility in browser localStorage; organization-wide brand and series settings need a secure persistent design.
+- Google Apps Script currently creates output under the configured main root/client folder logic. Selected-folder Picker flow is not implemented or verified.
+
+**Phase 0 completion state**
+- [x] Verify latest GitHub main and merged PR status.
+- [x] Read current homepage, navbar, settings, client page, records status/edit sections, application payload, case reference helper, data master values, database field mapper/API route, Apps Script folder generation sections, schema template, and current migration file.
+- [x] Read-only live Supabase project, schema columns, RLS/policies, row counts, status distribution, client prefix coverage, and duplicate identity scan.
+- [ ] Complete full Records edit-field audit and export/import round-trip inspection.
+- [ ] Complete all API route and Apps Script folder naming/auth audit.
+- [ ] Verify production runtime configuration and actual document generation path through a safe authenticated test session.
+- [ ] Produce final source-to-runtime field map and Phase 1 migration proposal.
+
+**Important safety note:** no SQL writes, schema changes, policy changes, record updates, Drive operations, Apps Script deployment, or Vercel deployment were performed during this read-only audit.
+
+
+**Additional Phase 0 findings — edit form and export contract**
+- The current Records edit modal exposes only a subset of the case form: series/prefix, client code, case number, case name, class, TM number, law firm name, legal filing stage, applicant, trading-as, dispatch/delivery dates, tracking ID, dispatch proof, receiver name, and notes.
+- It does not currently expose all application-entry fields for editing (including the full applicant identity/address/date/type/class-description and original logo/supporting assets). The requested full edit experience therefore needs a field-by-field source form vs. edit form parity matrix.
+- The current Records CSV export has a limited 19-column contract and builds the reference using `selectionMenu` as the first segment. It does not include all the latest case identity, generation, legal-stage, image/document, and delivery-proof fields.
+- The sample Records CSV contains inconsistent legacy reference examples (including both `A646-001` and `646-A-002` styles), so it must be rebuilt from the canonical field contract rather than reused.
+- Client CSV export already includes client prefix, code, city, folder reference, and address. Address can be removed from the on-screen client table while remaining available in the filing profile and export if needed.
+- CSV import/export and JSON backup must be tested as separate flows. The presence of browser localStorage helpers does not prove that backup/restore is correctly round-tripping the canonical Supabase data.
+
+**Phase 0 audit still open:** full CSV import parser, backup modal behavior, all edit field mappings, Apps Script authorization/folder naming, and safe production end-to-end path remain to be completed.
+
+
+**Additional Phase 0 findings — backup, CSV import, and Drive naming**
+- The backup export reads the Supabase snapshot, including cases, clients, history, and document references.
+- The current restore path imports cases and clients only. It explicitly reports that history and document links are not restored. This is not a full round-trip backup/restore and must be fixed or clearly scoped before calling it complete.
+- The current CSV case importer reads one “Workflow Stage” column into both `status` and `filingProcess`, so it cannot preserve the two independent workflow tracks.
+- The current CSV export places the series in the “Case Ref” string and does not export series as its own independent column. The importer then reconstructs series from that reference. This must change to an explicit Series column plus separate Client Prefix, Client Code, and Case Number fields.
+- Current Apps Script case-folder naming still starts with the series (e.g. `series + clientCode-caseNo`) and writes beneath a fixed `MAIN_FOLDER_ID`. The selected Google Drive folder ID is not accepted by `processFormSubmission`; Picker-based destination routing is not implemented.
+- Current generated TM-1/TM-48 document names are based mainly on the case/application folder name. The requested final naming convention must be implemented for new outputs only, without renaming existing Drive files or folders.
+- Current edit modal has a dispatch proof upload, but the Supabase row mapper does not persist the corresponding dispatch proof metadata. Attachments and original logo/supporting assets also need a full edit/persistence review.
+
+**Phase 0 status update**
+- [x] Inspect backup export/restore component and Supabase snapshot/restore functions.
+- [x] Inspect current case CSV export/import field mapping and client CSV contract.
+- [x] Inspect Apps Script fixed-root and case-folder naming path.
+- [ ] Finish end-to-end verification of the existing generation/retry path and all attachments.
+- [ ] Finish the source-to-live-schema field reconciliation and prepare the safe additive migration proposal.
+
+### Documentation PR
+
+- Open PR: [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4).
+- Branch: `feat/brandex-workflow-phase2-plan`.
+- Current head at last check: `ce61dc7a6014c1751566758b58fa947aceeeece4`.
+- PR remains open for review; it is documentation-only. No source or production changes were included.
+- No CI status was reported for the latest documentation head at the time of this update.
