@@ -620,6 +620,8 @@ export default function RecordsPage() {
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
+    const cnicDigits = String(editingRecord.cnic || '').replace(/\\D/g, '');
+    if (cnicDigits && !/^\\d{13}$/.test(cnicDigits)) { setErrorMsg('CNIC must contain exactly 13 digits (for example, 35201-1234567-1).'); return; }
     setSavingRecord(true);
     try {
       await supabaseDB.updateRecord(editingRecord.id, editingRecord);
@@ -1610,6 +1612,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDispatch}
+                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim()) || !dispatchModal.dispatchedImage}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Save Dispatch
@@ -1714,6 +1717,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDelivered}
+                disabled={!deliveredModal.date.trim() || !deliveredModal.receiverName.trim() || !deliveredModal.receiptImage}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#15803d] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Confirm Delivery
@@ -1972,6 +1976,7 @@ export default function RecordsPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+                        if (file.size > 12 * 1024 * 1024 || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 12 MB.'); e.target.value = ''; return; }
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           setEditingRecord(prev => prev ? ({
