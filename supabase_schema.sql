@@ -124,15 +124,7 @@ ALTER TABLE public.trademark_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trademark_documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 
--- Permissive public policies for authenticated and anon app clients
-DROP POLICY IF EXISTS "Allow public all on trademark_records" ON public.trademark_records;
-CREATE POLICY "Allow public all on trademark_records" ON public.trademark_records FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public all on trademark_history" ON public.trademark_history;
-CREATE POLICY "Allow public all on trademark_history" ON public.trademark_history FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public all on trademark_documents" ON public.trademark_documents;
-CREATE POLICY "Allow public all on trademark_documents" ON public.trademark_documents FOR ALL USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public all on clients" ON public.clients;
-CREATE POLICY "Allow public all on clients" ON public.clients FOR ALL USING (true) WITH CHECK (true);
+-- RLS remains enabled. Do not create permissive anon/public policies here.
+-- The application uses authenticated server-side API routes and a server-only
+-- service-role key. Grant access only through an explicitly reviewed policy
+-- strategy; never add USING (true) / WITH CHECK (true) policies.

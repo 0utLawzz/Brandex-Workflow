@@ -252,7 +252,7 @@ export default function RecordsPage() {
 
       // Default Status Filter: PENDING & IN REVIEW
       if (st === 'PENDING_IN_REVIEW') {
-        const isPendingOrReview = recordStatus.includes('PENDING') || recordStatus.includes('REVIEW');
+        const isPendingOrReview = recordStatus.includes('PENDING') || recordStatus.includes('REVIEW') || recordStatus.includes('GENERATING');
         if (!isPendingOrReview) return false;
       } else if (st && st !== 'ALL') {
         if (!recordStatus.includes(st)) return false;
@@ -536,7 +536,6 @@ export default function RecordsPage() {
       const r = dispatchModal.record;
       await supabaseDB.updateRecord(r.id, {
         status: 'DISPATCHED',
-        filingProcess: 'DISPATCHED',
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note,
         trackingId: dispatchModal.trackingId || r.trackingId,
@@ -584,7 +583,6 @@ export default function RecordsPage() {
       const r = deliveredModal.record;
       await supabaseDB.updateRecord(r.id, {
         status: 'DELIVERED',
-        filingProcess: 'DELIVERED',
         deliveredDate: deliveredModal.date,
         receiverName: deliveredModal.receiverName,
         receiptImage: deliveredModal.receiptImage
@@ -682,6 +680,7 @@ export default function RecordsPage() {
     if (s.includes('DISPATCHED')) return 'bg-[#0284c7] text-white';
     if (s.includes('APPROVED')) return 'bg-[#15803d] text-white';
     if (s.includes('REJECT')) return 'bg-[#dc2626] text-white';
+    if (s.includes('GENERATING')) return 'bg-[#7c3aed] text-white';
     if (s.includes('REVIEW')) return 'bg-[#d97706] text-white';
     return 'bg-[#FAF6EE] text-[#0C0C0C]';
   };
@@ -938,6 +937,7 @@ export default function RecordsPage() {
 
               {[
                 { label: 'PENDING & IN REVIEW (Default)', value: 'PENDING_IN_REVIEW' },
+                { label: 'GENERATING APPLICATION', value: 'GENERATING APPLICATION' },
                 { label: 'ALL', value: 'ALL' },
                 { label: 'APPROVED', value: 'APPROVED' },
                 { label: 'REJECTED', value: 'REJECT' },

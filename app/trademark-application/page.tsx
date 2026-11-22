@@ -8,7 +8,7 @@ import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
 import { supabaseDB } from '@/lib/supabase-db';
 import { buildGenerationRetryDraft } from '@/lib/generation-retry';
-import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic } from '@/lib/case-reference';
+import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
@@ -46,7 +46,7 @@ export default function TrademarkApplicationPage() {
   const [year, setYear] = useState('2023');
   const [noImg, setNoImg] = useState('[TEXT HERE]');
 
-  const [status, setStatus] = useState('PENDING');
+  const [status, setStatus] = useState('GENERATING APPLICATION');
   const [trackingId, setTrackingId] = useState('');
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -345,6 +345,11 @@ export default function TrademarkApplicationPage() {
       setStatusMsg('❌ Error: Please fill in all required fields.');
       return;
     }
+    if (!isValidPakistaniCnic(appCnic)) {
+      setStatusType('error');
+      setStatusMsg('CNIC must contain exactly 13 digits in XXXXX-XXXXXXX-X format.');
+      return;
+    }
 
     await submitApplication(false);
   };
@@ -523,6 +528,10 @@ export default function TrademarkApplicationPage() {
           setProgressLabel('Completed');
 
           setStatusType('success');
+          if (recordSavedToSupabase && insertedRecordId) {
+            await supabaseDB.updateRecord(insertedRecordId, { status: 'IN REVIEW' });
+            setStatus('IN REVIEW');
+          }
           const savedLocation = 'Case saved to Supabase; documents saved in Google Drive.';
           setStatusMsg(
             `✅ Success! Documents generated. ${savedLocation}\n` +
@@ -604,7 +613,7 @@ export default function TrademarkApplicationPage() {
     setYear('2023');
     setAppTrade('');
     setAppAdd('');
-    setStatus('PENDING');
+    setStatus('GENERATING APPLICATION');
     setTrackingId('');
     setNoImg('[TEXT HERE]');
     setPreviewSrc(null);
