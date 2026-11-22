@@ -103,3 +103,25 @@ The automated Apps Script writes 22 columns to Google Sheets:
 - T: `IMG`
 - U: `NO-IMG`
 - V: `FILING PROCESS`
+---
+
+## 5. Guarded workflow transitions and complete case editing
+
+The main application status and legal filing stage are separate fields:
+
+- `status`: `IN REVIEW` → `APPROVED` or `REJECTED` → `DISPATCHED` → `DELIVERED`.
+- `filing_process`: `APPLICATION FILED` → `EXAMINATION / REPLY` → `PUBLISHED / DEMAND NOTE` → `PAYMENT SUBMITTED` → `REGISTRATION COMPLETED`.
+- Document-generation progress is not a substitute for either field.
+
+Transition requirements are checked in both the Records UI and the server-side Supabase data layer:
+
+| Transition | Required checks |
+| --- | --- |
+| Pending / In Review → Approved or Rejected | Current status must be pending or in review. |
+| Approved → Dispatched | Dispatch date, tracking ID or dispatch note, and proof-of-sending image/PDF. |
+| Dispatched → Delivered | Delivery date, receiver name, and delivery receipt image. |
+| Rejected → Dispatched | Blocked. |
+
+The Edit Case dialog covers the existing case model: series/client/case reference segments, mark name, TM number, class and description, applicant, father/representative, CNIC, trading name, address, filing/expiry dates, year, application type, legal stage, consultant details, notes, applicant image, dispatch proof, delivery receipt, and linked document URLs.
+
+Reference identity remains `SERIES-CLIENTCODE-CASENUMBER`. Series is independent of the client category prefix. Unrelated edits preserve all reference segments; explicit reference edits continue to use the per-client-and-series duplicate check. Existing linked attachments are retained; new secure HTTPS document links may be added without moving or deleting Drive files.
