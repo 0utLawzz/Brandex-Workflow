@@ -39,7 +39,7 @@ export default function CaseCsvTools() {
 
   return (
     <section className="rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
-      <h2 className="mb-2 flex items-center gap-2 text-lg font-bold"><FileSpreadsheet className="h-5 w-5 text-[#C94A00]" /> Case import &amp; export</h2>
+      <h2 className="mb-2 flex items-center gap-2 text-lg font-bold"><FileSpreadsheet className="h-5 w-5 text-[#C94A00]" /> Case CSV tools</h2>
       <p className="mb-4 text-xs text-[#666]">Download a case CSV or the current template. Case import is temporarily held until the importer can preserve Series, client prefix, client code, and case number as separate fields.</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded border-2 border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold disabled:opacity-50"><FileSpreadsheet className="h-4 w-4" /> Template</button>
