@@ -17,7 +17,6 @@ export type BackupPackageInput = {
 };
 
 const isDataUrl = (value: string) => /^data:[^;,]+(?:;[^,]*)?,/i.test(value);
-const isHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
 function addAsset(
   assets: BackupAsset[],
