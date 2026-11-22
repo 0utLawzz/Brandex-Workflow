@@ -467,3 +467,17 @@ Before the live correction below, no production database, Supabase project, Apps
 - [ ] Google Picker OAuth setup and selected-folder generation. No production Drive tests until a non-production folder is configured.
 - [ ] Reconcile live schema with code and migrations; additive migration only after tests/review. Current live table lacks fields the source maps for client relationship and dispatch proof metadata.
 - [ ] Run CI, preview build, authenticated UI QA, and only then request merge/deploy.
+
+
+## 2026-11-23 continuation — PR #7 merged; shared Series management started
+
+- Verified GitHub PR #7 is merged into `main`; merge commit: `8b668f1a01e91ec57af70fdc5731481d54fa5ae5`. PR #6 is also merged (merge commit `f105945a31746af98710580d92330396b1236122`).
+- Created implementation branch `feat/brandex-shared-series-management` from current `main` after PR #7.
+- Read the current Settings page, Create Case series control, database API route, authentication middleware, Supabase data service, schema template, and existing migrations.
+- Confirmed current series choices are still a browser datalist (`A`, `X`, `N`, `B`) with free-text custom entry; no shared Series master exists. Settings display preferences remain browser-local.
+- Confirmed browser database operations are routed through `/api/database`; the route is protected by the existing application authentication middleware and uses the server-only Supabase service role. The migration must not add public/anon policies.
+- Added accepted ADR 0006: `audit/0006-shared-independent-case-series.md`, and indexed it in `audit/README.md`.
+- Decision: add an additive `public.case_series` registry; seed the four legacy options plus all distinct valid series already used in case records; support create/update/activate/deactivate; retain retired entries; prohibit renaming a code that is referenced by existing cases; fail closed if shared series cannot load.
+- No production schema, case/client rows, Google Drive, Apps Script, or Vercel production configuration changed. Migration has not been applied.
+- **Next implementation steps:** add migration and schema-template definition; implement authenticated server-side list/create/update operations and validation; add Settings management UI; replace the Create Case datalist with active shared series; add unit/API regression tests; run full CI and preview QA before opening a PR.
+- **Verification status:** read-only source inspection and ADR documentation only. Code implementation and automated tests are pending.
