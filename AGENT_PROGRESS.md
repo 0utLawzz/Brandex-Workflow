@@ -298,7 +298,7 @@ Before the live correction below, no production database, Supabase project, Apps
 - Document generation outcome is separate from main application status.
 - Main application status defaults to `IN REVIEW`; approval/rejection follows review. Rejected cases do not proceed to dispatch. Approved cases remain approved until staff starts dispatch.
 - Dispatch asks for date and optionally proof image. Delivery retains tracking number and recipient/person details. All form fields, notes, job details, images, and attachments must be editable.
-- Records is the Home destination after login. Navigation order: Home, Clients, Cases, Create Case, Settings.
+- Records is the Home destination after login. Primary navigation order: Home, Clients, Cases, Create Case; Settings opens from a compact gear/settings menu.
 - Settings is the home for brand identity, independent series management, backup/restore, import/export, spreadsheet template creation, display/sound/notification settings, and Drive setup.
 - UI should be compact, with breadcrumbs, pagination, expandable details, concise labels, boxed records alignment, and compact repository footer links.
 - New square/rounded logo mark and editable display name/prefix/tagline are required.
