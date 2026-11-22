@@ -2,6 +2,7 @@ import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
 import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 import { normalizeCaseSeries } from './case-reference';
+import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -176,6 +177,15 @@ export function mapClientToRow(client: Partial<ClientProfile>): Record<string, a
   if (client.consultant_name !== undefined) row.consultant_name = client.consultant_name;
   if (client.total_cases !== undefined) row.total_cases = client.total_cases;
   return row;
+}
+
+export interface CaseSeries {
+  id: number;
+  series_code: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface SupabaseStatus {
@@ -519,6 +529,89 @@ class SupabaseDBService {
       if (error) throw new Error(`Supabase client reassignment failed: ${error.message}`);
     }
 
+  }
+
+  // -------------------------------------------------------------
+  // SHARED CASE SERIES
+  // -------------------------------------------------------------
+  public async getSeries(): Promise<CaseSeries[]> {
+    if (typeof window !== 'undefined') return requestDatabase<CaseSeries[]>('getSeries');
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured. Shared series could not be loaded.');
+
+    const client = getSupabaseClient();
+    const { data, error } = await withSupabaseTimeout(
+      client.from('case_series').select('*').order('sort_order', { ascending: true }).order('series_code', { ascending: true })
+    );
+    if (error) throw new Error(`Shared case series could not be loaded: ${error.message}`);
+    if (!Array.isArray(data)) throw new Error('Supabase returned an invalid case-series response.');
+    return data.map((row: any) => ({
+      id: Number(row.id),
+      series_code: String(row.series_code || ''),
+      is_active: row.is_active === true,
+      sort_order: Number(row.sort_order) || 0,
+      created_at: String(row.created_at || ''),
+      updated_at: String(row.updated_at || '')
+    }));
+  }
+
+  public async addSeries(value: string): Promise<CaseSeries> {
+    if (typeof window !== 'undefined') return requestDatabase<CaseSeries>('addSeries', { seriesCode: value });
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured. Series was not saved.');
+
+    const seriesCode = normalizeSeriesCode(value);
+    const client = getSupabaseClient();
+    const { data, error } = await withSupabaseTimeout(
+      client.from('case_series').insert([{ series_code: seriesCode, is_active: true }]).select('*').single()
+    );
+    if (error) {
+      if (error.code === '23505') throw new Error(`Series ${seriesCode} already exists.`);
+      throw new Error(`Series could not be created: ${error.message}`);
+    }
+    if (!data) throw new Error('Supabase did not return the created series.');
+    return {
+      id: Number(data.id), series_code: String(data.series_code), is_active: data.is_active === true,
+      sort_order: Number(data.sort_order) || 0, created_at: String(data.created_at || ''), updated_at: String(data.updated_at || '')
+    };
+  }
+
+  public async updateSeries(id: number, value: unknown): Promise<CaseSeries> {
+    if (typeof window !== 'undefined') return requestDatabase<CaseSeries>('updateSeries', { id, updates: value as Record<string, unknown> });
+    if (!Number.isSafeInteger(id) || id < 1) throw new Error('A valid series ID is required.');
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured. Series was not updated.');
+
+    const updates = validateSeriesUpdate(value);
+    const client = getSupabaseClient();
+    const { data: current, error: currentError } = await withSupabaseTimeout(
+      client.from('case_series').select('id, series_code').eq('id', id).maybeSingle()
+    );
+    if (currentError) throw new Error(`Series could not be loaded: ${currentError.message}`);
+    if (!current) throw new Error('Series was not found. Reload Settings and try again.');
+
+    if (updates.series_code && updates.series_code !== String(current.series_code).toUpperCase()) {
+      const { count, error: usageError } = await withSupabaseTimeout(
+        client.from('trademark_records').select('id', { count: 'exact', head: true }).ilike('selection_menu', String(current.series_code))
+      );
+      if (usageError) throw new Error(`Existing case usage could not be checked: ${usageError.message}`);
+      if ((count || 0) > 0) {
+        throw new Error('This series is already used by existing cases. Create a new series and deactivate this one instead; historical references will not be renamed.');
+      }
+    }
+
+    const patch = { ...updates, updated_at: new Date().toISOString() };
+    const { data, error } = await withSupabaseTimeout(
+      client.from('case_series').update(patch).eq('id', id).select('*').single()
+    );
+    if (error) {
+      if (error.code === '23505') throw new Error('A series with this code already exists.');
+      throw new Error(`Series could not be updated: ${error.message}`);
+    }
+    return {
+      id: Number(data.id), series_code: String(data.series_code), is_active: data.is_active === true,
+      sort_order: Number(data.sort_order) || 0, created_at: String(data.created_at || ''), updated_at: String(data.updated_at || '')
+    };
   }
 
   // -------------------------------------------------------------
