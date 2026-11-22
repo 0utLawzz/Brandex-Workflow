@@ -503,3 +503,15 @@ Before the live correction below, no production database, Supabase project, Apps
 - Vercel preview deployment completed successfully for the latest code commit.
 - Supabase management connector returned a permission error during a read-only attempt to inspect live schema/migration metadata. No Supabase write or migration was attempted.
 - PR #8 remains a draft and is not merged. Production migration and production data remain untouched. Before merge: obtain authorized read-only schema inspection, test the migration on a disposable Supabase target, and complete authenticated UI QA on the preview.
+
+### 2026-11-23 — Complete case editing and guarded workflow implementation
+
+- Started the consolidated follow-up on `feat/complete-case-edit-workflow` after PR #8 and authenticated Settings → Series Management UI verification.
+- Created ADR 0007 before implementation. It records the existing partial edit form, separate application status/legal filing stage, and the requirement to preserve existing references, client-prefix separation, attachments, Drive folders, and the historical backup.
+- Added `lib/case-workflow.ts` with shared transition validation and regression tests. Approval/rejection is limited to pending/in-review cases; dispatch requires APPROVED plus date, tracking/note, and proof; delivery requires DISPATCHED plus date, receiver, and receipt. Rejected cases cannot be dispatched.
+- Enforced transition validation in the server-side Supabase update and bulk-update paths, not only the UI. The Records actions are disabled when the current status is not eligible.
+- Expanded the existing Edit Case dialog with father/representative name, CNIC validation, applicant address, filing/expiry dates, year, application type, class description, consultant address, applicant image, delivery receipt, and linked attachment listing/add-by-HTTPS-link.
+- Added an authenticated API operation to read existing document references. New links are appended through the existing `trademark_documents` table; existing links are not deleted or moved.
+- Added separate `PAYMENT SUBMITTED` and `REGISTRATION COMPLETED` legal filing stages. Main application status, legal filing stage, and document-generation progress remain distinct.
+- Updated `STATUS_AND_COLUMNS.md` and ADR index. No production schema migration, production data change, Google Drive mutation, Apps Script deployment, backup overwrite, or Vercel production configuration change was performed.
+- Verification status: GitHub CI, preview deployment, and authenticated end-to-end QA are pending. Do not merge or deploy to production until checks pass and the user verifies the preview.
