@@ -219,3 +219,16 @@ Required before marking implementation complete:
 - The preview build passed. Authenticated visual QA and end-to-end verification remain outstanding.
 - No Supabase schema/record changes, Google Drive operations, or Apps Script deployment were made by this UI pass.
 - Remaining Phase 2 work is still open: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full round-trip backup/restore.
+
+
+## Implementation update — consolidated identity/status corrections (2026-11-23)
+
+- Branch: `feat/brandex-phase2-consolidated`, based on merged PR #6 main.
+- Confirmed approved reference format: `N-333-001`, with the selected case series, client code, and case number as separate segments; client category/prefix is independent.
+- Updated the formatter, duplicate-reference error text, and unit test expectations to use all three hyphen-separated segments.
+- Create Case no longer copies the client's category prefix into the case-series field when a client is selected. The chosen series remains independent and numbering refresh uses that series.
+- New case status now defaults to `IN REVIEW`; the Create Case status list no longer mixes document-generation and dispatch/delivery states.
+- Corrected Settings explanatory text to match the approved model.
+- No historical references, production rows, schema, Apps Script deployment, Drive files, or Vercel production deployment changed.
+- CI and preview verification are pending; this is not yet a merged or deployed release.
+- Remaining work is tracked in `AGENT_PROGRESS.md`, including shared Series management, edit/persistence parity, workflow transitions, full backup restore, CSV round-trip, Google Picker, schema reconciliation, and authenticated QA.

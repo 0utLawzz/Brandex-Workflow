@@ -142,8 +142,8 @@ Case backup is a top-priority acceptance requirement. Follow ADR 0005. Do not ca
 - **Exit:** written source-to-runtime map and a risk list; no production mutations.
 
 ### Phase 1 — Identity and independent series
-- [ ] Change new reference formatter to `N-333-001` using series + client code + case number.
-- [ ] Keep series independent and visible/managed separately.
+- [x] Change new reference formatter to `N-333-001` using series + client code + case number.
+- [ ] Keep series independent and visible/managed separately (Create Case no longer copies client category into series; shared Series management UI remains open).
 - [ ] Confirm per-client + per-series numbering and uniqueness.
 - [ ] Remove obsolete display/reference construction paths and old dropdown labels only after compatibility tests.
 - [ ] Preserve historical references and missing prefixes; do not bulk-rewrite.
@@ -151,7 +151,7 @@ Case backup is a top-priority acceptance requirement. Follow ADR 0005. Do not ca
 - **Exit:** unit/integration tests cover multiple clients, multiple series per client, different applicants, missing prefixes, duplicates, and legacy references.
 
 ### Phase 2 — Workflow separation and editable records
-- [ ] Separate generation operation outcome from main application status.
+- [x] New-case status default and Create Case status choices now separate generation outcome from main application status; full transition flow still open.
 - [ ] Default new records to IN REVIEW after successful creation/generation flow.
 - [ ] Implement IN REVIEW → APPROVED/REJECTED; rejection blocks dispatch.
 - [ ] Approval remains APPROVED until staff starts dispatch.

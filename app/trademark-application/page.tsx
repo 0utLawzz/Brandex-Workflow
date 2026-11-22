@@ -46,7 +46,7 @@ export default function TrademarkApplicationPage() {
   const [year, setYear] = useState('2023');
   const [noImg, setNoImg] = useState('[TEXT HERE]');
 
-  const [status, setStatus] = useState('GENERATING APPLICATION');
+  const [status, setStatus] = useState('IN REVIEW');
   const [trackingId, setTrackingId] = useState('');
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -260,10 +260,9 @@ export default function TrademarkApplicationPage() {
       setSelectedClientName(client.client_name || client.name || '');
       setSelectedClientCity(client.city || '');
       setSelectedClientFolderReference(client.folder_reference || '');
-      setSelectionMenu(prefix);
       if (client.client_code) {
         setClientCode(String(client.client_code).replace(/\D/g, '').padStart(3, '0'));
-        void refreshCaseNumber(String(client.client_code), prefix);
+        void refreshCaseNumber(String(client.client_code), selectionMenu);
       }
       if (client.client_name) setAppName(client.client_name);
       if (client.father_name) setAppSo(client.father_name);

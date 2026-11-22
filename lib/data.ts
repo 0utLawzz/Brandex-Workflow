@@ -3,12 +3,7 @@ export const APPS_SCRIPT_URL =
   (typeof process !== 'undefined' && process.env.NEXT_APPS_SCRIPT_URL) ||
   "https://script.google.com/macros/s/AKfycbyUMRVcdasDxGIaaPKbSzhEVbkKyMyYLNv4-NQ8pyGJEjWOukRPzS3Pt5Da6_CdNmP33Q/exec";
 export const WORKFLOW_STATUSES = [
-  "PENDING",
-  "GENERATING APPLICATION",
-  "IN REVIEW",
-  "APPROVED / REJECT",
-  "DISPATCHED",
-  "DELIVERED"
+  "IN REVIEW"
 ];
 
 export const CASE_STAGE_OPTIONS = [

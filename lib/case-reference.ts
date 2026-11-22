@@ -11,7 +11,7 @@ export function formatCaseReference(series: string, clientCode: string, caseNo: 
   const code = String(clientCode || '').replace(/\D/g, '');
   const number = String(caseNo || '').replace(/\D/g, '');
   if (!code || code.length > 3 || !number || number.length > 3) return '';
-  return `${prefix}${code.padStart(3, '0')}-${number.padStart(3, '0')}`;
+  return `${prefix}-${code.padStart(3, '0')}-${number.padStart(3, '0')}`;
 }
 
 export function getNextCaseNumber(

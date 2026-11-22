@@ -59,7 +59,7 @@ async function assertUniqueCaseReference(
     String(row.case_no || '').replace(/\D/g, '').padStart(3, '0') === caseNo
   );
   if (duplicate) {
-    throw new Error(`Case reference ${series}${code}-${caseNo} already exists for this client and series. Choose the next available number.`);
+    throw new Error(`Case reference ${series}-${code}-${caseNo} already exists for this client and series. Choose the next available number.`);
   }
 }
 

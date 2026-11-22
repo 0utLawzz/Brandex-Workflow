@@ -442,3 +442,28 @@ Before the live correction below, no production database, Supabase project, Apps
 - Vercel production deployment for the merge commit is READY: `https://brandex-workflow-qzaukytbp-projectsb.vercel.app`.
 - Vercel preview build for the PR commit passed; authenticated visual QA was not completed in the preview. Production deployment readiness is confirmed, but authenticated end-to-end UI QA remains open.
 - Do not mark the overall Phase 2 scope complete: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full backup/restore remain open.
+
+
+## 2026-11-23 consolidated Phase 1/2 implementation — in progress
+
+- Branch: `feat/brandex-phase2-consolidated`, created from current `main` after PR #6 merge.
+- Confirmed the repository's approved identity rule in `AGENT.md` and ADR 0004: the visible reference is `N-333-001` (selected case series, client code, case number); client category/prefix is a separate client-profile field.
+- Fixed `lib/case-reference.ts` to include hyphens between all three reference segments. Updated the uniqueness error text to match.
+- Updated case-reference unit tests to assert `A-005-010`, `N-333-001`, and `X-842-001`.
+- Fixed Create Case client selection so it no longer overwrites the separately selected case series with the client's category prefix. Case numbering refresh now uses the selected series.
+- New cases now default to `IN REVIEW`; the Create Case status selector no longer offers generation/dispatch lifecycle states. Generation remains an operation outcome, not the case's business status.
+- Corrected Settings help text so it describes series + client code + case number and explicitly keeps client category/prefix separate.
+- No existing references or production rows were rewritten. No Supabase schema, production data, Google Drive, Apps Script deployment, or Vercel production changes were made.
+- Verification: source edits and test expectations reviewed through GitHub; CI/local test execution is still pending. Do not mark these changes verified until PR checks and preview build complete.
+
+### Still open in this consolidated pass
+- [ ] Independent shared Series master/management UI (must persist for all staff; browser-local-only storage is not acceptable).
+- [ ] Full edit-form parity and persistence of every application field, image, and attachment.
+- [ ] Separate/verified generation outcome and legal/application status transitions, including reject blocks dispatch and delivery tracking/recipient.
+- [ ] Pagination/breadcrumbs and responsive visual QA.
+- [ ] Shared brand logo/name/prefix/tagline settings.
+- [ ] Complete backup restore for history and document references; external Drive file bytes remain a separate asset-copy capability and must be reported accurately.
+- [ ] Identity-safe case CSV import/export with explicit Series, Client Prefix, Client Code, Case Number columns.
+- [ ] Google Picker OAuth setup and selected-folder generation. No production Drive tests until a non-production folder is configured.
+- [ ] Reconcile live schema with code and migrations; additive migration only after tests/review. Current live table lacks fields the source maps for client relationship and dispatch proof metadata.
+- [ ] Run CI, preview build, authenticated UI QA, and only then request merge/deploy.
