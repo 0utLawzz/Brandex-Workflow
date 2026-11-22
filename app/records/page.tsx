@@ -620,8 +620,8 @@ export default function RecordsPage() {
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
-    const cnicDigits = String(editingRecord.cnic || '').replace(/\\D/g, '');
-    if (cnicDigits && !/^\\d{13}$/.test(cnicDigits)) { setErrorMsg('CNIC must contain exactly 13 digits (for example, 35201-1234567-1).'); return; }
+    const cnicDigits = String(editingRecord.cnic || '').replace(/\D/g, '');
+    if (cnicDigits && !/^\d{13}$/.test(cnicDigits)) { setErrorMsg('CNIC must contain exactly 13 digits (for example, 35201-1234567-1).'); return; }
     setSavingRecord(true);
     try {
       await supabaseDB.updateRecord(editingRecord.id, editingRecord);
