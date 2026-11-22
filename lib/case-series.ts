@@ -32,7 +32,7 @@ export function validateSeriesUpdate(value: unknown): CaseSeriesUpdateInput {
     updates.is_active = input.is_active;
   }
   if (Object.prototype.hasOwnProperty.call(input, 'sort_order')) {
-    if (!Number.isInteger(input.sort_order) || Number(input.sort_order) < 0 || Number(input.sort_order) > 10000) {
+    if (typeof input.sort_order !== 'number' || !Number.isInteger(input.sort_order) || input.sort_order < 0 || input.sort_order > 10000) {
       throw new Error('Series order must be a whole number between 0 and 10000.');
     }
     updates.sort_order = Number(input.sort_order);
