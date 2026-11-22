@@ -67,7 +67,7 @@ Preserve the separate four-stage legal filing tracker unless a later user-approv
 ### 3.3 Workspace and navigation
 
 - Make Records the default authenticated landing page and label it Home in the navigation.
-- Top navigation order: Home (Records), Clients, Cases, Create Case, Settings.
+- Primary navigation order: Home (Records), Clients, Cases, Create Case. Settings is opened through a compact gear/settings menu rather than a fifth primary tab.
 - Provide a compact horizontal breadcrumb/path trail so users can move back to parent pages.
 - Keep the separate marketing/landing content out of the primary logged-in workflow. Remove the large duplicated homepage logo; use a visible square/rounded-corner brand mark in the header.
 - Keep repository links as a compact icon-led footer/link strip, with minimal text.
