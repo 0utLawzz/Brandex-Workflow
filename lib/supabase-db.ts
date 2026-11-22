@@ -864,6 +864,27 @@ class SupabaseDBService {
     throw new Error('Supabase history could not be saved.');
   }
 
+  public async getDocumentReferences(recordId: number): Promise<DocumentAttachment[]> {
+    if (typeof window !== 'undefined') return requestDatabase('getDocumentReferences', { recordId });
+    if (!Number.isSafeInteger(recordId) || recordId < 1) throw new Error('A valid case ID is required.');
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
+    const client = getSupabaseClient();
+    const { data, error } = await withSupabaseTimeout(
+      client.from('trademark_documents').select('*').eq('record_id', recordId).order('id', { ascending: false })
+    );
+    if (error) throw new Error(`Case attachments could not be loaded: ${error.message}`);
+    return (data || []).map((row: any) => ({
+      id: Number(row.id),
+      record_id: Number(row.record_id),
+      file_name: String(row.file_name || 'Attachment'),
+      file_type: String(row.file_type || ''),
+      file_url: String(row.file_url || ''),
+      file_size: row.file_size == null ? undefined : Number(row.file_size),
+      created_at: String(row.created_at || ''),
+    }));
+  }
+
   public async saveDocumentReferences(documents: Array<Omit<DocumentAttachment, 'id' | 'created_at'> & { file_size?: number }>): Promise<number> {
     if (typeof window !== 'undefined') return requestDatabase('saveDocumentReferences', { documents });
     if (documents.length === 0) return 0;
