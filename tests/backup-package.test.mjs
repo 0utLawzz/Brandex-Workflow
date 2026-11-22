@@ -61,3 +61,15 @@ test('backup validator accepts legacy case/client snapshots but marks no status 
   assert.equal(result.success, true);
   assert.equal(result.data?.history, undefined);
 });
+
+test('unknown non-empty asset references are not silently omitted', () => {
+  const pkg = createBackupPackage({
+    records: [{ id: 7, img: 'drive-file-id-without-url' }],
+    clients: [],
+    history: [],
+    documents: [],
+  });
+  assert.equal(pkg.backupStatus, 'partial');
+  assert.equal(pkg.assets.length, 1);
+  assert.equal(pkg.assets[0].bytesIncluded, false);
+});
