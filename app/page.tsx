@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -15,10 +15,7 @@ import {
   BookOpen,
   ShieldCheck,
   Landmark,
-  ChevronLeft,
-  ChevronRight,
   ArrowRight,
-  Sparkles,
   Zap,
   HardDrive
 } from 'lucide-react';
@@ -41,81 +38,13 @@ const BRAND_LOGOS = [
   }
 ];
 
-interface Slide {
-  id: number;
-  badge: string;
-  tag: string;
-  title: string;
-  desc: string;
-  stat: string;
-  accent: string;
-  bgBadge: string;
-  targetUrl: string;
-  btnLabel: string;
-}
-
-const SLIDES: Slide[] = [
-  {
-    id: 1,
-    badge: "TOOL 01 · AUTOMATED GENERATOR",
-    tag: "[MENU X / A / N / B]",
-    title: "TRADEMARK™ APPLICATION & MAILMERGE",
-    desc: "Generate full TM-1 & TM-48 documents with automatic 3-digit Client Code, auto-incrementing case numbering, and Nice Classification (1–45) goods/services specifications.",
-    stat: "45 NICE CLASSES · DUAL POWER OF ATTORNEY",
-    accent: "#C94A00",
-    bgBadge: "bg-[#C94A00] text-white",
-    targetUrl: "/trademark-application",
-    btnLabel: "OPEN APPLICATION GENERATOR"
-  },
-  {
-    id: 2,
-    badge: "TOOL 02 · STANDALONE CMS",
-    tag: "[PRIMARY DASHBOARD]",
-    title: "CASE RECORDS CMS & STAGE TRACKING",
-    desc: "Track trademark cases across 5 legal stages: PENDING → IN REVIEW → APPROVED / REJECT → DISPATCHED → DELIVERED. Zero network latency, instant search, and complete CSV/JSON backup sovereignty.",
-    stat: "5 STAGE PIPELINE · 0ms LOCAL STORE",
-    accent: "#0D9970",
-    bgBadge: "bg-[#0D9970] text-white",
-    targetUrl: "/records",
-    btnLabel: "WIPE & LAUNCH RECORDS DASHBOARD"
-  },
-  {
-    id: 3,
-    badge: "TOOL 03 · CLIENT LEDGER",
-    tag: "[DIRECTORY DIRECT]",
-    title: "CLIENT DIRECTORY & PROFILES",
-    desc: "Manage client master records with CNIC, Trading Name, Father's Name, and assigned legal consultants. 1-click autofill into any new trademark application.",
-    stat: "INSTANT AUTOFILL · CLIENT PROFILES",
-    accent: "#D4A800",
-    bgBadge: "bg-[#D4A800] text-[#0C0C0C]",
-    targetUrl: "/clients",
-    btnLabel: "OPEN CLIENT DIRECTORY"
-  },
-  {
-    id: 4,
-    badge: "OFFICIAL · GOVERNMENT GATEWAY",
-    tag: "[IP & TAX AUTHORITIES]",
-    title: "IPO PAKISTAN · FBR IRIS · SECP LEAP",
-    desc: "Direct high-speed gateway to Pakistan Intellectual Property Organization, Federal Board of Revenue, and Securities & Exchange Commission portals for compliance verification.",
-    stat: "3 OFFICIAL AUTHORIZED PORTALS",
-    accent: "#0C0C0C",
-    bgBadge: "bg-[#0C0C0C] text-[#FAF6EE]",
-    targetUrl: "https://apply.ipo.gov.pk",
-    btnLabel: "EXPLORE GOVERNMENT PORTALS"
-  }
-];
-
 export default function HomePage() {
   const router = useRouter();
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [selectedLogoIdx, setSelectedLogoIdx] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
   const [wipeTarget, setWipeTarget] = useState('/records');
   const [wipeTitle, setWipeTitle] = useState('RECORDS DASHBOARD');
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const activeLogo = BRAND_LOGOS[selectedLogoIdx];
+  const activeLogo = BRAND_LOGOS[0];
 
   // Audio effect for button click and wipe
   const playSound = (freq = 420, duration = 0.08) => {
@@ -135,18 +64,6 @@ export default function HomePage() {
     } catch {}
   };
 
-  // Automatic Slide Rotation (every 4.5 seconds)
-  useEffect(() => {
-    if (isPaused || isWiping) return;
-    timerRef.current = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % SLIDES.length);
-    }, 4500);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPaused, isWiping]);
-
   // Screen Wipe Navigation Trigger with Animated Logo Loading
   const triggerWipeAndNavigate = (targetUrl: string, title = 'RECORDS DASHBOARD') => {
     playSound(540, 0.15);
@@ -164,18 +81,6 @@ export default function HomePage() {
       }
     }, 700);
   };
-
-  const handleNext = () => {
-    playSound(400);
-    setCurrentSlide((prev) => (prev + 1) % SLIDES.length);
-  };
-
-  const handlePrev = () => {
-    playSound(400);
-    setCurrentSlide((prev) => (prev - 1 + SLIDES.length) % SLIDES.length);
-  };
-
-  const activeSlide = SLIDES[currentSlide];
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] relative overflow-x-hidden">
@@ -271,192 +176,6 @@ export default function HomePage() {
         <p className="welcome-sub font-['DM_Mono',monospace] text-[0.85rem] font-bold text-[#C94A00] text-center max-w-[620px] mb-7 tracking-[1px] uppercase">
           STANDALONE EDITION · ZERO LATENCY
         </p>
-
-        {/* =========================================================================
-            AUTOMATIC SELECTION SLIDER
-           ========================================================================= */}
-        <div
-          className="w-full mb-10"
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
-        >
-          <div className="flex items-center justify-between mb-2 px-1">
-            <div className="flex items-center gap-2">
-              <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold text-[#C94A00] tracking-[1px] uppercase flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                AUTOMATIC SELECTION SLIDER
-              </span>
-              <span className="text-[0.7rem] font-['DM_Mono',monospace] text-[#666] bg-[#E8DFC7] px-2 py-0.5 rounded border border-[#0C0C0C]">
-                {isPaused ? 'PAUSED' : 'AUTO-ROTATING'}
-              </span>
-            </div>
-
-            {/* Slider Counter */}
-            <div className="font-['DM_Mono',monospace] text-[0.8rem] font-bold tracking-[1px]">
-              [{String(currentSlide + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}]
-            </div>
-          </div>
-
-          {/* Slider Card Container */}
-          <div className="relative bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] rounded-[8px] shadow-[8px_8px_0_#0C0C0C] overflow-hidden">
-            {/* Slide Progress Bar */}
-            <div className="w-full h-1.5 bg-[#E8DFC7] overflow-hidden">
-              <motion.div
-                key={currentSlide}
-                className="h-full bg-[#C94A00]"
-                initial={{ width: '0%' }}
-                animate={{ width: isPaused ? '100%' : '100%' }}
-                transition={{ duration: 4.5, ease: 'linear' }}
-              />
-            </div>
-
-            <div className="p-6 sm:p-8">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                {/* Left/Main Column: Slide details */}
-                <div className="lg:col-span-8 flex flex-col justify-between">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <span className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold py-1 px-2.5 border-2 border-[#0C0C0C] rounded-[4px] uppercase tracking-[1px] shadow-[2px_2px_0_#0C0C0C] ${activeSlide.bgBadge}`}>
-                      {activeSlide.badge}
-                    </span>
-                    <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold text-[#666] tracking-[1px]">
-                      {activeSlide.tag}
-                    </span>
-                  </div>
-
-                  <h2 className="font-['Bebas_Neue'] text-[clamp(1.9rem,5vw,2.8rem)] tracking-[1.5px] leading-[1.05] mb-3 text-[#0C0C0C]">
-                    {activeSlide.title}
-                  </h2>
-
-                  <p className="font-['DM_Mono',monospace] text-[0.85rem] text-[#333] leading-relaxed max-w-2xl mb-5">
-                    {activeSlide.desc}
-                  </p>
-
-                  <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t-2 border-[#0C0C0C]">
-                    <div className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0D9970] bg-[#EBF7F2] border border-[#0D9970] px-3 py-1.5 rounded-[4px]">
-                      ✓ {activeSlide.stat}
-                    </div>
-
-                    {/* Primary Wipe Button */}
-                    <button
-                      type="button"
-                      onClick={() => triggerWipeAndNavigate(activeSlide.targetUrl, activeSlide.title)}
-                      className="font-['DM_Mono',monospace] text-[0.85rem] font-bold py-3 px-5 sm:px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] shadow-[4px_4px_0_#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0_#0C0C0C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_#0C0C0C] transition-all flex items-center gap-2 cursor-pointer uppercase tracking-[1px]"
-                    >
-                      <span>{activeSlide.btnLabel}</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Right Column: Animated Brandex Logo Showcase */}
-                <div className="lg:col-span-4 flex flex-col items-center justify-center bg-[#F0E8D0] border-2 border-[#0C0C0C] rounded-[6px] p-4 shadow-[4px_4px_0_#0C0C0C]">
-                  <div className="flex items-center justify-between w-full mb-2">
-                    <span className="font-['DM_Mono',monospace] text-[0.65rem] font-bold tracking-[1px] uppercase text-[#666] flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-[#C94A00]" />
-                      BRANDEX EMBLEM
-                    </span>
-                    <span className="font-['DM_Mono',monospace] text-[0.62rem] font-bold text-[#0D9970] bg-[#FAF6EE] px-1.5 py-0.5 border border-[#0C0C0C] rounded">
-                      STANDALONE
-                    </span>
-                  </div>
-
-                  {/* Animated Emblem Frame with Click-to-Wipe */}
-                  <motion.div
-                    key={activeLogo.id}
-                    animate={{ y: [0, -5, 0] }}
-                    transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
-                    onClick={() => triggerWipeAndNavigate(activeSlide.targetUrl, activeSlide.title)}
-                    className="relative group cursor-pointer my-1.5"
-                    title="Click logo to launch Dashboard"
-                  >
-                    <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#141210] border-[2.5px] border-[#C94A00] p-3 flex items-center justify-center relative shadow-[0_0_20px_rgba(201,74,0,0.5),5px_5px_0_#0C0C0C] group-hover:scale-105 group-hover:shadow-[0_0_28px_rgba(201,74,0,0.7),7px_7px_0_#0D9970] transition-all">
-                      {/* Rotating accent dashed perimeter */}
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
-                        className="absolute -inset-1.5 border border-dashed border-[#D4A800]/80 rounded-2xl pointer-events-none"
-                      />
-                      <Image
-                        src={activeLogo.src}
-                        alt={activeLogo.name}
-                        width={112}
-                        height={112}
-                        className="object-contain w-full h-full drop-shadow-[0_0_15px_rgba(201,74,0,0.8)]"
-                        referrerPolicy="no-referrer"
-                        priority
-                      />
-                    </div>
-                  </motion.div>
-
-                  {/* Logo Variant Switcher Tabs */}
-                  <div className="flex items-center gap-1 mt-2.5">
-                    {BRAND_LOGOS.map((logo, idx) => (
-                      <button
-                        key={logo.id}
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          playSound(320 + idx * 40);
-                          setSelectedLogoIdx(idx);
-                        }}
-                        className={`font-['DM_Mono',monospace] text-[0.62rem] font-bold px-2 py-0.5 border border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
-                          selectedLogoIdx === idx
-                            ? 'bg-[#C94A00] text-white shadow-[1px_1px_0_#0C0C0C]'
-                            : 'bg-[#FAF6EE] text-[#0C0C0C] hover:bg-white'
-                        }`}
-                        title={logo.name}
-                      >
-                        Logo 0{idx + 1}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="font-['DM_Mono',monospace] text-[0.62rem] text-[#666] mt-1 text-center font-medium">
-                    {activeLogo.name}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Slider Navigation Bar Bottom */}
-            <div className="bg-[#E8DFC7] border-t-2 border-[#0C0C0C] px-6 py-3 flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-1.5">
-                {SLIDES.map((s, idx) => (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      playSound(360);
-                      setCurrentSlide(idx);
-                    }}
-                    className={`font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2.5 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] cursor-pointer transition-all ${
-                      currentSlide === idx
-                        ? 'bg-[#0C0C0C] text-[#FAF6EE] shadow-[2px_2px_0_#C94A00]'
-                        : 'bg-[#FAF6EE] text-[#0C0C0C] hover:bg-white'
-                    }`}
-                  >
-                    0{s.id}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrev}
-                  className="p-1.5 border-2 border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer active:translate-x-[1px] active:translate-y-[1px]"
-                  title="Previous Slide"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleNext}
-                  className="p-1.5 border-2 border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer active:translate-x-[1px] active:translate-y-[1px]"
-                  title="Next Slide"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* External Portals Quick Bar (FBR, IPO, SECP) */}
         <div className="w-full mb-8">

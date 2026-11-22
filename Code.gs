@@ -173,7 +173,7 @@ var CONSULTANT_DATA = [
   {name:"TAXATIONIST CORPORATE CONSULTANTS", addr:"DROP AT ABDULLAH CENTRE, JUNEJO COLONY BEHIND PTCL EXCHANGE, TARLAI, ISLAMABAD CELL # 03360015004"}
 ];
 
-var FILING_PROCESS_OPTIONS = ["PENDING", "IN REVIEW", "APPROVED", "REJECTED", "DISPATCHED", "DELIVERED"];
+var FILING_PROCESS_OPTIONS = ["APPLICATION FILED", "EXAMINATION / REPLY", "PUBLISHED / DEMAND NOTE", "PAYMENT SUBMITTED / REGISTRATION COMPLETED"];
 
 function generateUniqueSerial() {
   var prefix = "PB-ISB-";
@@ -279,9 +279,18 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
   var parentFolder = DriveApp.getFolderById(mainFolderId);
   var newFolder;
   if (formData && (formData.clientCode || formData.caseNo)) {
-    var clientFolder = getOrCreateClientFolder(parentFolder, formData.clientCode || "UNASSIGNED_CLIENT");
-    var caseIdentity = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"].join("-");
-    newFolder = getOrCreateClientFolder(clientFolder, caseIdentity);
+    var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
+    var clientPrefix = String(formData.clientPrefix || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+    var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+    var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
+    var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+    var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName;
+    var caseIdentity = caseSeries + clientCode + "-" + caseNo;
+    var caseFolderName = caseIdentity + " " + String(rowData.folder || "UNTITLED CASE").toUpperCase()
+      + (rowData.tm && rowData.tm !== "PENDING" ? " " + rowData.tm : "")
+      + (rowData.classNo ? " C" + String(rowData.classNo).replace(/\D/g, "") : "");
+    var clientFolder = getOrCreateClientFolder(parentFolder, clientFolderName);
+    newFolder = getOrCreateClientFolder(clientFolder, caseFolderName);
   } else {
     newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
   }

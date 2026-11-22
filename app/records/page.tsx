@@ -7,6 +7,8 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
+import { CASE_STAGE_OPTIONS } from '@/lib/data';
+import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import {
   CheckSquare,
   Square,
@@ -1171,11 +1173,11 @@ export default function RecordsPage() {
 
                   {/* Col 3: Case Ref in box of 3 col */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Case Ref [Code | Menu | #]
+                    Case Reference
                   </th>
 
                   {/* Col 4: Image Thumbnail */}
-                  <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase w-14">
+                  <th className="hidden 2xl:table-cell p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase w-14">
                     Logo
                   </th>
 
@@ -1200,17 +1202,17 @@ export default function RecordsPage() {
                   </th>
 
                   {/* Col 9: Law Firm Name * */}
-                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
+                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
                     Law Firm Name *
                   </th>
 
                   {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) */}
-                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
                     Dispatched Date
                   </th>
 
                   {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
-                  <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
+                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
                     Delivered Date
                   </th>
 
@@ -1282,22 +1284,14 @@ export default function RecordsPage() {
                         </td>
 
                         {/* Col 3: Case Ref in box of 3 col */}
-                        <td className="p-2.5 text-center">
-                          <div className="inline-flex items-center border-[1.5px] border-[#0C0C0C] rounded-[3px] overflow-hidden bg-white shadow-[1px_1px_0_#0C0C0C] font-['DM_Mono',monospace] text-[0.68rem] font-bold">
-                            <span className="px-1.5 py-0.5 bg-[#FAF6EE] text-[#C94A00] border-r border-[#0C0C0C]">
-                              {r.clientCode || '646'}
-                            </span>
-                            <span className="px-1.5 py-0.5 bg-white text-[#0C0C0C] border-r border-[#0C0C0C]">
-                              {r.selectionMenu || 'A'}
-                            </span>
-                            <span className="px-1.5 py-0.5 bg-[#E8DFC7] text-[#0C0C0C]">
-                              {r.caseNo || String(idx + 1).padStart(3, '0')}
-                            </span>
-                          </div>
+                        <td className="p-2.5 text-center whitespace-nowrap">
+                          <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
+                            {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '646', r.caseNo || String(idx + 1).padStart(3, '0'))}
+                          </span>
                         </td>
 
                         {/* Col 4: Image Thumbnail */}
-                        <td className="p-2.5 text-center">
+                        <td className="hidden 2xl:table-cell p-2.5 text-center">
                           {r.img && r.img.startsWith('data:image') ? (
                             <div className="w-9 h-9 border border-[#0C0C0C] rounded bg-white p-0.5 overflow-hidden mx-auto shadow-[1px_1px_0_#0C0C0C]">
                               <Image
@@ -1351,12 +1345,12 @@ export default function RecordsPage() {
                         </td>
 
                         {/* Col 9: Law Firm Name * */}
-                        <td className="p-2.5 text-[0.76rem] font-medium font-['DM_Mono',monospace] max-w-[180px] truncate" title={lawFirm}>
+                        <td className="hidden 2xl:table-cell p-2.5 text-[0.76rem] font-medium font-['DM_Mono',monospace] max-w-[180px] truncate" title={lawFirm}>
                           <HighlightText text={lawFirm} query={searchQuery} />
                         </td>
 
                         {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) & Proof of Sending */}
-                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.72rem] text-[#0C0C0C] whitespace-nowrap">
+                        <td className="hidden 2xl:table-cell p-2.5 font-['DM_Mono',monospace] text-[0.72rem] text-[#0C0C0C] whitespace-nowrap">
                           {r.dispatchedDate ? (
                             <div>
                               <div className="font-bold text-[#0284c7]">{r.dispatchedDate}</div>
@@ -1387,7 +1381,7 @@ export default function RecordsPage() {
                         </td>
 
                         {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
-                        <td className="p-2.5 font-['DM_Mono',monospace] text-[0.72rem] whitespace-nowrap">
+                        <td className="hidden 2xl:table-cell p-2.5 font-['DM_Mono',monospace] text-[0.72rem] whitespace-nowrap">
                           {r.deliveredDate ? (
                             <div>
                               <span className="font-bold text-[#0D9970]">{r.deliveredDate}</span>
@@ -1948,6 +1942,30 @@ export default function RecordsPage() {
             </div>
 
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Series / Prefix</label>
+                  <input type="text" list="brandex-edit-series" maxLength={8} value={editingRecord.selectionMenu || 'A'}
+                    onChange={e => setEditingRecord({ ...editingRecord, selectionMenu: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
+                  <datalist id="brandex-edit-series"><option value="A" /><option value="X" /><option value="N" /><option value="B" /></datalist>
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Client Code</label>
+                  <input type="text" maxLength={3} value={editingRecord.clientCode || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, clientCode: e.target.value.replace(/\D/g, '').slice(0, 3) })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case No</label>
+                  <input type="text" maxLength={3} value={editingRecord.caseNo || ''}
+                    onChange={e => setEditingRecord({ ...editingRecord, caseNo: e.target.value.replace(/\D/g, '').slice(0, 3) })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
+                </div>
+              </div>
+              <div className="text-xs font-['DM_Mono',monospace] text-[#C94A00]">
+                Reference: {formatCaseReference(editingRecord.selectionMenu || 'A', editingRecord.clientCode || '', editingRecord.caseNo || '') || '—'}
+              </div>
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Name *</label>
                 <input
@@ -1991,6 +2009,14 @@ export default function RecordsPage() {
               </div>
 
               <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Legal Case Stage</label>
+                <select value={editingRecord.filingProcess || 'APPLICATION FILED'}
+                  onChange={e => setEditingRecord({ ...editingRecord, filingProcess: e.target.value })}
+                  className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold">
+                  {CASE_STAGE_OPTIONS.map(stage => <option key={stage} value={stage}>{stage}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Applicant Name</label>
                 <input
                   type="text"
@@ -2014,9 +2040,8 @@ export default function RecordsPage() {
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Dispatched Date</label>
                   <input
-                    type="text"
-                    placeholder="ddd DD-MMM-YYYY"
-                    value={editingRecord.dispatchedDate || ''}
+                    type="date"
+                    value={toDateInputValue(editingRecord.dispatchedDate)}
                     onChange={e => setEditingRecord({ ...editingRecord, dispatchedDate: e.target.value })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
                   />
@@ -2116,9 +2141,8 @@ export default function RecordsPage() {
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Delivered Date</label>
                   <input
-                    type="text"
-                    placeholder="DD-MMM-YY"
-                    value={editingRecord.deliveredDate || ''}
+                    type="date"
+                    value={toDateInputValue(editingRecord.deliveredDate)}
                     onChange={e => setEditingRecord({ ...editingRecord, deliveredDate: e.target.value })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
                   />
