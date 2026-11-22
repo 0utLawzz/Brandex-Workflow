@@ -15,7 +15,6 @@ import {
   BookOpen,
   ShieldCheck,
   Landmark,
-  ArrowRight,
   Zap,
   HardDrive
 } from 'lucide-react';

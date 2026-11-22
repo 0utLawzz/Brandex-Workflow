@@ -76,6 +76,11 @@ export default function ClientsPage() {
   const handleSaveEditedClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient || !editFormData.client_name?.trim()) return;
+    const editPrefix = String(editFormData.client_prefix || '').trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9]{0,7}$/.test(editPrefix)) {
+      setErrorMsg('Client prefix must start with a letter and contain 1–8 letters or numbers.');
+      return;
+    }
     const editCnic = formatPakistaniCnic(editFormData.cnic || '');
     if (editCnic && !isValidPakistaniCnic(editCnic)) {
       setErrorMsg('CNIC must contain exactly 13 digits (XXXXX-XXXXXXX-X).');
@@ -110,6 +115,10 @@ export default function ClientsPage() {
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim()) return;
+    if (!/^[A-Z][A-Z0-9]{0,7}$/.test(clientPrefix.trim().toUpperCase())) {
+      setErrorMsg('Client prefix must start with a letter and contain 1–8 letters or numbers.');
+      return;
+    }
     const newCnic = formatPakistaniCnic(cnic);
     if (newCnic && !isValidPakistaniCnic(newCnic)) {
       setErrorMsg('CNIC must contain exactly 13 digits (XXXXX-XXXXXXX-X).');
@@ -553,7 +562,7 @@ export default function ClientsPage() {
             </div>
 
             <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Prefix</label>
                   <input type="text" list="brandex-edit-prefixes" maxLength={8} value={editFormData.client_prefix || 'A'}

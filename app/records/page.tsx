@@ -2016,6 +2016,7 @@ export default function RecordsPage() {
                 <select value={editingRecord.filingProcess || 'APPLICATION FILED'}
                   onChange={e => setEditingRecord({ ...editingRecord, filingProcess: e.target.value })}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold">
+                  {!CASE_STAGE_OPTIONS.includes(editingRecord.filingProcess || '') && editingRecord.filingProcess && <option value={editingRecord.filingProcess}>{editingRecord.filingProcess} (Legacy)</option>}
                   {CASE_STAGE_OPTIONS.map(stage => <option key={stage} value={stage}>{stage}</option>)}
                 </select>
               </div>
