@@ -27,15 +27,15 @@ The goal is to complete the user's phase-two requirements as a sequence of small
 
 These are separate fields:
 
-- Client category/prefix: e.g. `N`, belongs to the client profile.
+- Series: e.g. `N`, a separate grouping label selected for a case.
 - Client code: e.g. `333`, belongs to the client identity.
 - Case number: e.g. `001`, belongs to a case within its client + series sequence.
-- Series: a separate grouping label for organizing cases. It must never be merged into the client prefix or client code.
+- Client category/prefix: a separate client-profile attribute for classification/folder routing. It is not the case series and is not substituted for the series in the case reference.
 - Applicant/person name: case-specific; one client may have multiple people and different applicant names across cases.
 
 New visible case reference: **`N-333-001`**.
 
-Reference segments are client prefix, client code, and case number. The series is stored, selected, displayed, and filtered separately and is not part of this three-segment reference. Numbering remains per client + series unless a new ADR explicitly changes it.
+Reference segments are selected series, client code, and case number, with hyphens between all three segments. The client profile's category/prefix remains a separate field and is not merged into the series. Numbering remains per client + series unless a new ADR explicitly changes it.
 
 Do not automatically change old references or infer missing client prefixes. Existing client prefixes may be blank; require an explicit client-profile value before creating a new case where the prefix is needed.
 
@@ -137,7 +137,7 @@ Folder IDs must be validated server-side. Do not expose backend tokens or servic
 - **Exit:** written source-to-runtime map and a risk list; no production mutations.
 
 ### Phase 1 — Identity and independent series
-- [ ] Change new reference formatter to `N-333-001` using client prefix + client code + case number.
+- [ ] Change new reference formatter to `N-333-001` using series + client code + case number.
 - [ ] Keep series independent and visible/managed separately.
 - [ ] Confirm per-client + per-series numbering and uniqueness.
 - [ ] Remove obsolete display/reference construction paths and old dropdown labels only after compatibility tests.
