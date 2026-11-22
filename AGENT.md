@@ -77,6 +77,7 @@ Use a compact horizontal breadcrumb/path trail. Keep the current Records boxed d
 - Remove Address from the normal client table; retain the address field in create/edit only if required by the filing workflow.
 - Move import/export to Settings.
 - Support client-code-based grouping and show cases/applicants under the correct client without assuming one applicant name per client.
+- When a client is selected in the case form, show the client details inline; remove any redundant extra “view/select details” button if the selection itself already reveals them.
 
 ### 3.5 Case Generator
 
@@ -84,6 +85,8 @@ Use a compact horizontal breadcrumb/path trail. Keep the current Records boxed d
 - Put secondary/coming-soon actions into a dropdown.
 - Keep current document generation features and retry behavior.
 - Use numeric trademark class display (e.g. `43`, not `Class 43`) where the user-facing class value is shown.
+- Keep applicant name, father/representative details, CNIC, and address at case level because different cases under the same client may have different applicants.
+- Use one canonical law-firm master list; reconcile the existing values in `Code.gs` and `lib/data.ts` instead of maintaining two drifting dropdown lists.
 - Build law-firm dropdown options from the existing master values in `lib/data.ts`; allow the appropriate case-level value to be edited.
 - Show prefix, client code, case number, and series as separate controls/values.
 - Investigate a Google Drive Picker folder assignment per client/case and save generated documents into the selected folder after server-side validation.
