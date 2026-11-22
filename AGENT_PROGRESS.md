@@ -368,3 +368,14 @@ Before the live correction below, no production database, Supabase project, Apps
 - [ ] Produce final source-to-runtime field map and Phase 1 migration proposal.
 
 **Important safety note:** no SQL writes, schema changes, policy changes, record updates, Drive operations, Apps Script deployment, or Vercel deployment were performed during this read-only audit.
+
+
+**Additional Phase 0 findings — edit form and export contract**
+- The current Records edit modal exposes only a subset of the case form: series/prefix, client code, case number, case name, class, TM number, law firm name, legal filing stage, applicant, trading-as, dispatch/delivery dates, tracking ID, dispatch proof, receiver name, and notes.
+- It does not currently expose all application-entry fields for editing (including the full applicant identity/address/date/type/class-description and original logo/supporting assets). The requested full edit experience therefore needs a field-by-field source form vs. edit form parity matrix.
+- The current Records CSV export has a limited 19-column contract and builds the reference using `selectionMenu` as the first segment. It does not include all the latest case identity, generation, legal-stage, image/document, and delivery-proof fields.
+- The sample Records CSV contains inconsistent legacy reference examples (including both `A646-001` and `646-A-002` styles), so it must be rebuilt from the canonical field contract rather than reused.
+- Client CSV export already includes client prefix, code, city, folder reference, and address. Address can be removed from the on-screen client table while remaining available in the filing profile and export if needed.
+- CSV import/export and JSON backup must be tested as separate flows. The presence of browser localStorage helpers does not prove that backup/restore is correctly round-tripping the canonical Supabase data.
+
+**Phase 0 audit still open:** full CSV import parser, backup modal behavior, all edit field mappings, Apps Script authorization/folder naming, and safe production end-to-end path remain to be completed.
