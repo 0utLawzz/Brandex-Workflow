@@ -1,7 +1,7 @@
 'use client';
 
 import Papa from 'papaparse';
-import { createBackupPackage, validateBackupPackage } from './backup-package';
+import { createBackupPackage, validateBackupPackage } from './backup-package.ts';
 
 // =========================================================================
 // BRANDEX LAW ASSOCIATES — CSV AND BACKUP UTILITIES
