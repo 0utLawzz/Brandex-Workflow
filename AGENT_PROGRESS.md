@@ -291,7 +291,7 @@ Before the live correction below, no production database, Supabase project, Apps
 
 ### New user-approved clarifications
 
-- Visible reference is `N-333-001`: client category/prefix, client code, case number.
+- Visible reference is `N-333-001`: selected series, client code, case number. Client category/prefix remains a separate client-profile attribute.
 - Series is a separate grouping field; it is not the client category and is not part of the visible three-segment reference.
 - Keep per-client + per-series case numbering unless a later ADR changes it.
 - A single client can contain multiple people/applicants and different applicant names across cases; applicant/person data remains case-specific.
