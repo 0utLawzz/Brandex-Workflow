@@ -379,3 +379,28 @@ Before the live correction below, no production database, Supabase project, Apps
 - CSV import/export and JSON backup must be tested as separate flows. The presence of browser localStorage helpers does not prove that backup/restore is correctly round-tripping the canonical Supabase data.
 
 **Phase 0 audit still open:** full CSV import parser, backup modal behavior, all edit field mappings, Apps Script authorization/folder naming, and safe production end-to-end path remain to be completed.
+
+
+**Additional Phase 0 findings — backup, CSV import, and Drive naming**
+- The backup export reads the Supabase snapshot, including cases, clients, history, and document references.
+- The current restore path imports cases and clients only. It explicitly reports that history and document links are not restored. This is not a full round-trip backup/restore and must be fixed or clearly scoped before calling it complete.
+- The current CSV case importer reads one “Workflow Stage” column into both `status` and `filingProcess`, so it cannot preserve the two independent workflow tracks.
+- The current CSV export places the series in the “Case Ref” string and does not export series as its own independent column. The importer then reconstructs series from that reference. This must change to an explicit Series column plus separate Client Prefix, Client Code, and Case Number fields.
+- Current Apps Script case-folder naming still starts with the series (e.g. `series + clientCode-caseNo`) and writes beneath a fixed `MAIN_FOLDER_ID`. The selected Google Drive folder ID is not accepted by `processFormSubmission`; Picker-based destination routing is not implemented.
+- Current generated TM-1/TM-48 document names are based mainly on the case/application folder name. The requested final naming convention must be implemented for new outputs only, without renaming existing Drive files or folders.
+- Current edit modal has a dispatch proof upload, but the Supabase row mapper does not persist the corresponding dispatch proof metadata. Attachments and original logo/supporting assets also need a full edit/persistence review.
+
+**Phase 0 status update**
+- [x] Inspect backup export/restore component and Supabase snapshot/restore functions.
+- [x] Inspect current case CSV export/import field mapping and client CSV contract.
+- [x] Inspect Apps Script fixed-root and case-folder naming path.
+- [ ] Finish end-to-end verification of the existing generation/retry path and all attachments.
+- [ ] Finish the source-to-live-schema field reconciliation and prepare the safe additive migration proposal.
+
+### Documentation PR
+
+- Open PR: [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4).
+- Branch: `feat/brandex-workflow-phase2-plan`.
+- Current head at last check: `ce61dc7a6014c1751566758b58fa947aceeeece4`.
+- PR remains open for review; it is documentation-only. No source or production changes were included.
+- No CI status was reported for the latest documentation head at the time of this update.
