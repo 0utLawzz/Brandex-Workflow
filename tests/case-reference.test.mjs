@@ -8,9 +8,10 @@ import {
   normalizeCaseSeries
 } from '../lib/case-reference.ts';
 
-test('case reference follows prefix + three-digit client + case number', () => {
-  assert.equal(formatCaseReference('A', '5', '10'), 'A005-010');
-  assert.equal(formatCaseReference('X', '842', '1'), 'X842-001');
+test('case reference keeps series, client code, and case number as separate segments', () => {
+  assert.equal(formatCaseReference('A', '5', '10'), 'A-005-010');
+  assert.equal(formatCaseReference('N', '333', '1'), 'N-333-001');
+  assert.equal(formatCaseReference('X', '842', '1'), 'X-842-001');
 });
 
 test('custom series is normalized and validated', () => {
