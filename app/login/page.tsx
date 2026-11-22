@@ -2,11 +2,10 @@
 
 import React, { useState, Suspense } from 'react';
 import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Lock, User, ShieldCheck, ArrowRight, AlertCircle, Database } from 'lucide-react';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get('from') || '/records';
 
@@ -14,6 +13,9 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [cookieBlocked, setCookieBlocked] = useState(false);
+
+  const safeTarget = from.startsWith('/') && !from.startsWith('//') ? from : '/records';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,10 +26,12 @@ function LoginForm() {
 
     setLoading(true);
     setErrorMsg('');
+    setCookieBlocked(false);
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       });
@@ -35,8 +39,18 @@ function LoginForm() {
       const data = await res.json();
 
       if (res.ok && data.ok) {
-        router.push(from);
-        router.refresh();
+        const checkRes = await fetch('/api/auth/login', {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'no-store',
+        });
+        const checkData = await checkRes.json().catch(() => null);
+        if (checkData?.authenticated) {
+          window.location.assign(safeTarget);
+          return;
+        }
+        setCookieBlocked(true);
+        setErrorMsg('Login succeeded, but your browser blocked the session cookie inside this embedded preview.');
       } else {
         setErrorMsg(data.error || 'Invalid credentials. Please verify your username and password.');
       }
@@ -74,9 +88,22 @@ function LoginForm() {
 
       {/* Error Alert */}
       {errorMsg && (
-        <div className="mb-4 p-3 bg-[#FEE2E2] border-2 border-[#DC2626] rounded-[4px] text-[0.8rem] font-bold text-[#991B1B] flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{errorMsg}</span>
+        <div className="mb-4 p-3 bg-[#FEE2E2] border-2 border-[#DC2626] rounded-[4px] text-[0.8rem] font-bold text-[#991B1B] normal-case flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          {cookieBlocked && (
+            <a
+              href={`/login?from=${encodeURIComponent(safeTarget)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-[#0C0C0C] text-[#FAF6EE] rounded border border-[#0C0C0C] text-[0.75rem] font-['DM_Mono',monospace] uppercase hover:bg-[#222]"
+            >
+              <span>Open Portal in New Tab</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+          )}
         </div>
       )}
 
@@ -94,7 +121,8 @@ function LoginForm() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter username"
               required
-              className="w-full pl-9 pr-3 py-2.5 bg-white border-2 border-[#0C0C0C] rounded font-['Space_Grotesk'] text-[0.9rem] focus:outline-none focus:ring-2 focus:ring-[#C94A00]"
+              autoComplete="username"
+              className="w-full pl-9 pr-3 py-2.5 bg-white border-2 border-[#0C0C0C] rounded font-['Space_Grotesk'] text-[0.9rem] normal-case focus:outline-none focus:ring-2 focus:ring-[#C94A00]"
             />
           </div>
         </div>
@@ -111,7 +139,8 @@ function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               required
-              className="w-full pl-9 pr-3 py-2.5 bg-white border-2 border-[#0C0C0C] rounded font-['Space_Grotesk'] text-[0.9rem] focus:outline-none focus:ring-2 focus:ring-[#C94A00]"
+              autoComplete="current-password"
+              className="w-full pl-9 pr-3 py-2.5 bg-white border-2 border-[#0C0C0C] rounded font-['Space_Grotesk'] text-[0.9rem] normal-case focus:outline-none focus:ring-2 focus:ring-[#C94A00]"
             />
           </div>
         </div>

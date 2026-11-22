@@ -13,7 +13,12 @@ function hasSameOrigin(request: Request): boolean {
     const host = forwardedHost || request.headers.get('host');
     const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
     const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-    return Boolean(host && new URL(origin).origin === `${proto}://${host}`);
+    const originUrl = new URL(origin);
+    return Boolean(
+      host &&
+      originUrl.host === host &&
+      (originUrl.protocol === `${proto}:` || originUrl.protocol === 'https:')
+    );
   } catch {
     return false;
   }

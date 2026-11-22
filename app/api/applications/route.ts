@@ -14,8 +14,8 @@ export async function POST(request: Request) {
             const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
             const requestHost = forwardedHost || request.headers.get('host');
             const requestProto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-            const expectedOrigin = requestHost ? `${requestProto}://${requestHost}` : new URL(request.url).origin;
-            if (new URL(origin).origin !== expectedOrigin) {
+            const originUrl = new URL(origin);
+            if (!requestHost || originUrl.host !== requestHost || (originUrl.protocol !== `${requestProto}:` && originUrl.protocol !== 'https:')) {
                 return Response.json({ ok: false, error: 'Cross-site requests are not allowed.' }, { status: 403 });
             }
         } catch {
