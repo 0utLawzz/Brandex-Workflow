@@ -38,16 +38,16 @@ The UI still exposes secondary controls and repeated explanatory content in plac
 
 Keep these as independent fields and concepts:
 
-- **Client category/prefix:** for example `N`, taken from the client profile; it is not the case series.
+- **Series:** an independent, editable grouping selected for the case, for example `N`. It is not the client's category/prefix.
 - **Client code:** a separate three-digit client identifier, for example `333`.
 - **Case number:** a separate three-digit number, for example `001`.
-- **Series:** an independent, editable grouping selected for the case. It is not merged into the client prefix or client code.
+- **Client category/prefix:** a separate client-profile attribute used for client classification/folder routing; it is not substituted for the selected case series in the case reference.
 
 The newly approved visible reference is:
 
 `N-333-001`
 
-The reference is composed of client category/prefix + client code + case number. The selected series remains separately stored, displayed, filtered, and managed. Numbering remains per client + series unless a later ADR changes that rule. Applicant/person name is case-specific and must not be assumed to be identical for every case belonging to a client.
+The reference is composed of selected case series + client code + case number. All three segments are displayed separately with hyphens. Client category/prefix remains a separate client-profile attribute and is not merged into the case reference. Numbering remains per client + series unless a later ADR changes that rule. Applicant/person name is case-specific and must not be assumed to be identical for every case belonging to a client.
 
 The implementation must inspect existing fields and relationships before changing schema. Prefer reusing existing `clients.client_prefix`, `trademark_records.client_code`, `trademark_records.case_no`, and `trademark_records.selection_menu` where their actual meanings are verified. Do not silently reinterpret legacy values or automatically rewrite existing records. If the record needs a durable client-prefix snapshot or explicit series table/relationship, propose an additive migration with preflight, backfill rules, uniqueness, and rollback before applying it.
 
