@@ -1261,7 +1261,7 @@ export default function RecordsPage() {
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"
-                              disabled={!['PENDING', 'IN REVIEW', 'IN_REVIEW', 'PENDING / IN REVIEW'].includes(String(r.status || '').toUpperCase())}
+                              disabled={!['PENDING', 'IN REVIEW', 'IN_REVIEW', 'PENDING / IN REVIEW', 'PENDING IN REVIEW', 'PENDING_IN_REVIEW'].includes(String(r.status || '').toUpperCase())}
                               onClick={() => handleOpenStageTransition(r, 'APPROVED_OR_REJECTED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#FFE066] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Approve or Reject"
