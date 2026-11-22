@@ -6,6 +6,7 @@ test('pending and in-review cases can be approved or rejected', () => {
   assert.equal(validateWorkflowTransition('PENDING', 'APPROVED').valid, true);
   assert.equal(validateWorkflowTransition('IN REVIEW', 'REJECTED').valid, true);
   assert.equal(validateWorkflowTransition('IN_REVIEW', 'APPROVED').valid, true);
+  assert.equal(validateWorkflowTransition('PENDING_IN_REVIEW', 'APPROVED').valid, true);
 });
 
 test('rejected cases cannot be dispatched', () => {
