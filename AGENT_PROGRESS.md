@@ -421,3 +421,6 @@ Before the live correction below, no production database, Supabase project, Apps
 - Added backup-package tests for case identity, client link, history/document association, embedded versus external assets, and broken relationship rejection. CI results are pending.
 - Important remaining gap: cloud restore still imports only cases and clients. It does not yet restore history or document references, and the current live schema lacks the client_id field required for explicit client relationship restoration. No production schema change has been made. Actual Google Drive file bytes are not copied by this increment; external files are reported as missing bytes, so the export is deliberately marked partial.
 - Next implementation gate: design and test an additive, transaction-safe restore strategy plus an approved client relationship migration; do not run a production migration or restore until separately reviewed and authorized.
+
+- CI run 45040265099 for commit 8eaadee0803cdecd4ee2116bd3676a6ab6fa4767 passed: 32/32 tests; npm audit found 0 vulnerabilities; Apps Script syntax check passed; lint passed with 0 errors and one pre-existing React Hook dependency warning; Next.js production build and required-document checks passed.
+- PR #5 remains open for review. No deployment or production mutation was performed.
