@@ -57,6 +57,9 @@ test('clients CSV round-trip preserves the client profile', () => {
   standaloneDB.clearAllData();
   standaloneDB.addClient({
     client_code: '325',
+    client_prefix: 'X',
+    city: 'LAHORE',
+    folder_reference: 'CA',
     client_name: 'TEST CLIENT',
     father_name: 'TEST FATHER',
     trading_as: 'TEST TRADING',
@@ -75,6 +78,9 @@ test('clients CSV round-trip preserves the client profile', () => {
   assert.equal(imported.success, true);
   assert.equal(imported.count, 1);
   assert.equal(client.client_code, '325');
+  assert.equal(client.client_prefix, 'X');
+  assert.equal(client.city, 'LAHORE');
+  assert.equal(client.folder_reference, 'CA');
   assert.equal(client.client_name, 'TEST CLIENT');
   assert.equal(client.trading_as, 'TEST TRADING');
   assert.equal(client.cnic, '12345-1234567-1');

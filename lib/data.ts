@@ -4,10 +4,18 @@ export const APPS_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbyUMRVcdasDxGIaaPKbSzhEVbkKyMyYLNv4-NQ8pyGJEjWOukRPzS3Pt5Da6_CdNmP33Q/exec";
 export const WORKFLOW_STATUSES = [
   "PENDING",
+  "GENERATING APPLICATION",
   "IN REVIEW",
   "APPROVED / REJECT",
   "DISPATCHED",
   "DELIVERED"
+];
+
+export const CASE_STAGE_OPTIONS = [
+  "APPLICATION FILED",
+  "EXAMINATION / REPLY",
+  "PUBLISHED / DEMAND NOTE",
+  "PAYMENT SUBMITTED / REGISTRATION COMPLETED"
 ];
 
 export const CATEGORIES = [
