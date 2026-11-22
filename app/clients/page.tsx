@@ -196,8 +196,8 @@ export default function ClientsPage() {
           </button>
         </div>
 
-        {showAddForm && (
         {/* Add Client Form */}
+        {showAddForm && (
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-6 rounded-[6px] mb-8">
           <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
             <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px] flex items-center gap-2">
