@@ -1,478 +1,237 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import {
+  ArrowRight,
   ExternalLink,
   Github,
-  FileText,
-  Database,
-  BookOpen,
-  ShieldCheck,
   Landmark,
-  Zap,
-  HardDrive
+  ShieldCheck,
+  BookOpen,
+  Search,
+  FilePlus2,
+  Users,
+  Settings,
+  Table2
 } from 'lucide-react';
 
-const BRAND_LOGOS = [
+const BRAND_LOGO = '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png';
+
+const BRANDEX_REPOSITORIES = [
   {
-    id: 'monogram-ring',
-    name: 'bR Monogram (Ring)',
-    src: '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png'
+    name: 'Brandex Workflow',
+    description: 'Client, case and document workflow',
+    url: 'https://github.com/0utLawzz/Brandex-Workflow',
+    type: 'Core system'
   },
   {
-    id: 'monogram-pure',
-    name: 'bR Monogram',
-    src: '/assets/aistudio/Elegant_purple_bR_monogram_40d16f05.png'
+    name: 'Brandex Client Ledger',
+    description: 'Client records and ledger',
+    url: 'https://github.com/0utLawzz/Brandex-Client-Ledger',
+    preview: 'https://brandex-client-ledger.vercel.app/',
+    type: 'Client management'
   },
   {
-    id: 'app-squircle',
-    name: 'Brandex App Icon',
-    src: '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_37_PM_e12d09bd.png'
+    name: 'Brandex Tax NTN',
+    description: 'NTN and tax filing tools',
+    url: 'https://github.com/0utLawzz/Brandex-Tax-NTN',
+    preview: 'https://brandex-tax-ntn.vercel.app',
+    type: 'Tax'
+  },
+  {
+    name: 'Brandex Database CMS',
+    description: 'Database and records utilities',
+    url: 'https://github.com/0utLawzz/Brandex-Database-CMS',
+    preview: 'https://brandexsheet.vercel.app',
+    type: 'Data'
+  },
+  {
+    name: 'Brandex Drive Parser',
+    description: 'Google Drive folder and case parsing',
+    url: 'https://github.com/0utLawzz/Brandex-Drive-Parser',
+    preview: 'https://0utlawzz.github.io/Brandex-Drive-Parser',
+    type: 'Automation'
   }
 ];
 
 export default function HomePage() {
   const router = useRouter();
   const [isWiping, setIsWiping] = useState(false);
-  const [wipeTarget, setWipeTarget] = useState('/records');
-  const [wipeTitle, setWipeTitle] = useState('RECORDS DASHBOARD');
+  const [wipeTitle, setWipeTitle] = useState('RECORDS');
+  const [repoQuery, setRepoQuery] = useState('');
 
-  const activeLogo = BRAND_LOGOS[0];
+  const filteredRepositories = useMemo(() => {
+    const query = repoQuery.trim().toLowerCase();
+    if (!query) return BRANDEX_REPOSITORIES;
+    return BRANDEX_REPOSITORIES.filter(repo =>
+      [repo.name, repo.description, repo.type].some(value => value.toLowerCase().includes(query))
+    );
+  }, [repoQuery]);
 
-  // Audio effect for button click and wipe
-  const playSound = (freq = 420, duration = 0.08) => {
-    try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
-    } catch {}
-  };
-
-  // Screen Wipe Navigation Trigger with Animated Logo Loading
-  const triggerWipeAndNavigate = (targetUrl: string, title = 'RECORDS DASHBOARD') => {
-    playSound(540, 0.15);
-    setWipeTarget(targetUrl);
+  const triggerWipeAndNavigate = (targetUrl: string, title: string) => {
     setWipeTitle(title);
     setIsWiping(true);
+    window.setTimeout(() => router.push(targetUrl), 700);
+  };
 
-    // After animation displays (700ms), push route
-    setTimeout(() => {
-      if (targetUrl.startsWith('http')) {
-        window.open(targetUrl, '_blank');
-        setIsWiping(false);
-      } else {
-        router.push(targetUrl);
-      }
-    }, 700);
+  const internalLink = (href: string, title: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    triggerWipeAndNavigate(href, title);
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] relative overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] overflow-x-hidden">
       <Navbar />
 
-      {/* Screen Wipe Transition Overlay with Animated Brandex Logo */}
       <AnimatePresence>
         {isWiping && (
           <motion.div
-            className="fixed inset-0 z-[9999] pointer-events-none flex flex-col"
+            className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center overflow-hidden"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {/* Primary Wipe Layer 1 */}
             <motion.div
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
               style={{ originX: 0 }}
-              className="absolute inset-0 bg-[#0C0C0C] z-10 flex flex-col items-center justify-center p-6 text-center"
+              className="absolute inset-0 z-10 bg-[#0C0C0C] flex flex-col items-center justify-center p-5 text-center"
             >
-              {/* Brandex Animated Logo in Wipe Loading Screen */}
               <motion.div
-                initial={{ scale: 0.2, rotate: -15, opacity: 0 }}
-                animate={{ scale: [0.2, 1.15, 1], rotate: [-15, 5, 0], opacity: 1 }}
-                transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative mb-6"
+                initial={{ scale: 0.7, rotate: -10, opacity: 0 }}
+                animate={{ scale: [0.7, 1.08, 1], rotate: [-10, 3, 0], opacity: 1 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl border-[3px] border-[#C94A00] bg-[#FAF6EE] p-2 shadow-[0_0_35px_rgba(201,74,0,.45)]"
               >
-                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-[#1c1611] border-[3px] border-[#C94A00] p-3 flex items-center justify-center relative overflow-hidden shadow-[0_0_50px_rgba(201,74,0,0.85),0_0_20px_rgba(212,168,0,0.6)]">
-                  {/* Rotating decorative accent ring */}
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 6, ease: "linear" }}
-                    className="absolute -inset-2 border-2 border-dashed border-[#D4A800]/70 rounded-2xl pointer-events-none"
-                  />
-                  <Image
-                    src={activeLogo.src}
-                    alt="Brandex Loading Logo"
-                    width={104}
-                    height={104}
-                    className="object-contain w-full h-full drop-shadow-[0_0_18px_rgba(201,74,0,0.9)]"
-                    referrerPolicy="no-referrer"
-                    priority
-                  />
-                </div>
-                {/* Expanding pulse wave */}
-                <motion.div
-                  className="absolute -inset-3 rounded-2xl border-2 border-[#C94A00]"
-                  animate={{ scale: [1, 1.35, 1.55], opacity: [0.9, 0.4, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.2, ease: "easeOut" }}
-                />
+                <Image src={BRAND_LOGO} alt="Brandex" width={112} height={112} className="w-full h-full object-contain" priority />
               </motion.div>
-
-              <div className="font-['Bebas_Neue'] text-[clamp(2.5rem,8vw,4.5rem)] text-[#FAF6EE] tracking-[4px] leading-tight">
-                LAUNCHING {wipeTitle}...
+              <div className="mt-6 font-['Bebas_Neue'] text-[clamp(2rem,7vw,4rem)] tracking-[3px] text-[#FAF6EE]">
+                OPENING {wipeTitle}
               </div>
-              <div className="font-['DM_Mono',monospace] text-[0.9rem] text-[#D4A800] tracking-[2px] mt-2 flex items-center gap-2">
-                <HardDrive className="w-4 h-4 animate-spin text-[#C94A00]" />
-                <span>STANDALONE CMS · LOCAL STORAGE 0ms LATENCY</span>
+              <div className="mt-2 text-xs sm:text-sm font-['DM_Mono',monospace] text-[#D4A800]">
+                BRANDEX WORKSPACE
               </div>
-              <div className="w-72 sm:w-80 h-3 bg-[#1A1A1A] border-2 border-[#FAF6EE] mt-6 p-0.5 rounded-[3px] overflow-hidden">
+              <div className="mt-6 h-2 w-64 max-w-[80vw] overflow-hidden rounded bg-[#292929]">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-[#C94A00] via-[#D4A800] to-[#0D9970]"
+                  className="h-full bg-[#C94A00]"
                   initial={{ width: 0 }}
                   animate={{ width: '100%' }}
-                  transition={{ duration: 0.65, ease: "easeInOut" }}
+                  transition={{ duration: 0.65, ease: 'easeInOut' }}
                 />
               </div>
             </motion.div>
-
-            {/* Accent Wipe Layer 2 (Diagonal edge) */}
             <motion.div
               initial={{ scaleX: 0 }}
               animate={{ scaleX: 1 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               style={{ originX: 0 }}
-              className="absolute inset-0 bg-[#C94A00] z-20 mix-blend-multiply opacity-80"
+              className="absolute inset-0 z-20 bg-[#C94A00] mix-blend-multiply opacity-80"
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <main className="flex-1 flex flex-col items-center px-4 pt-7 pb-16 max-w-5xl mx-auto w-full">
-        {/* Standalone Stamp Header */}
-        <div className="welcome-stamp font-['Bebas_Neue'] text-[1.1rem] tracking-[2.5px] border-[3px] border-[#0C0C0C] bg-[#D4A800] text-[#0C0C0C] py-[5px] px-4 rounded-[6px] rotate-[-2deg] shadow-[4px_4px_0_#0C0C0C] mb-4 inline-flex items-center gap-2">
-          <HardDrive className="w-4 h-4" />
-          BRANDEX CMS v2.1
-        </div>
-
-        <h1 className="welcome-title font-['Bebas_Neue'] text-[clamp(2.4rem,7vw,4rem)] tracking-[2px] text-center leading-[1] mb-2 text-[#0C0C0C]">
-          BRANDEX LAW ASSOCIATES CMS
-        </h1>
-        <p className="welcome-sub font-['DM_Mono',monospace] text-[0.85rem] font-bold text-[#C94A00] text-center max-w-[620px] mb-7 tracking-[1px] uppercase">
-          STANDALONE EDITION · ZERO LATENCY
-        </p>
-
-        {/* External Portals Quick Bar (FBR, IPO, SECP) */}
-        <div className="w-full mb-8">
-          <div className="font-['DM_Mono',monospace] text-[0.75rem] font-bold text-[#666] tracking-[1.5px] uppercase mb-3 text-center">
-            GOVERNMENT IP &amp; CORPORATE PORTALS
-          </div>
-          <div className="flex flex-wrap gap-3 justify-center w-full">
-            <a
-              href="https://iris.fbr.gov.pk/"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => playSound(380)}
-              className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2.5 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:bg-white transition-all"
-            >
-              <Landmark className="w-4 h-4 text-[#C94A00]" /> FBR Iris Portal <ExternalLink className="w-3 h-3 opacity-60" />
-            </a>
-            <a
-              href="https://apply.ipo.gov.pk"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => playSound(380)}
-              className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2.5 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:bg-white transition-all"
-            >
-              <ShieldCheck className="w-4 h-4 text-[#0D9970]" /> IPO Pakistan e-Filing <ExternalLink className="w-3 h-3 opacity-60" />
-            </a>
-            <a
-              href="https://leap.secp.gov.pk/#/user/login"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => playSound(380)}
-              className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2.5 px-4 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:bg-white transition-all"
-            >
-              <BookOpen className="w-4 h-4 text-[#D4A800]" /> SECP LEAP Services <ExternalLink className="w-3 h-3 opacity-60" />
-            </a>
-          </div>
-        </div>
-
-        {/* Menu Buttons */}
-        <div className="menu-buttons flex flex-col gap-3 w-full mb-8">
-          {/* Item 1: Trademark Application Manager */}
-          <div className="menu-btn menu-card font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[16px_20px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5">
-            <span className="btn-num font-['Bebas_Neue'] text-[1.4rem] w-10 h-10 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0 bg-[#0C0C0C] text-[#FAF6EE]">
-              01
-            </span>
-            <div className="btn-content flex-1 flex flex-col gap-[6px]">
-              <span className="btn-label text-[1.1rem] font-bold">Trademark™ Application Manager</span>
-              <div className="btn-links flex flex-wrap gap-2">
-                <Link
-                  href="/trademark-application"
-                  className="tag tag-live tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#C94A00] text-white no-underline shadow-[2px_2px_0_#0C0C0C]"
-                  onClick={() => playSound(420)}
-                >
-                  Application
-                </Link>
-                <Link
-                  href="/clients"
-                  className="tag tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#D4A800] text-[#0C0C0C] no-underline shadow-[2px_2px_0_#0C0C0C]"
-                  onClick={() => playSound(420)}
-                >
-                  Clients
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => triggerWipeAndNavigate('/records', 'RECORDS DASHBOARD')}
-                  className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#0D9970] text-white cursor-pointer shadow-[2px_2px_0_#0C0C0C]"
-                >
-                  Record View
-                </button>
-              </div>
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-7 sm:px-6 sm:py-10">
+        <section className="grid gap-6 rounded-xl border-2 border-[#0C0C0C] bg-[#FAF6EE] p-5 shadow-[5px_5px_0_#0C0C0C] sm:grid-cols-[1fr_auto] sm:items-center sm:p-8">
+          <div className="min-w-0">
+            <div className="mb-2 inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#D4A800] px-2.5 py-1 text-xs font-bold tracking-wide">
+              BRANDEX WORKSPACE
             </div>
-          </div>
-
-          {/* Item 2: Client Ledger */}
-          <div className="menu-btn menu-card font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[16px_20px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5">
-            <span className="btn-num font-['Bebas_Neue'] text-[1.4rem] w-10 h-10 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0 bg-[#D4A800] text-[#0C0C0C]">
-              02
-            </span>
-            <div className="btn-content flex-1 flex flex-col gap-[6px]">
-              <span className="btn-label text-[1.1rem] font-bold">Client Ledger</span>
-              <div className="btn-links flex flex-wrap gap-2">
-                <Link
-                  href="/clients"
-                  className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#0D9970] text-white no-underline shadow-[2px_2px_0_#0C0C0C]"
-                  onClick={() => playSound(420)}
-                >
-                  Client Directory
-                </Link>
-                <a
-                  href="https://brandex-client-ledger.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#FAF6EE] text-[#0C0C0C] no-underline shadow-[2px_2px_0_#0C0C0C]"
-                  onClick={() => playSound(380)}
-                >
-                  External Ledger App ↗
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Item 3: Standalone Records CMS */}
-          <div className="menu-btn menu-card font-['DM_Mono',monospace] text-[0.88rem] font-medium tracking-[1px] uppercase p-[16px_20px] border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] flex items-center gap-3.5">
-            <span className="btn-num font-['Bebas_Neue'] text-[1.4rem] w-10 h-10 flex items-center justify-center border-2 border-currentColor rounded-[4px] shrink-0 bg-[#0D9970] text-white">
-              03
-            </span>
-            <div className="btn-content flex-1 flex flex-col gap-[6px]">
-              <span className="btn-label text-[1.1rem] font-bold">Standalone Records CMS (0ms Latency)</span>
-              <div className="btn-links flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => triggerWipeAndNavigate('/records', 'RECORDS DASHBOARD')}
-                  className="tag tag-deploy tag-link font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#0D9970] text-white cursor-pointer shadow-[2px_2px_0_#0C0C0C]"
-                >
-                  Launch Dashboard
-                </button>
-                <span className="tag tag-sheet font-['DM_Mono',monospace] text-[0.7rem] tracking-[0.7px] px-3 py-1 border-[1.5px] border-[#0C0C0C] rounded-[3px] font-bold bg-[#FAF6EE] text-[#0D9970]">
-                  ● Local Persistent Engine Active
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* =========================================================================
-            BRANDEX GITHUB PROJECTS ECOSYSTEM TABLE
-           ========================================================================= */}
-        <div className="w-full bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[6px_6px_0_#0C0C0C] rounded-[6px] p-5 sm:p-6 mb-8">
-          <div className="flex items-center justify-between pb-3 mb-4 border-b-2 border-[#0C0C0C] flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Github className="w-5 h-5 text-[#0C0C0C]" />
-              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1.5px]">Brandex Projects Ecosystem</h3>
-            </div>
-            <a
-              href="https://github.com/0utLawzz/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00] hover:underline flex items-center gap-1"
+            <h1 className="font-['Bebas_Neue'] text-4xl leading-none tracking-wide sm:text-6xl">
+              Trademark &amp; Client Workflow
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-[#555] sm:text-base">
+              Manage client profiles, applications and case records from one place.
+            </p>
+            <button
+              type="button"
+              onClick={() => triggerWipeAndNavigate('/records', 'RECORDS')}
+              className="mt-5 inline-flex items-center justify-center gap-2 rounded border-2 border-[#0C0C0C] bg-[#C94A00] px-5 py-3 text-sm font-bold text-white shadow-[3px_3px_0_#0C0C0C] transition hover:-translate-y-0.5 hover:bg-[#ad3f00]"
             >
-              github.com/0utLawzz <ExternalLink className="w-3 h-3" />
-            </a>
+              <Table2 className="h-4 w-4" />
+              Open Records
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse font-['DM_Mono',monospace] text-[0.78rem]">
-              <thead>
-                <tr className="bg-[#0C0C0C] text-[#FAF6EE]">
-                  <th className="p-2.5 text-left border-b-2 border-[#0C0C0C]">Repo</th>
-                  <th className="p-2.5 text-left border-b-2 border-[#0C0C0C]">GitHub</th>
-                  <th className="p-2.5 text-left border-b-2 border-[#0C0C0C]">Preview / Deploy</th>
-                  <th className="p-2.5 text-left border-b-2 border-[#0C0C0C]">Topics</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
-                  <td className="p-2.5 font-bold text-[#C94A00]">Brandex-Tax-NTN</td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://github.com/0utLawzz/Brandex-Tax-NTN"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#0C0C0C] hover:underline"
-                    >
-                      github.com/0utLawzz/Brandex-Tax-NTN
-                    </a>
-                  </td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://brandex-tax-ntn.vercel.app"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-[#0D9970] text-white px-2 py-0.5 border border-[#0C0C0C] rounded-[2px] font-bold no-underline inline-block hover:opacity-90"
-                    >
-                      brandex-tax-ntn.vercel.app ↗
-                    </a>
-                  </td>
-                  <td className="p-2.5 text-[#888]">—</td>
-                </tr>
-
-                <tr className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
-                  <td className="p-2.5 font-bold text-[#C94A00]">Brandex-Client-Ledger</td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://github.com/0utLawzz/Brandex-Client-Ledger"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#0C0C0C] hover:underline"
-                    >
-                      github.com/0utLawzz/Brandex-Client-Ledger
-                    </a>
-                  </td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://brandex-client-ledger.vercel.app"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-[#0D9970] text-white px-2 py-0.5 border border-[#0C0C0C] rounded-[2px] font-bold no-underline inline-block hover:opacity-90"
-                    >
-                      brandex-client-ledger.vercel.app ↗
-                    </a>
-                  </td>
-                  <td className="p-2.5 text-[#888]">—</td>
-                </tr>
-
-                <tr className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
-                  <td className="p-2.5 font-bold text-[#C94A00]">Brandex-Database-CMS</td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://github.com/0utLawzz/Brandex-Database-CMS"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#0C0C0C] hover:underline"
-                    >
-                      github.com/0utLawzz/Brandex-Database-CMS
-                    </a>
-                  </td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://brandexsheet.vercel.app"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-[#0D9970] text-white px-2 py-0.5 border border-[#0C0C0C] rounded-[2px] font-bold no-underline inline-block hover:opacity-90"
-                    >
-                      brandexsheet.vercel.app ↗
-                    </a>
-                  </td>
-                  <td className="p-2.5 text-[0.7rem] text-[#555] max-w-[280px]">
-                    brandex, case-management, datasheet, excel, google-sheets, ip-practice, pakistan, postgres, react, rls, sheets, supabase, trademark, vercel, vite
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-[#E8DFC7]">
-                  <td className="p-2.5 font-bold text-[#C94A00]">Brandex-Drive-Parser</td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://github.com/0utLawzz/Brandex-Drive-Parser"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#0C0C0C] hover:underline"
-                    >
-                      github.com/0utLawzz/Brandex-Drive-Parser
-                    </a>
-                  </td>
-                  <td className="p-2.5">
-                    <a
-                      href="https://0utlawzz.github.io/Brandex-Drive-Parser"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="bg-[#0D9970] text-white px-2 py-0.5 border border-[#0C0C0C] rounded-[2px] font-bold no-underline inline-block hover:opacity-90"
-                    >
-                      0utlawzz.github.io/Brandex-Drive-Parser ↗
-                    </a>
-                  </td>
-                  <td className="p-2.5 text-[0.7rem] text-[#555] max-w-[280px]">
-                    automation, clean, drive-data, google-drive, google-sheets, pandas, python
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="mx-auto w-28 shrink-0 rounded-2xl border-2 border-[#0C0C0C] bg-white p-2 shadow-[3px_3px_0_#0C0C0C] sm:mx-0 sm:w-36">
+            <Image src={BRAND_LOGO} alt="Brandex logo" width={144} height={144} className="h-auto w-full object-contain" priority />
           </div>
-        </div>
+        </section>
 
-        {/* Additional Tools & Author */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full mb-8">
-          {/* Document Enhancer */}
-          <a
-            href="https://0utlawzz.github.io/Document-Enhancer/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 font-['DM_Mono',monospace] text-[0.82rem] font-medium p-4 border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#FAF6EE] text-[#0C0C0C] shadow-[4px_4px_0_#0C0C0C] flex items-center justify-between no-underline hover:translate-x-[-2px] hover:translate-y-[-2px]"
-            onClick={() => playSound(380)}
-          >
+        <section>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="font-['Bebas_Neue'] text-2xl tracking-wide sm:text-3xl">Quick Links</h2>
+            <span className="text-xs text-[#666]">Workspace</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Link href="/trademark-application" onClick={internalLink('/trademark-application', 'APPLICATION')} className="flex min-h-20 items-center gap-3 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] transition hover:-translate-y-0.5">
+              <span className="rounded-md bg-[#C94A00] p-2 text-white"><FilePlus2 className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm">New Application</strong><span className="text-xs text-[#666]">Create or retry documents</span></span>
+              <ArrowRight className="h-4 w-4 shrink-0" />
+            </Link>
+            <Link href="/clients" onClick={internalLink('/clients', 'CLIENTS')} className="flex min-h-20 items-center gap-3 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] transition hover:-translate-y-0.5">
+              <span className="rounded-md bg-[#D4A800] p-2 text-[#0C0C0C]"><Users className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm">Clients</strong><span className="text-xs text-[#666]">Profiles and client codes</span></span>
+              <ArrowRight className="h-4 w-4 shrink-0" />
+            </Link>
+            <Link href="/settings" onClick={internalLink('/settings', 'SETTINGS')} className="flex min-h-20 items-center gap-3 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] transition hover:-translate-y-0.5">
+              <span className="rounded-md bg-[#0C0C0C] p-2 text-white"><Settings className="h-5 w-5" /></span>
+              <span className="min-w-0 flex-1"><strong className="block text-sm">Settings</strong><span className="text-xs text-[#666]">Workspace preferences</span></span>
+              <ArrowRight className="h-4 w-4 shrink-0" />
+            </Link>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="mb-3 font-['Bebas_Neue'] text-2xl tracking-wide sm:text-3xl">External Portals</h2>
+          <div className="flex flex-wrap gap-2">
+            <a href="https://iris.fbr.gov.pk/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#FAF6EE] px-3 py-2 text-sm font-semibold shadow-[2px_2px_0_#0C0C0C]"><Landmark className="h-4 w-4 text-[#C94A00]" /> FBR Iris <ExternalLink className="h-3 w-3" /></a>
+            <a href="https://apply.ipo.gov.pk" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#FAF6EE] px-3 py-2 text-sm font-semibold shadow-[2px_2px_0_#0C0C0C]"><ShieldCheck className="h-4 w-4 text-[#0D9970]" /> IPO Pakistan <ExternalLink className="h-3 w-3" /></a>
+            <a href="https://leap.secp.gov.pk/#/user/login" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#FAF6EE] px-3 py-2 text-sm font-semibold shadow-[2px_2px_0_#0C0C0C]"><BookOpen className="h-4 w-4 text-[#D4A800]" /> SECP LEAP <ExternalLink className="h-3 w-3" /></a>
+          </div>
+        </section>
+
+        <section className="mt-auto border-t-2 border-[#0C0C0C]/20 pt-6">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="font-bold text-[0.95rem]">Document Enhancer</div>
-              <div className="text-[0.68rem] text-[#666]">Online Image &amp; Scan Enhancer</div>
+              <div className="flex items-center gap-2"><Github className="h-5 w-5" /><h2 className="font-['Bebas_Neue'] text-2xl tracking-wide sm:text-3xl">Brandex Repositories</h2></div>
+              <p className="mt-1 text-xs text-[#666]">Related projects only</p>
             </div>
-            <ExternalLink className="w-4 h-4 opacity-70" />
-          </a>
-
-          {/* GitHub Author */}
-          <a
-            href="https://github.com/0utLawzz/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 font-['DM_Mono',monospace] text-[0.82rem] font-medium p-4 border-[2.5px] border-[#0C0C0C] rounded-[6px] bg-[#0C0C0C] text-[#FAF6EE] shadow-[4px_4px_0_#0C0C0C] flex items-center justify-between no-underline hover:translate-x-[-2px] hover:translate-y-[-2px]"
-            onClick={() => playSound(380)}
-          >
-            <div className="flex items-center gap-2">
-              <Github className="w-5 h-5 text-[#FAF6EE]" />
-              <div>
-                <div className="font-bold text-[0.95rem]">github.com/0utLawzz</div>
-                <div className="text-[0.68rem] text-[#aaa]">Explore All Repositories</div>
-              </div>
-            </div>
-            <ExternalLink className="w-4 h-4 text-[#D4A800]" />
-          </a>
-        </div>
+            <label className="relative block w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#777]" />
+              <input
+                type="search"
+                value={repoQuery}
+                onChange={event => setRepoQuery(event.target.value)}
+                placeholder="Filter Brandex repositories"
+                aria-label="Filter Brandex repositories"
+                className="w-full rounded border-2 border-[#0C0C0C] bg-white py-2 pl-9 pr-3 text-sm normal-case outline-none focus:ring-2 focus:ring-[#C94A00]"
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {filteredRepositories.map(repo => (
+              <article key={repo.name} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[#0C0C0C]/30 bg-[#FAF6EE] p-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2"><strong className="truncate text-sm">{repo.name}</strong><span className="rounded bg-[#E8DFC7] px-1.5 py-0.5 text-[10px] font-semibold text-[#555]">{repo.type}</span></div>
+                  <p className="mt-1 truncate text-xs text-[#666]">{repo.description}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {repo.preview && <a href={repo.preview} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repo.name} preview`} title="Open preview" className="rounded border border-[#0C0C0C] p-2 hover:bg-[#E8DFC7]"><ExternalLink className="h-4 w-4" /></a>}
+                  <a href={repo.url} target="_blank" rel="noopener noreferrer" aria-label={`Open ${repo.name} repository`} title="Open repository" className="rounded border border-[#0C0C0C] bg-[#0C0C0C] p-2 text-white hover:bg-[#333]"><Github className="h-4 w-4" /></a>
+                </div>
+              </article>
+            ))}
+            {filteredRepositories.length === 0 && <p className="rounded border border-dashed border-[#999] p-5 text-center text-sm text-[#666] md:col-span-2">No Brandex repository matches this filter.</p>}
+          </div>
+        </section>
       </main>
-
       <Footer />
     </div>
   );
