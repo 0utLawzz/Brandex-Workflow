@@ -402,7 +402,6 @@ class SupabaseDBService {
       const client = getSupabaseClient();
       const updatePayload: Record<string, any> = {
           status: newStatus,
-          filing_process: newStatus,
           updated_at: new Date().toISOString(),
           ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),

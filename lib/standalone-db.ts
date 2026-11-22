@@ -245,7 +245,6 @@ class StandaloneDB {
         const item: RecordItem = {
           ...r,
           status: newStatus,
-          filingProcess: newStatus,
           updatedAt: new Date().toISOString(),
           ...(meta?.dispatchedDate ? { dispatchedDate: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatchedNote: meta.dispatchedNote } : {}),

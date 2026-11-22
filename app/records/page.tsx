@@ -1327,9 +1327,12 @@ export default function RecordsPage() {
 
                         {/* Col 7: Workflow Stage */}
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <span className={`inline-block font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 rounded-[3px] border border-[#0C0C0C] shadow-[1px_1px_0_#0C0C0C] uppercase ${statusBadge(r.status)}`}>
-                            {r.status || 'PENDING'}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`inline-block font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 rounded-[3px] border border-[#0C0C0C] shadow-[1px_1px_0_#0C0C0C] uppercase ${statusBadge(r.status)}`}>
+                              {r.status || 'PENDING'}
+                            </span>
+                            {r.filingProcess && <span className="text-[0.58rem] leading-tight text-[#666] max-w-[130px] text-center">{r.filingProcess}</span>}
+                          </div>
                         </td>
 
                         {/* Col 8: Applicant */}
