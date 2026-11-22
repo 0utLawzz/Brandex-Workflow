@@ -60,12 +60,13 @@ The separate four-stage legal filing tracker remains distinct from generation an
 
 ### 3.3 Navigation and compact UI
 
-Authenticated navigation order:
+Authenticated primary navigation order:
 1. Home (the Records workspace; default post-login destination)
 2. Clients
 3. Cases
 4. Create Case
-5. Settings
+
+Settings should be opened through a compact gear/settings menu entry, not added as a fifth primary navigation tab unless the user later requests it.
 
 Use a compact horizontal breadcrumb/path trail. Keep the current Records boxed display style, correcting alignment and density. Hide secondary information behind expand/collapse controls. Provide pagination and fast page navigation. Keep repository links as a compact icon-led footer.
 
