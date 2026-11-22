@@ -8,6 +8,7 @@ import { Settings, Save, RotateCcw, CheckCircle2, Table2, Users, FilePlus2, Shie
 import DataBackupModal from '@/app/components/DataBackupModal';
 import ClientCsvTools from '@/app/components/ClientCsvTools';
 import CaseCsvTools from '@/app/components/CaseCsvTools';
+import SeriesManagement from '@/app/components/SeriesManagement';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -84,6 +85,8 @@ export default function SettingsPage() {
             <Link href="/trademark-application" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold"><FilePlus2 className="h-4 w-4" /> Create case</Link>
           </div>
         </section>
+
+        <SeriesManagement />
 
         <ClientCsvTools />
         <div className="mt-5"><CaseCsvTools /></div>
