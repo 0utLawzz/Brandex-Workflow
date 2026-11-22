@@ -404,3 +404,17 @@ Before the live correction below, no production database, Supabase project, Apps
 - Current head at last check: `ce61dc7a6014c1751566758b58fa947aceeeece4`.
 - PR remains open for review; it is documentation-only. No source or production changes were included.
 - No CI status was reported for the latest documentation head at the time of this update.
+
+
+## Phase-two continuation — PR #4 merged; backup integrity first (2026-11-22)
+
+- PR #4 is merged into main. Merge commit: cc3e863ef0b921c6ce9e767fef62161c4b7f0326.
+- Implementation branch created from the merged main: feat/phase2-backup-integrity-first.
+- Added ADR 0005, Full-fidelity case backup and safe restore. It is accepted as the implementation decision; no production restore is authorized.
+- Confirmed current backup gap in source: cloud JSON export includes cases, clients, history, and document-reference rows, but cloud restore inserts only cases and clients. History and document references are omitted because imported case IDs are reassigned.
+- Confirmed that document URLs are references only; the current export does not copy Google Drive file bytes. It cannot be described as a full file backup.
+- Current backup modal's success message explicitly states that history and document links were not restored. This is accurate but insufficient for the user's requested full recovery.
+- User's existing historical case backup must remain untouched. Keep a separate copy; do not use it as a test input that could be overwritten.
+- Priority next steps: (1) inspect all case/client/history/document/asset fields and relationships on current main; (2) design versioned package plus asset manifest; (3) implement dry-run and safe ID mapping; (4) restore history/document associations; (5) support actual file bytes where authorized and report unavailable assets; (6) test only against disposable storage/database.
+- No Supabase production rows, schema, RLS, Google Drive files/folders, Apps Script deployment, or Vercel deployment were changed in this continuation.
+- No implementation acceptance check is marked complete yet.
