@@ -579,22 +579,28 @@ class StandaloneDB {
 
   public exportClientsCSV(clients: ClientProfile[] = this.getClients()): string {
     const headers = [
+      "Client Prefix",
       "Client Code",
       "Full Name",
       "Father Name",
       "Trading As",
       "CNIC",
       "Address",
+      "City",
+      "Additional Folder Reference",
       "Consultant Name"
     ];
 
     const data = clients.map(c => [
+      c.client_prefix || '',
       c.client_code || '',
       c.client_name || '',
       c.father_name || '',
       c.trading_as || '',
       c.cnic || '',
       c.address || '',
+      c.city || '',
+      c.folder_reference || '',
       c.consultant_name || 'BRANDEX LAW ASSOCIATES'
     ]);
 
@@ -605,44 +611,12 @@ class StandaloneDB {
   }
 
   public generateSampleClientsCSV(): string {
-    const headers = [
-      "Client Code",
-      "Full Name",
-      "Father Name",
-      "Trading As",
-      "CNIC",
-      "Address",
-      "Consultant Name"
-    ];
+    const headers = ["Client Prefix", "Client Code", "Full Name", "Father Name", "Trading As", "CNIC", "Address", "City", "Additional Folder Reference", "Consultant Name"];
 
     const sampleRows = [
-      [
-        "646",
-        "MUHAMMAD USMAN RAZA",
-        "HAJI ABDUL RAZZAQ",
-        "AEROFLEX LOGISTICS PAKISTAN",
-        "35201-1234567-1",
-        "PLOT 14, SECTOR I-9, ISLAMABAD",
-        "BRANDEX LAW ASSOCIATES"
-      ],
-      [
-        "647",
-        "CHAUDHRY ASLAM PERVAIZ",
-        "CHAUDHRY BASHIR AHMED",
-        "GOLDEN AGRI FOODS",
-        "35102-9988776-5",
-        "G.T. ROAD, GUJRANWALA",
-        "BRANDEX LAW ASSOCIATES"
-      ],
-      [
-        "648",
-        "HAMZA KHALID",
-        "KHALID MEHMOOD",
-        "ZENITH CLOUD INNOVATIONS",
-        "35202-3344556-7",
-        "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE",
-        "BRANDEX LAW ASSOCIATES"
-      ]
+      ["A", "646", "MUHAMMAD USMAN RAZA", "HAJI ABDUL RAZZAQ", "AEROFLEX LOGISTICS PAKISTAN", "35201-1234567-1", "PLOT 14, SECTOR I-9, ISLAMABAD", "ISLAMABAD", "", "BRANDEX LAW ASSOCIATES"],
+      ["X", "647", "CHAUDHRY ASLAM PERVAIZ", "CHAUDHRY BASHIR AHMED", "GOLDEN AGRI FOODS", "35102-9988776-5", "G.T. ROAD, GUJRANWALA", "GUJRANWALA", "", "BRANDEX LAW ASSOCIATES"],
+      ["N", "648", "HAMZA KHALID", "KHALID MEHMOOD", "ZENITH CLOUD INNOVATIONS", "35202-3344556-7", "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE", "LAHORE", "", "BRANDEX LAW ASSOCIATES"]
     ];
 
     return Papa.unparse({
@@ -676,12 +650,15 @@ class StandaloneDB {
         return defaultIndex;
       };
 
+      const colPrefix = findCol(["client prefix", "prefix", "client_prefix"], -1);
       const colCode = findCol(["client code", "code", "client #", "client_code"], 0);
       const colName = findCol(["full name", "client name", "name", "client_name"], 1);
       const colFather = findCol(["father name", "father", "father_name"], 2);
       const colTrade = findCol(["trading as", "trade as", "business", "trading_as", "company"], 3);
       const colCnic = findCol(["cnic", "nic", "cnic no"], 4);
       const colAddr = findCol(["address", "client address"], 5);
+      const colCity = findCol(["city"], -1);
+      const colFolderReference = findCol(["additional folder reference", "folder reference", "folder_reference"], -1);
       const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
 
       const existing = persist ? this.getClients() : [];
@@ -699,7 +676,10 @@ class StandaloneDB {
         const clientCode = val(colCode) || String(646 + existing.length + importedCount);
         
         const importedClient = {
-          client_code: clientCode,
+          client_code: clientCode.padStart(3, '0'),
+          client_prefix: val(colPrefix).toUpperCase(),
+          city: val(colCity).toUpperCase(),
+          folder_reference: val(colFolderReference).toUpperCase(),
           client_name: name.toUpperCase(),
           father_name: val(colFather).toUpperCase(),
           trading_as: val(colTrade).toUpperCase(),
