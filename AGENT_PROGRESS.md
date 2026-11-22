@@ -492,3 +492,14 @@ Before the live correction below, no production database, Supabase project, Apps
 - Added the Settings Series Management panel (list, create, edit unused code, activate/deactivate) and replaced the Create Case free-text/datalist control with the shared active-series selector. Inactive series remain selectable only while retrying an existing case. If the shared registry is unavailable, case creation fails closed.
 - No production migration has been applied. No production case/client rows, Google Drive files, Apps Script deployment, or Vercel production settings were changed.
 - Verification is pending: no local test/build execution has been performed from this session. Open a draft PR for GitHub CI and Vercel preview checks; do not merge/deploy until the migration has been reviewed, tested on a disposable Supabase target, and separately approved for production application.
+
+
+### 2026-11-23 verification update — shared Series PR #8
+
+- Added a final submission guard so both new-case creation and document retry require a successfully loaded shared series; new cases require an active series, while retry may retain an inactive series for its already-saved case.
+- Latest code commit before this documentation update: `0f914f5c10f08125e6c37fa2de0417ac9ac7ad0c`.
+- GitHub CI passed: dependency audit, Apps Script syntax check, ESLint, `npm test`, Next.js production build, and required-document check.
+- CodeQL passed for Actions and JavaScript/TypeScript.
+- Vercel preview deployment completed successfully for the latest code commit.
+- Supabase management connector returned a permission error during a read-only attempt to inspect live schema/migration metadata. No Supabase write or migration was attempted.
+- PR #8 remains a draft and is not merged. Production migration and production data remain untouched. Before merge: obtain authorized read-only schema inspection, test the migration on a disposable Supabase target, and complete authenticated UI QA on the preview.
