@@ -284,8 +284,8 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
     var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
     var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientCity = String(formData.clientCity || "").toUpperCase().trim();
-    var clientReference = String(formData.clientFolderReference || "").toUpperCase().trim();
+    var clientCity = String(formData.clientCity || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+    var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
     var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
       + (clientCity ? " " + clientCity : "")
       + (clientReference ? " " + clientReference : "");

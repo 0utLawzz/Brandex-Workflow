@@ -511,7 +511,6 @@ export default function RecordsPage() {
       const r = approveRejectModal.record;
       await supabaseDB.updateRecord(r.id, {
         status: approveRejectModal.decision,
-        filingProcess: approveRejectModal.decision,
         notes: approveRejectModal.notes ? `${r.notes || ''} [Decision: ${approveRejectModal.notes}]` : r.notes
       });
       await supabaseDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
@@ -1948,20 +1947,20 @@ export default function RecordsPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Series / Prefix</label>
-                  <input type="text" list="brandex-edit-series" maxLength={8} value={editingRecord.selectionMenu || 'A'}
+                  <input type="text" list="brandex-edit-series" required maxLength={8} value={editingRecord.selectionMenu || 'A'}
                     onChange={e => setEditingRecord({ ...editingRecord, selectionMenu: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
                   <datalist id="brandex-edit-series"><option value="A" /><option value="X" /><option value="N" /><option value="B" /></datalist>
                 </div>
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Client Code</label>
-                  <input type="text" maxLength={3} value={editingRecord.clientCode || ''}
+                  <input type="text" required maxLength={3} value={editingRecord.clientCode || ''}
                     onChange={e => setEditingRecord({ ...editingRecord, clientCode: e.target.value.replace(/\D/g, '').slice(0, 3) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
                 </div>
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case No</label>
-                  <input type="text" maxLength={3} value={editingRecord.caseNo || ''}
+                  <input type="text" required maxLength={3} value={editingRecord.caseNo || ''}
                     onChange={e => setEditingRecord({ ...editingRecord, caseNo: e.target.value.replace(/\D/g, '').slice(0, 3) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
                 </div>
