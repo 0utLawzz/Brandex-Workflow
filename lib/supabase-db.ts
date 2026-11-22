@@ -562,8 +562,13 @@ class SupabaseDBService {
 
     const seriesCode = normalizeSeriesCode(value);
     const client = getSupabaseClient();
+    const { data: latest, error: orderError } = await withSupabaseTimeout(
+      client.from('case_series').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+    );
+    if (orderError) throw new Error(`Series order could not be read: ${orderError.message}`);
+    const nextOrder = (Number(latest?.sort_order) || 0) + 1;
     const { data, error } = await withSupabaseTimeout(
-      client.from('case_series').insert([{ series_code: seriesCode, is_active: true }]).select('*').single()
+      client.from('case_series').insert([{ series_code: seriesCode, is_active: true, sort_order: nextOrder }]).select('*').single()
     );
     if (error) {
       if (error.code === '23505') throw new Error(`Series ${seriesCode} already exists.`);
