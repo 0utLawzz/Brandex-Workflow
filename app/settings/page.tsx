@@ -5,7 +5,8 @@ import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { Settings, Save, RotateCcw, CheckCircle2, Table2, Users, FilePlus2, ShieldCheck } from 'lucide-react';
-import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences, WorkspacePreferences } from '@/lib/workspace-preferences';
+import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
+import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
 export default function SettingsPage() {
   const [preferences, setPreferences] = useState<WorkspacePreferences>(DEFAULT_WORKSPACE_PREFERENCES);

@@ -9,7 +9,7 @@ import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
-import { readWorkspacePreferences } from '@/lib/workspace-preferences';
+import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
   Square,
@@ -1045,7 +1045,11 @@ export default function RecordsPage() {
 
               <button
                 type="button"
-                onClick={() => setShowCharts(!showCharts)}
+                onClick={() => {
+                  const nextValue = !showCharts;
+                  setShowCharts(nextValue);
+                  saveWorkspacePreferences({ ...readWorkspacePreferences(), showLawFirmWidget: nextValue });
+                }}
                 className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2.5 px-3 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded-[4px] cursor-pointer"
               >
                 {showCharts ? 'Hide Firm Widget' : 'Show Firm Widget'}

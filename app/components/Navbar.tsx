@@ -23,6 +23,8 @@ export default function Navbar() {
   const handleLogout = async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } catch {
+      // Redirect to the login page even if the network request fails.
     } finally {
       window.location.assign('/login');
     }
