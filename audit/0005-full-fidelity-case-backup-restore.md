@@ -89,6 +89,9 @@ Do not test against production. Retain the original backup and a separately veri
 ## 10. Implementation record
 
 - **Implementation branch:** feat/phase2-backup-integrity-first.
-- **Current status:** decision recorded; implementation and tests not yet complete.
+- **Current status:** first incremental implementation committed on feat/phase2-backup-integrity-first. Versioned package and asset-manifest coverage checks are in place; cloud restore is still incomplete.
+- **Implementation commit(s):** see branch history for the versioned backup package, asset manifest, backup UI warnings, and tests.
+- **Tests:** added; CI result pending.
+- **Known gaps:** history/document rows are not yet restored; the live schema lacks client_id; external Google Drive file bytes are not copied. This increment must not be described as full backup/restore.
 - **Production data/files changed:** No.
-- Update this section with commit/PR and verified test evidence after implementation.
+- Update this section after each implementation PR with verified test evidence and remaining gaps.
