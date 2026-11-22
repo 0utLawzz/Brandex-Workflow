@@ -165,3 +165,28 @@ ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 -- The application uses authenticated server-side API routes and a server-only
 -- service-role key. Grant access only through an explicitly reviewed policy
 -- strategy; never add USING (true) / WITH CHECK (true) policies.
+
+
+-- 5. Shared independent case-series registry
+CREATE TABLE IF NOT EXISTS public.case_series (
+  id BIGSERIAL PRIMARY KEY,
+  series_code TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0 CHECK (sort_order BETWEEN 0 AND 10000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT case_series_code_format_check
+    CHECK (series_code = UPPER(BTRIM(series_code)) AND series_code ~ '^[A-Z][A-Z0-9]{0,7}$')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_case_series_code_normalized
+  ON public.case_series (UPPER(BTRIM(series_code)));
+
+ALTER TABLE public.case_series ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.case_series FROM anon, authenticated;
+GRANT ALL ON TABLE public.case_series TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.case_series_id_seq TO service_role;
+
+INSERT INTO public.case_series (series_code, is_active, sort_order)
+VALUES ('A', TRUE, 1), ('X', TRUE, 2), ('N', TRUE, 3), ('B', TRUE, 4)
+ON CONFLICT DO NOTHING;
