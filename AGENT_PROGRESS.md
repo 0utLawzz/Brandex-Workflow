@@ -434,7 +434,7 @@ Before the live correction below, no production database, Supabase project, Apps
 - Primary navigation simplified to Home, Clients, Cases, and Create Case. Settings is a compact gear link; the navbar backup button/modal was removed.
 - Header logo changed from circular to square with rounded corners.
 - Compact icon-led links to BrandEx-related repositories are now at the bottom footer; the redundant standalone repository directory was removed with the old landing page.
-- Settings now includes the backup modal entry and client CSV template/import/export tools. Existing CSV functions are retained in a dedicated Settings component.
+- Settings now includes the backup modal entry and client CSV template/import/export tools. Case CSV template/export is also in Settings; case CSV import is paused until the parser can preserve Series, client prefix, client code, and case number independently.
 - Client page now uses the concise `Client Profiles` heading, a collapsible New Client form, and no Address table column. Address remains in create/edit and export data.
 - Case Generator heading shortened. No case reference, series, client prefix, client code, historical records, or database values were rewritten.
 - No Supabase schema/row writes, Google Drive operations, Apps Script deployment, or Vercel production deployment were performed.
