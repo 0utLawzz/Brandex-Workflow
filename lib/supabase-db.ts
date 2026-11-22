@@ -579,7 +579,7 @@ class SupabaseDBService {
         id: Number(row.id), record_id: Number(row.record_id), action: row.status || row.action || 'STAGE_UPDATE', notes: row.notes || '', created_at: row.created_at || ''
       }));
       documents = (documentsResult.data || []).map((row: any) => ({
-        id: Number(row.id), record_id: Number(row.record_id), file_name: row.file_name || '', file_type: row.file_type || '', file_url: row.file_url || '', created_at: row.created_at || ''
+        id: Number(row.id), record_id: Number(row.record_id), file_name: row.file_name || '', file_size: Number(row.file_size) || undefined, file_type: row.file_type || '', file_url: row.file_url || '', created_at: row.created_at || ''
       }));
     }
     return standaloneDB.exportBackupJSON({
