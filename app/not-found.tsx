@@ -7,10 +7,10 @@ export default function NotFound() {
         <h1 className="font-['Bebas_Neue'] text-[3rem] mb-2">404 — Page Not Found</h1>
         <p className="font-['DM_Mono',monospace] text-[0.85rem] mb-6">The page you are looking for does not exist or has been moved.</p>
         <Link
-          href="/"
+          href="/records"
           className="inline-block font-['DM_Mono',monospace] text-[0.85rem] font-bold py-3 px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[4px] shadow-[4px_4px_0_#0C0C0C] no-underline"
         >
-          ← Return to CMS Home
+          Open Records
         </Link>
       </div>
     </div>

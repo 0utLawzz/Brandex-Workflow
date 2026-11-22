@@ -38,6 +38,7 @@ export default function ClientsPage() {
 
   const loadClients = async () => {
     setLoading(true);
+    setErrorMsg('');
     try {
       const res = await supabaseDB.getClients();
       setClients(res.clients);
@@ -334,8 +335,9 @@ export default function ClientsPage() {
           )}
 
           {errorMsg && (
-            <div className="mb-4 p-3 bg-[#fee2e2] text-[#991b1b] border-2 border-[#0C0C0C] font-['DM_Mono',monospace] text-[0.8rem] font-bold">
-              {errorMsg}
+            <div role="alert" className="mb-4 flex flex-col gap-2 rounded border-2 border-[#DC2626] bg-[#FEE2E2] p-3 text-sm font-semibold text-[#991B1B] sm:flex-row sm:items-center sm:justify-between">
+              <span className="min-w-0 break-words">{errorMsg}</span>
+              <button type="button" onClick={loadClients} disabled={loading} className="shrink-0 rounded border border-[#991B1B] px-3 py-1.5 text-xs font-bold disabled:opacity-50">{loading ? 'Retrying…' : 'Retry'}</button>
             </div>
           )}
 
