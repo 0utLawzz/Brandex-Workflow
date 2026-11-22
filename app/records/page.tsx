@@ -1728,7 +1728,7 @@ export default function RecordsPage() {
          ========================================================================= */}
       {editingRecord && (
         <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-lg w-full p-6 relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
               <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-[#C94A00]" />
@@ -1746,7 +1746,7 @@ export default function RecordsPage() {
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Series / Prefix</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Series</label>
                   <input type="text" list="brandex-edit-series" required maxLength={8} value={editingRecord.selectionMenu || 'A'}
                     onChange={e => setEditingRecord({ ...editingRecord, selectionMenu: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
@@ -1827,6 +1827,54 @@ export default function RecordsPage() {
                   onChange={e => setEditingRecord({ ...editingRecord, appName: e.target.value.toUpperCase() })}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Father / Representative Name</label>
+                  <input type="text" value={editingRecord.fatherName || ''} onChange={e => setEditingRecord({ ...editingRecord, fatherName: e.target.value.toUpperCase() })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">CNIC</label>
+                  <input type="text" maxLength={15} placeholder="35201-1234567-1" value={editingRecord.cnic || ''} onChange={e => setEditingRecord({ ...editingRecord, cnic: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Applicant Address</label>
+                <textarea rows={2} value={editingRecord.address || ''} onChange={e => setEditingRecord({ ...editingRecord, address: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Filing Date</label>
+                  <input type="date" value={toDateInputValue(editingRecord.date || editingRecord.issueDate)} onChange={e => setEditingRecord({ ...editingRecord, date: e.target.value, issueDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Expiry Date</label>
+                  <input type="date" value={toDateInputValue(editingRecord.expiryDate || '')} onChange={e => setEditingRecord({ ...editingRecord, expiryDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Year</label>
+                  <input type="text" value={editingRecord.year || ''} onChange={e => setEditingRecord({ ...editingRecord, year: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Application Type</label>
+                  <input type="text" value={editingRecord.appType || ''} onChange={e => setEditingRecord({ ...editingRecord, appType: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Class Description</label>
+                <textarea rows={2} value={editingRecord.classDesc || ''} onChange={e => setEditingRecord({ ...editingRecord, classDesc: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Consultant / Law Firm Address</label>
+                  <textarea rows={2} value={editingRecord.conAddr || ''} onChange={e => setEditingRecord({ ...editingRecord, conAddr: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div className="rounded border-2 border-[#0C0C0C] bg-white p-2">
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-2">Applicant / Mark Image</label>
+                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><Image src={editingRecord.img} alt="Applicant mark" width={56} height={56} className="h-14 w-14 rounded border object-contain" unoptimized /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
+                  <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>12*1024*1024){setErrorMsg('Applicant image must be an image no larger than 12 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
+                </div>
               </div>
 
               <div>
@@ -1961,6 +2009,23 @@ export default function RecordsPage() {
                 </div>
               </div>
 
+              <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
+                <div className="mb-2 flex items-center gap-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold"><Paperclip className="h-4 w-4" /> LINKED CASE ATTACHMENTS</div>
+                {loadingEditingDocuments ? <p className="text-xs text-[#666]">Loading attachments…</p> : editingDocuments.length ? (
+                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={document.file_url} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
+                ) : <p className="mb-3 text-xs text-[#666]">No linked attachments recorded.</p>}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                  <input value={newDocumentName} onChange={e=>setNewDocumentName(e.target.value)} placeholder="Attachment name" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
+                  <input value={newDocumentUrl} onChange={e=>setNewDocumentUrl(e.target.value)} placeholder="https://drive.google.com/…" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
+                  <button type="button" onClick={handleAddDocumentReference} className="rounded border-2 border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold">Add link</button>
+                </div>
+                <p className="mt-1 text-[0.65rem] text-[#666]">Adds a secure link only; existing files and links are never deleted or moved.</p>
+              </div>
+              <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
+                <div className="mb-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold">DELIVERY RECEIPT</div>
+                {editingRecord.receiptImage ? <div className="flex items-center gap-2"><button type="button" onClick={()=>setProofModal({open:true,title:`Delivery Receipt - ${editingRecord.folder}`,url:editingRecord.receiptImage!,docName:`Delivery_Receipt_${editingRecord.folder}`,docType:'image/jpeg'})} className="rounded border border-[#0C0C0C] bg-[#dcfce7] px-2 py-1 text-xs font-bold">View receipt</button><button type="button" onClick={()=>setEditingRecord({...editingRecord,receiptImage:''})} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <p className="mb-2 text-xs text-[#666]">No delivery receipt attached.</p>}
+                <input type="file" accept="image/*" className="mt-2 block w-full text-xs" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')||file.size>12*1024*1024){setErrorMsg('Delivery receipt must be an image no larger than 12 MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,receiptImage:ev.target?.result as string}):null);reader.readAsDataURL(file);e.target.value='';}} />
+              </div>
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Internal Notes</label>
                 <textarea
