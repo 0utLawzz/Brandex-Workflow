@@ -438,4 +438,7 @@ Before the live correction below, no production database, Supabase project, Apps
 - Client page now uses the concise `Client Profiles` heading, a collapsible New Client form, and no Address table column. Address remains in create/edit and export data.
 - Case Generator heading shortened. No case reference, series, client prefix, client code, historical records, or database values were rewritten.
 - No Supabase schema/row writes, Google Drive operations, Apps Script deployment, or Vercel production deployment were performed.
-- CI and runtime verification for this consolidated PR are pending. Do not mark the overall Phase 2 scope complete: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full backup/restore remain open.
+- PR #6 merged into main on 2026-11-22; merge commit `f105945a31746af98710580d92330396b1236122`.
+- Vercel production deployment for the merge commit is READY: `https://brandex-workflow-qzaukytbp-projectsb.vercel.app`.
+- Vercel preview build for the PR commit passed; authenticated visual QA was not completed in the preview. Production deployment readiness is confirmed, but authenticated end-to-end UI QA remains open.
+- Do not mark the overall Phase 2 scope complete: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full backup/restore remain open.
