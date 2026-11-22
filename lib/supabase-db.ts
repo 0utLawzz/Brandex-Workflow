@@ -424,14 +424,12 @@ class SupabaseDBService {
 
       const updated = mapRowToRecord(result.data);
       if (updates.dispatchedImage) {
-        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert([{
+        await this.saveDocumentReferences([{
           record_id: id,
           file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
           file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
           file_url: updates.dispatchedImage,
-          created_at: new Date().toISOString()
-        }]));
-        if (documentError) throw new Error(`Case was updated, but dispatch proof reference save failed: ${documentError.message}`);
+        }]);
       }
       return updated;
     }
