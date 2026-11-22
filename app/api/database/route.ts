@@ -96,6 +96,17 @@ export async function POST(request: Request) {
         result = { results };
         break;
       }
+      case 'getSeries':
+        result = await supabaseDB.getSeries();
+        break;
+      case 'addSeries':
+        if (typeof body.seriesCode !== 'string') return invalidPayload('A valid series code is required.');
+        result = await supabaseDB.addSeries(body.seriesCode);
+        break;
+      case 'updateSeries':
+        if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object' || Array.isArray(body.updates)) return invalidPayload('A valid series ID and updates are required.');
+        result = await supabaseDB.updateSeries(Number(body.id), body.updates);
+        break;
       case 'getClients':
         result = await supabaseDB.getClients();
         break;
