@@ -28,7 +28,7 @@ export default function Navbar() {
   };
 
   const navLinkClass = (href: string) =>
-    `flex items-center gap-2 rounded px-3 py-2 text-xs font-semibold tracking-wide transition sm:px-3.5 ${(href === '/' ? pathname === '/' || pathname === '/records' : pathname === href) ? 'bg-[#C94A00] text-white' : 'text-[#FAF6EE]/75 hover:bg-white/10 hover:text-white'}`;
+    `flex items-center gap-2 rounded px-3 py-2 text-xs font-semibold tracking-wide transition sm:px-3.5 ${(href === '/' ? pathname === '/' : pathname === href) ? 'bg-[#C94A00] text-white' : 'text-[#FAF6EE]/75 hover:bg-white/10 hover:text-white'}`;
 
   return (
     <nav className="navbar sticky top-0 z-[1000] border-b-[3px] border-[#C94A00] bg-[#0C0C0C] shadow-[0_4px_0_rgba(0,0,0,.12)]">
