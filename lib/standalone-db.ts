@@ -370,7 +370,7 @@ class StandaloneDB {
       [
         1,
         "02/10/2026",
-        "646-A-001",
+        "A646-001",
         "AEROFLEX COURIER",
         "TM-589201",
         "39",

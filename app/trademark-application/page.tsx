@@ -552,6 +552,7 @@ export default function TrademarkApplicationPage() {
           if (recordSavedToSupabase && insertedRecordId) {
             await supabaseDB.updateRecord(insertedRecordId, { status: 'IN REVIEW' });
             setStatus('IN REVIEW');
+            payload.status = 'IN REVIEW';
           }
           const savedLocation = 'Case saved to Supabase; documents saved in Google Drive.';
           setStatusMsg(
