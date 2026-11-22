@@ -50,6 +50,16 @@ export function toDateInputValue(value: string | null | undefined): string {
   const raw = String(value || '').trim();
   if (!raw) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const namedDate = /^(?:[A-Z]{3},?\s+)?(\d{1,2})[-\s]([A-Z]{3})[-\s](\d{2,4})$/i.exec(raw);
+  if (namedDate) {
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const monthIndex = months.indexOf(namedDate[2].toUpperCase());
+    if (monthIndex >= 0) {
+      const yearNumber = Number(namedDate[3]);
+      const year = namedDate[3].length === 2 ? 2000 + yearNumber : yearNumber;
+      return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(Number(namedDate[1])).padStart(2, '0')}`;
+    }
+  }
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return '';
   const year = parsed.getFullYear();

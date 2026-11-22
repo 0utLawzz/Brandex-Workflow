@@ -243,6 +243,13 @@ export default function TrademarkApplicationPage() {
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
     const client = savedClients.find(c => String(c.id) === clientId);
+    if (!client) {
+      setSelectedClientName('');
+      setSelectedClientPrefix('A');
+      setSelectedClientCity('');
+      setSelectedClientFolderReference('');
+      return;
+    }
     if (client) {
       const prefix = String(client.client_prefix || 'A').toUpperCase();
       setSelectedClientPrefix(prefix);
@@ -698,7 +705,7 @@ export default function TrademarkApplicationPage() {
                   <option value="">-- SELECT CLIENT TO AUTO-FETCH DETAILS --</option>
                   {savedClients.map(c => (
                     <option key={c.id} value={c.id}>
-                      [{c.client_code}] {c.name} — {c.company_name || c.address}
+                      [{c.client_prefix || 'A'}-{String(c.client_code).padStart(3, '0')}] {c.client_name} — {c.trading_as || c.address}
                     </option>
                   ))}
                 </select>
