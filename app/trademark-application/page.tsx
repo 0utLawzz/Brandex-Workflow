@@ -409,10 +409,18 @@ export default function TrademarkApplicationPage() {
 
   const submitApplication = async (retryGeneration: boolean) => {
     if (submitting) return;
+    const selectedSeries = seriesOptions.find(item => item.series_code === selectionMenu);
+    const seriesAllowed = !!selectedSeries && !seriesLoadError &&
+      (selectedSeries.is_active || (retryGeneration && generationPending));
+    if (seriesLoading || !seriesAllowed) {
+      setStatusType('error');
+      setStatusMsg(seriesLoading
+        ? 'Shared case series are still loading. Please wait and try again.'
+        : (seriesLoadError || 'Select an active shared case series before creating a new case.'));
+      return;
+    }
     if (retryGeneration) {
-      const selectedSeries = seriesOptions.find(item => item.series_code === selectionMenu);
       const missing = [
-        (!selectedSeries || (!selectedSeries.is_active && !generationPending) || !!seriesLoadError) && 'active shared case series',
         !folder.trim() && 'case folder',
         !/^\d{1,3}$/.test(clientCode) && 'client code',
         !/^[A-Z][A-Z0-9]{0,7}$/.test(selectionMenu.toUpperCase()) && 'case series (A, X, N, B or custom)',
