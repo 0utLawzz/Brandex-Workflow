@@ -1,6 +1,7 @@
 import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
 import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
+import { normalizeCaseSeries } from './case-reference';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -29,6 +30,36 @@ async function withSupabaseTimeout<T>(operation: PromiseLike<T>): Promise<T> {
     ]);
   } finally {
     if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+}
+
+async function assertUniqueCaseReference(
+  client: any,
+  identity: { clientCode?: string; selectionMenu?: string; caseNo?: string },
+  ignoreId?: number
+): Promise<void> {
+  const code = String(identity.clientCode || '').replace(/\D/g, '').padStart(3, '0');
+  const caseNo = String(identity.caseNo || '').replace(/\D/g, '').padStart(3, '0');
+  if (!code || code === '000' || !caseNo || caseNo === '000' || !identity.selectionMenu) return;
+  const series = normalizeCaseSeries(identity.selectionMenu);
+  const codeVariants = Array.from(new Set([code, String(Number(code))]));
+  const caseVariants = Array.from(new Set([caseNo, String(Number(caseNo))]));
+  const { data, error } = await withSupabaseTimeout(
+    client.from('trademark_records')
+      .select('id, client_code, selection_menu, case_no')
+      .in('client_code', codeVariants)
+      .ilike('selection_menu', series)
+      .in('case_no', caseVariants)
+  );
+  if (error) throw new Error(`Could not verify case reference uniqueness: ${error.message}`);
+  const duplicate = (data || []).find((row: any) =>
+    Number(row.id) !== Number(ignoreId || 0) &&
+    String(row.client_code || '').replace(/\D/g, '').padStart(3, '0') === code &&
+    String(row.selection_menu || '').toUpperCase() === series &&
+    String(row.case_no || '').replace(/\D/g, '').padStart(3, '0') === caseNo
+  );
+  if (duplicate) {
+    throw new Error(`Case reference ${series}${code}-${caseNo} already exists for this client and series. Choose the next available number.`);
   }
 }
 
@@ -247,9 +278,10 @@ class SupabaseDBService {
       try {
         const client = getSupabaseClient();
         const row = mapRecordToRow(record);
-        row.selection_menu = record.selectionMenu ?? '';
-        row.client_code = record.clientCode ?? '';
-        row.case_no = record.caseNo ?? '';
+        row.selection_menu = normalizeCaseSeries(record.selectionMenu || 'A');
+        row.client_code = String(record.clientCode || '').replace(/\D/g, '').padStart(3, '0');
+        row.case_no = String(record.caseNo || '').replace(/\D/g, '').padStart(3, '0');
+        await assertUniqueCaseReference(client, { clientCode: row.client_code, selectionMenu: row.selection_menu, caseNo: row.case_no });
         if (record.id) row.id = record.id;
         row.created_at = new Date().toISOString();
 
@@ -340,6 +372,22 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const row = mapRecordToRow(updates);
+      if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
+        const { data: current, error: currentError } = await withSupabaseTimeout(
+          client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
+        );
+        if (currentError) throw new Error(`Could not read current case identity: ${currentError.message}`);
+        if (!current) throw new Error('Case was not found while validating its reference.');
+        const identity = {
+          clientCode: String(updates.clientCode ?? current.client_code ?? ''),
+          selectionMenu: String(updates.selectionMenu ?? current.selection_menu ?? 'A'),
+          caseNo: String(updates.caseNo ?? current.case_no ?? '')
+        };
+        await assertUniqueCaseReference(client, identity, id);
+        if (updates.clientCode !== undefined) row.client_code = identity.clientCode.replace(/\D/g, '').padStart(3, '0');
+        if (updates.selectionMenu !== undefined) row.selection_menu = normalizeCaseSeries(identity.selectionMenu);
+        if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
+      }
 
       let result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
       if (result.error && result.error.message.includes('dispatched_image')) {
