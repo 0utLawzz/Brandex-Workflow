@@ -3,6 +3,7 @@ import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment
 import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
+import { validateWorkflowTransition } from './case-workflow';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -131,6 +132,9 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.img !== undefined) row.logo_url = record.img;
   if (record.dispatchedDate !== undefined) row.dispatched_date = record.dispatchedDate;
   if (record.dispatchedNote !== undefined) row.dispatched_note = record.dispatchedNote;
+  if (record.dispatchedImage !== undefined) row.dispatched_image = record.dispatchedImage;
+  if (record.dispatchedDocName !== undefined) row.dispatched_doc_name = record.dispatchedDocName;
+  if (record.dispatchedDocType !== undefined) row.dispatched_doc_type = record.dispatchedDocType;
   if (record.deliveredDate !== undefined) row.delivered_date = record.deliveredDate;
   if (record.receiverName !== undefined) row.receiver_name = record.receiverName;
   if (record.receiptImage !== undefined) row.receipt_image = record.receiptImage;
@@ -382,6 +386,15 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const row = mapRecordToRow(updates);
+      if (updates.status !== undefined) {
+        const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
+          client.from('trademark_records').select('status').eq('id', id).maybeSingle()
+        );
+        if (statusReadError) throw new Error(`Could not verify the current workflow status: ${statusReadError.message}`);
+        if (!currentStatusRow) throw new Error('Case was not found while validating its workflow transition.');
+        const transition = validateWorkflowTransition(currentStatusRow.status, updates.status, updates);
+        if (!transition.valid) throw new Error(transition.error || 'This workflow transition is not allowed.');
+      }
       if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
         const { data: current, error: currentError } = await withSupabaseTimeout(
           client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
@@ -447,6 +460,7 @@ class SupabaseDBService {
     meta?: {
       dispatchedDate?: string;
       dispatchedNote?: string;
+      trackingId?: string;
       dispatchedImage?: string;
       dispatchedDocName?: string;
       dispatchedDocType?: string;
@@ -462,11 +476,22 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
+      const { data: currentRows, error: currentRowsError } = await withSupabaseTimeout(
+        client.from('trademark_records').select('id, status').in('id', ids)
+      );
+      if (currentRowsError) throw new Error(`Could not verify selected case statuses: ${currentRowsError.message}`);
+      if (!Array.isArray(currentRows) || currentRows.length !== ids.length) throw new Error('One or more selected cases could not be found; no workflow status was changed.');
+      for (const current of currentRows) {
+        const transition = validateWorkflowTransition(current.status, newStatus, meta || {});
+        if (!transition.valid) throw new Error(`Case #${current.id}: ${transition.error || 'Workflow transition not allowed.'} No selected cases were changed.`);
+      }
       const updatePayload: Record<string, any> = {
           status: newStatus,
           updated_at: new Date().toISOString(),
           ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),
+          ...(meta?.trackingId ? { tracking_id: meta.trackingId } : {}),
+          ...(meta?.dispatchedImage ? { dispatched_image: meta.dispatchedImage } : {}),
           ...(meta?.deliveredDate ? { delivered_date: meta.deliveredDate } : {}),
           ...(meta?.receiverName ? { receiver_name: meta.receiverName } : {}),
           ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
