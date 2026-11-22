@@ -237,7 +237,6 @@ export default function TrademarkApplicationPage() {
   const handleSeriesChange = (value: string) => {
     const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
     setSelectionMenu(normalized);
-    if (/^[A-Z][A-Z0-9]{0,7}$/.test(normalized)) void refreshCaseNumber(clientCode, normalized);
   };
 
   const handleClientSelect = (clientId: string) => {
