@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
+import { RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
@@ -37,7 +37,6 @@ import {
   Eye,
   Paperclip,
   ExternalLink,
-  FileSpreadsheet
 } from 'lucide-react';
 
 // Highlight query matches in text
@@ -1307,7 +1306,7 @@ export default function RecordsPage() {
 
       {/* =========================================================================
           FLOATING ACTION BUTTON (FAB)
-          Quick access to Import CSV, Open Help, and Toggle Settings
+          Quick access to Open Help and Workspace Settings
          ========================================================================= */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
         {fabOpen && (
@@ -1315,30 +1314,6 @@ export default function RecordsPage() {
             <div className="font-['DM_Mono',monospace] text-[0.68rem] font-bold tracking-[1px] uppercase text-[#666] pb-1 border-b border-[#ddd] w-full text-left">
               Quick Actions
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                handleImportCSVClick();
-              }}
-              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-[#C94A00]" />
-              <span>Import CSV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                handleExportCSV();
-              }}
-              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-[#0D9970]" />
-              <span>Export CSV</span>
-            </button>
 
             <button
               type="button"
