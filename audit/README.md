@@ -78,5 +78,6 @@ Add implementation commit(s), PR, deployment status, and any deviations after th
 - [ADR 0001: Adopt Architecture Decision Records](0001-adr-process.md)
 - [ADR 0002: Approved client and case naming rules](0002-approved-client-case-naming.md)
 - [ADR 0003: Initial system architecture baseline](0003-initial-architecture-baseline.md)
+- [ADR 0004: Phase-two workspace, series, workflow, and Drive plan](0004-phase-two-workspace-series-workflow-drive.md)
 
 New ADRs should be added to this index.
