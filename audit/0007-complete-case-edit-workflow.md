@@ -77,5 +77,8 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 ## 10. Implementation record
 
 - Implementation branch: `feat/complete-case-edit-workflow`.
-- Implementation commit/PR and verification evidence: pending.
+- **PR:** [#9 — Complete case editing and guarded workflow transitions](https://github.com/0utLawzz/Brandex-Workflow/pull/9) (draft/open; not merged).
+- **CI:** GitHub Actions run `45079927411` passed dependency audit, Apps Script syntax, ESLint, regression tests, Next.js production build, and required-document checks.
+- **Preview:** Vercel's latest READY preview on this branch is commit `cfed658f23dc913ccf74b9fe8c0725e685d99671`, which predates the final Edit Case UI changes. Subsequent preview attempts were canceled/blocked by Vercel's build-rate limit. The PR head has not received a complete preview deployment.
+- **Authenticated QA:** pending because the latest branch head does not have a current preview. Do not merge until a current preview is available and the Records editor/workflow is checked.
 - Production schema/data, Google Drive, Apps Script, and Vercel production configuration: not changed.
