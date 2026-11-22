@@ -534,7 +534,7 @@ class StandaloneDB {
         // Restore it so an export/import round-trip preserves X/A/N/B and the
         // original case identity instead of silently defaulting to series A.
         const caseReference = val(colCaseRef).toUpperCase();
-        const caseReferenceMatch = /^([A-Z][A-Z0-9]{0,7})(\d{1,3})-(\d{1,3})$/.exec(caseReference);
+        const caseReferenceMatch = /^([A-Z][A-Z0-9]{0,7}?)(\d{3})-(\d{3})$/.exec(caseReference);
         const legacyCaseReferenceMatch = /^(\d{1,3})-([A-Z][A-Z0-9]{0,7})-(\d{1,3})$/.exec(caseReference);
 
         maxId++;
