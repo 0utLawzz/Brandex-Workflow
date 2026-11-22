@@ -29,7 +29,8 @@ function addAsset(
 ) {
   if (typeof value !== 'string' || !value.trim()) return;
   const sourceUrl = value.trim();
-  if (!isDataUrl(sourceUrl) && !isHttpUrl(sourceUrl)) return;
+  // Keep every non-empty asset reference visible. Unknown schemes/paths are
+  // deliberately marked as missing bytes instead of being silently ignored.
   assets.push({
     assetId: `${recordId}:${source}:${assets.length + 1}`,
     recordId,
@@ -38,7 +39,8 @@ function addAsset(
     mimeType,
     sourceUrl,
     embedded: isDataUrl(sourceUrl),
-    // Data URLs are already embedded in the JSON record. External URLs are references only.
+    // Only data URLs contain file bytes in the JSON itself. HTTP(S) and unknown
+    // references require an external copy and therefore remain incomplete.
     bytesIncluded: isDataUrl(sourceUrl),
   });
 }
