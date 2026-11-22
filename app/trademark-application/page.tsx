@@ -8,6 +8,7 @@ import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
 import { supabaseDB } from '@/lib/supabase-db';
 import { buildGenerationRetryDraft } from '@/lib/generation-retry';
+import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
@@ -18,6 +19,8 @@ export default function TrademarkApplicationPage() {
 
   const [savedClients, setSavedClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState('');
+  const [selectedClientName, setSelectedClientName] = useState('');
+  const [selectedClientPrefix, setSelectedClientPrefix] = useState('A');
 
   const [classNo, setClassNo] = useState('3');
   const [classList] = useState(CLASS_DATA);
@@ -200,14 +203,7 @@ export default function TrademarkApplicationPage() {
 
       try {
         const res = await supabaseDB.getRecords();
-        let maxCase = 0;
-        res.records.forEach(r => {
-          if (r.caseNo) {
-            const num = parseInt(r.caseNo, 10);
-            if (!isNaN(num) && num > maxCase) maxCase = num;
-          }
-        });
-        setCaseNo(String(maxCase + 1).padStart(3, '0'));
+        setCaseNo(getNextCaseNumber(res.records, clientCode, selectionMenu));
       } catch (error) {
         setStatusType('error');
         setStatusMsg(error instanceof Error ? error.message : 'Cases could not be loaded from Supabase.');
@@ -216,11 +212,34 @@ export default function TrademarkApplicationPage() {
     fetchLatestCaseNo();
   }, [updateExpiry]);
 
+  const refreshCaseNumber = async (code: string, series: string) => {
+    try {
+      const result = await supabaseDB.getRecords();
+      setCaseNo(getNextCaseNumber(result.records, code, series));
+    } catch (error) {
+      setStatusType('error');
+      setStatusMsg(error instanceof Error ? error.message : 'Could not calculate the next case number.');
+    }
+  };
+
+  const handleSeriesChange = (value: string) => {
+    const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    setSelectionMenu(normalized);
+    if (/^[A-Z][A-Z0-9]{0,7}$/.test(normalized)) void refreshCaseNumber(clientCode, normalized);
+  };
+
   const handleClientSelect = (clientId: string) => {
     setSelectedClientId(clientId);
     const client = savedClients.find(c => String(c.id) === clientId);
     if (client) {
-      if (client.client_code) setClientCode(client.client_code);
+      const prefix = String(client.client_prefix || 'A').toUpperCase();
+      setSelectedClientPrefix(prefix);
+      setSelectedClientName(client.client_name || client.name || '');
+      setSelectionMenu(prefix);
+      if (client.client_code) {
+        setClientCode(String(client.client_code).replace(/\D/g, '').padStart(3, '0'));
+        void refreshCaseNumber(String(client.client_code), prefix);
+      }
       if (client.client_name) setAppName(client.client_name);
       if (client.father_name) setAppSo(client.father_name);
       if (client.trading_as) setAppTrade(client.trading_as);
@@ -230,11 +249,7 @@ export default function TrademarkApplicationPage() {
   };
 
   const handleCnicInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let digits = e.target.value.replace(/\D/g, '').slice(0, 13);
-    let formatted = digits;
-    if (digits.length > 5) formatted = digits.slice(0, 5) + '-' + digits.slice(5);
-    if (digits.length > 12) formatted = digits.slice(0, 5) + '-' + digits.slice(5, 12) + '-' + digits.slice(12);
-    setAppCnic(formatted);
+    setAppCnic(formatPakistaniCnic(e.target.value));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -336,7 +351,7 @@ export default function TrademarkApplicationPage() {
       const missing = [
         !folder.trim() && 'case folder',
         !/^\d{1,3}$/.test(clientCode) && 'client code',
-        !/^[XANB]$/.test(selectionMenu.toUpperCase()) && 'case series (X, A, N, or B)',
+        !/^[A-Z][A-Z0-9]{0,7}$/.test(selectionMenu.toUpperCase()) && 'case series (A, X, N, B or custom)',
         !/^\d{1,3}$/.test(caseNo) && 'case number',
         !classNo.trim() && 'class',
         !appName.trim() && 'applicant name',
@@ -358,9 +373,11 @@ export default function TrademarkApplicationPage() {
     const payload: Record<string, any> = {
       action: 'generateFromForm',
       category: selectedCategory,
-      selectionMenu,
-      clientCode,
-      caseNo,
+      selectionMenu: normalizeCaseSeries(selectionMenu),
+      clientCode: String(clientCode).replace(/\D/g, '').padStart(3, '0'),
+      caseNo: String(caseNo).replace(/\D/g, '').padStart(3, '0'),
+      clientName: selectedClientName,
+      clientPrefix: selectedClientPrefix,
       folder: folder.trim().toUpperCase(),
       tm: tm.trim().toUpperCase(),
       classNo: classNo.trim().toUpperCase(),
@@ -437,9 +454,9 @@ export default function TrademarkApplicationPage() {
         const newRec = await supabaseDB.addRecord({
         clientId: selectedClientId ? Number(selectedClientId) : undefined,
         category: selectedCategory,
-        selectionMenu,
-        clientCode,
-        caseNo,
+        selectionMenu: normalizeCaseSeries(selectionMenu),
+        clientCode: String(clientCode).replace(/\D/g, '').padStart(3, '0'),
+        caseNo: String(caseNo).replace(/\D/g, '').padStart(3, '0'),
         tm: tm.trim().toUpperCase() || 'PENDING',
         folder: folder.trim().toUpperCase(),
         classNo: classNo.trim().toUpperCase(),
@@ -459,7 +476,7 @@ export default function TrademarkApplicationPage() {
         conAddr: conAdd.trim().toUpperCase(),
         img: payload.imageBase64 || '',
         noImg,
-        filingProcess: 'PENDING',
+        filingProcess: 'APPLICATION FILED',
         });
         if (!newRec?.id) throw new Error('Supabase did not confirm the new case ID.');
         recordSavedToSupabase = true;
@@ -682,16 +699,26 @@ export default function TrademarkApplicationPage() {
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">
                     Selection Menu <span className="text-[#C94A00]">*</span>
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="brandex-case-series"
+                    required
+                    maxLength={8}
                     value={selectionMenu}
-                    onChange={e => setSelectionMenu(e.target.value)}
-                    className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] cursor-pointer font-bold"
-                  >
-                    <option value="X">X — Option X</option>
-                    <option value="A">A — Option A</option>
-                    <option value="N">N — Option N</option>
-                    <option value="B">B — Option B</option>
-                  </select>
+                    onChange={e => handleSeriesChange(e.target.value)}
+                    onBlur={() => {
+                      try {
+                        const normalized = normalizeCaseSeries(selectionMenu);
+                        setSelectionMenu(normalized);
+                        void refreshCaseNumber(clientCode, normalized);
+                      } catch (error) {
+                        setStatusType('error');
+                        setStatusMsg(error instanceof Error ? error.message : 'Invalid case series.');
+                      }
+                    }}
+                    className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] font-bold"
+                  />
+                  <datalist id="brandex-case-series"><option value="X" /><option value="A" /><option value="N" /><option value="B" /></datalist>
                 </div>
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">
@@ -721,6 +748,9 @@ export default function TrademarkApplicationPage() {
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#E8DFC7] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] font-bold"
                   />
                 </div>
+              </div>
+              <div className="mt-3 text-sm font-['DM_Mono',monospace] text-[#0C0C0C]">
+                Case Reference Preview: <strong className="text-[#C94A00]">{formatCaseReference(selectionMenu, clientCode, caseNo) || '—'}</strong>
               </div>
             </div>
 

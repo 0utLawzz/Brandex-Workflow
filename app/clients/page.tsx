@@ -6,6 +6,7 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { standaloneDB, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
+import { formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Trash2, Plus, Users, ShieldCheck, Download, Upload, Pencil, X, Database, FileSpreadsheet } from 'lucide-react';
 
 export default function ClientsPage() {
@@ -13,6 +14,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [dbSource, setDbSource] = useState<'supabase' | 'local'>('supabase');
   const [clientCode, setClientCode] = useState('646');
+  const [clientPrefix, setClientPrefix] = useState('A');
   const [clientName, setClientName] = useState('');
   const [fatherName, setFatherName] = useState('');
   const [tradingAs, setTradingAs] = useState('');
@@ -57,6 +59,7 @@ export default function ClientsPage() {
     setEditingClient(client);
     setEditFormData({
       client_code: client.client_code,
+      client_prefix: client.client_prefix || 'A',
       client_name: client.client_name,
       father_name: client.father_name || '',
       trading_as: client.trading_as || '',
@@ -69,14 +72,20 @@ export default function ClientsPage() {
   const handleSaveEditedClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient || !editFormData.client_name?.trim()) return;
+    const editCnic = formatPakistaniCnic(editFormData.cnic || '');
+    if (editCnic && !isValidPakistaniCnic(editCnic)) {
+      setErrorMsg('CNIC must contain exactly 13 digits (XXXXX-XXXXXXX-X).');
+      return;
+    }
     setEditSaving(true);
     try {
       const updated = await supabaseDB.updateClient(editingClient.id, {
-        client_code: (editFormData.client_code || '').trim(),
+        client_code: (editFormData.client_code || '').replace(/\D/g, '').slice(0, 3).padStart(3, '0'),
+        client_prefix: String(editFormData.client_prefix || 'A').trim().toUpperCase(),
         client_name: (editFormData.client_name || '').trim().toUpperCase(),
         father_name: (editFormData.father_name || '').trim().toUpperCase(),
         trading_as: (editFormData.trading_as || '').trim().toUpperCase(),
-        cnic: (editFormData.cnic || '').trim(),
+        cnic: editCnic,
         address: (editFormData.address || '').trim().toUpperCase(),
         consultant_name: (editFormData.consultant_name || '').trim().toUpperCase()
       });
@@ -95,17 +104,27 @@ export default function ClientsPage() {
   const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim()) return;
+    const newCnic = formatPakistaniCnic(cnic);
+    if (newCnic && !isValidPakistaniCnic(newCnic)) {
+      setErrorMsg('CNIC must contain exactly 13 digits (XXXXX-XXXXXXX-X).');
+      return;
+    }
+    if (!/^\d{1,3}$/.test(clientCode.trim())) {
+      setErrorMsg('Client code must contain 1 to 3 digits.');
+      return;
+    }
     setSubmitting(true);
     setSuccessMsg('');
     setErrorMsg('');
 
     try {
       const added = await supabaseDB.addClient({
-        client_code: clientCode.trim(),
+        client_code: clientCode.trim().padStart(3, '0'),
+        client_prefix: clientPrefix.trim().toUpperCase(),
         client_name: clientName.trim().toUpperCase(),
         father_name: fatherName.trim().toUpperCase(),
         trading_as: tradingAs.trim().toUpperCase(),
-        cnic: cnic.trim(),
+        cnic: newCnic,
         address: address.trim().toUpperCase(),
         consultant_name: consultantName.trim().toUpperCase(),
         total_cases: 0,
@@ -303,6 +322,13 @@ export default function ClientsPage() {
 
           <form onSubmit={handleAddClient} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
+              <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">Client Prefix / Category *</label>
+              <input type="text" list="brandex-client-prefixes" required maxLength={8} value={clientPrefix}
+                onChange={e => setClientPrefix(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))}
+                className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['DM_Mono',monospace] font-bold rounded-[4px]" />
+              <datalist id="brandex-client-prefixes"><option value="A" /><option value="X" /><option value="N" /><option value="B" /></datalist>
+            </div>
+            <div>
               <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">
                 Client Code (3 Digits) *
               </label>
@@ -365,7 +391,8 @@ export default function ClientsPage() {
                 type="text"
                 placeholder="37405-1234567-9"
                 value={cnic}
-                onChange={e => setCnic(e.target.value)}
+                maxLength={15}
+                onChange={e => setCnic(formatPakistaniCnic(e.target.value))}
                 className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['DM_Mono',monospace] rounded-[4px]"
               />
             </div>
@@ -443,7 +470,7 @@ export default function ClientsPage() {
                   {clients.map((c, idx) => (
                     <tr key={idx} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
                       <td className="p-2.5 font-['DM_Mono',monospace] font-bold text-[#C94A00]">
-                        #{c.client_code}
+                        {c.client_prefix || 'A'}-{String(c.client_code).padStart(3, '0')}
                       </td>
                       <td className="p-2.5 font-bold">
                         <div>{c.client_name}</div>
@@ -508,6 +535,13 @@ export default function ClientsPage() {
             <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
               <div className="grid grid-cols-3 gap-3">
                 <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Prefix</label>
+                  <input type="text" list="brandex-edit-prefixes" maxLength={8} value={editFormData.client_prefix || 'A'}
+                    onChange={e => setEditFormData({ ...editFormData, client_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
+                    className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
+                  <datalist id="brandex-edit-prefixes"><option value="A" /><option value="X" /><option value="N" /><option value="B" /></datalist>
+                </div>
+                <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Code</label>
                   <input
                     type="text"
@@ -545,7 +579,8 @@ export default function ClientsPage() {
                     type="text"
                     placeholder="35202-1234567-1"
                     value={editFormData.cnic || ''}
-                    onChange={e => setEditFormData({ ...editFormData, cnic: e.target.value })}
+                    maxLength={15}
+                    onChange={e => setEditFormData({ ...editFormData, cnic: formatPakistaniCnic(e.target.value) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded"
                   />
                 </div>
