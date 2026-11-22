@@ -210,3 +210,12 @@ Required before marking implementation complete:
 - Data impact: none. No historical case references, client prefixes, series, or existing rows were changed. No Supabase migration, Drive mutation, Apps Script deployment, or production deployment was performed.
 - Verification: pending CI on the consolidated PR; visual production QA remains outstanding.
 - Remaining scope: independent Series settings, complete case workflow/edit parity, pagination/breadcrumbs, Google Picker, schema reconciliation, and full round-trip backup/restore.
+
+
+## Consolidated UI pass — merged and deployed (2026-11-22)
+
+- PR #6 merged into `main`: merge commit `f105945a31746af98710580d92330396b1236122`.
+- Vercel production deployment for the merge commit is `READY`: https://brandex-workflow-qzaukytbp-projectsb.vercel.app
+- The preview build passed. Authenticated visual QA and end-to-end verification remain outstanding.
+- No Supabase schema/record changes, Google Drive operations, or Apps Script deployment were made by this UI pass.
+- Remaining Phase 2 work is still open: independent Series management, complete workflow/edit parity, pagination, Google Picker, schema reconciliation, and full round-trip backup/restore.
