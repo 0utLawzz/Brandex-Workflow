@@ -7,6 +7,7 @@ import Footer from '@/app/components/Footer';
 import { Settings, Save, RotateCcw, CheckCircle2, Table2, Users, FilePlus2, ShieldCheck, Database } from 'lucide-react';
 import DataBackupModal from '@/app/components/DataBackupModal';
 import ClientCsvTools from '@/app/components/ClientCsvTools';
+import CaseCsvTools from '@/app/components/CaseCsvTools';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -85,6 +86,7 @@ export default function SettingsPage() {
         </section>
 
         <ClientCsvTools />
+        <div className="mt-5"><CaseCsvTools /></div>
 
         <section className="my-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
           <h2 className="mb-2 flex items-center gap-2 text-lg font-bold"><Database className="h-5 w-5 text-[#C94A00]" /> Backup &amp; restore</h2>
