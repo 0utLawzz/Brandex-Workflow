@@ -168,6 +168,16 @@ export default function TrademarkApplicationPage() {
           setClientCode(draft.clientCode);
           setCaseNo(draft.caseNo);
           setSelectedClientId(draft.clientId ? String(draft.clientId) : '');
+          if (draft.clientId) {
+            const retryClients = await supabaseDB.getClients();
+            const retryClient = retryClients.clients.find(client => String(client.id) === String(draft.clientId));
+            if (retryClient) {
+              setSelectedClientPrefix(retryClient.client_prefix || 'A');
+              setSelectedClientName(retryClient.client_name || '');
+              setSelectedClientCity(retryClient.city || '');
+              setSelectedClientFolderReference(retryClient.folder_reference || '');
+            }
+          }
           setClassNo(draft.classNo);
           setClassDesc(draft.classDesc);
           setConName(draft.conName);
@@ -535,7 +545,7 @@ export default function TrademarkApplicationPage() {
           const savedLocation = 'Case saved to Supabase; documents saved in Google Drive.';
           setStatusMsg(
             `✅ Success! Documents generated. ${savedLocation}\n` +
-            `${payload.folder} (Client: ${clientCode} · Case #${caseNo})\n` +
+            `${payload.folder} (Case Ref: ${formatCaseReference(selectionMenu, clientCode, caseNo)})\n` +
             `Applicant: ${payload.appName} | Status: ${payload.status}\n` +
             (payload.trackingId ? `Tracking ID: ${payload.trackingId}` : '')
           );
@@ -745,7 +755,11 @@ export default function TrademarkApplicationPage() {
                     maxLength={3}
                     placeholder="646"
                     value={clientCode}
-                    onChange={e => setClientCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                    onChange={e => {
+                      const code = e.target.value.replace(/\D/g, '').slice(0, 3);
+                      setClientCode(code);
+                      if (code.length === 3 && /^[A-Z][A-Z0-9]{0,7}$/.test(selectionMenu)) void refreshCaseNumber(code, selectionMenu);
+                    }}
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px]"
                   />
                 </div>
