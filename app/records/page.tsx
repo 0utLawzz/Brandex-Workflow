@@ -9,6 +9,7 @@ import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
+import { readWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
   Square,
@@ -110,7 +111,6 @@ export default function RecordsPage() {
   // Floating Action Button & Modals
   const [fabOpen, setFabOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
-  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   // Workflow Stage Transition Modals
   // Approved/Rejected modal
@@ -185,11 +185,15 @@ export default function RecordsPage() {
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const preferences = readWorkspacePreferences();
+    setPageSize(preferences.pageSize);
+    setShowCharts(preferences.showLawFirmWidget);
     loadAllRecords();
   }, []);
 
   const loadAllRecords = async () => {
     setLoading(true);
+    setErrorMsg('');
     try {
       const recordsResult = await supabaseDB.getRecords();
       const clientsResult = await supabaseDB.getClients();
@@ -786,8 +790,9 @@ export default function RecordsPage() {
         )}
 
         {errorMsg && (
-          <div className="p-3 bg-[#fee2e2] border-2 border-[#ef4444] text-[#991b1b] font-['DM_Mono',monospace] text-[0.8rem] rounded-[4px] font-bold mb-4">
-            {errorMsg}
+          <div role="alert" className="mb-4 flex flex-col gap-2 rounded-[4px] border-2 border-[#ef4444] bg-[#fee2e2] p-3 text-sm font-semibold text-[#991b1b] sm:flex-row sm:items-center sm:justify-between">
+            <span className="min-w-0 break-words">{errorMsg}</span>
+            <button type="button" onClick={loadAllRecords} disabled={loading} className="shrink-0 rounded border border-[#991b1b] px-3 py-1.5 text-xs font-bold disabled:opacity-50">{loading ? 'Retrying…' : 'Retry'}</button>
           </div>
         )}
 
@@ -1146,7 +1151,7 @@ export default function RecordsPage() {
            ========================================================================= */}
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] rounded-[6px] overflow-hidden mb-6">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[0.82rem]">
+            <table className="min-w-[760px] w-full border-collapse text-[0.78rem]">
               <thead>
                 <tr className="bg-[#0C0C0C] text-[#FAF6EE] border-b-2 border-[#0C0C0C]">
                   {/* Col 1: Tickmark Col */}
@@ -1175,11 +1180,6 @@ export default function RecordsPage() {
                     Case Reference
                   </th>
 
-                  {/* Col 4: Image Thumbnail */}
-                  <th className="hidden 2xl:table-cell p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase w-14">
-                    Logo
-                  </th>
-
                   {/* Col 5: Case Name */}
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
                     Case Name
@@ -1200,21 +1200,6 @@ export default function RecordsPage() {
                     Applicant
                   </th>
 
-                  {/* Col 9: Law Firm Name * */}
-                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Law Firm Name *
-                  </th>
-
-                  {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) */}
-                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Dispatched Date
-                  </th>
-
-                  {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
-                  <th className="hidden 2xl:table-cell p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Delivered Date
-                  </th>
-
                   {/* Actions */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
                     Actions
@@ -1225,14 +1210,14 @@ export default function RecordsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={12} className="p-12 text-center font-['DM_Mono',monospace]">
+                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace]">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C94A00]" />
                       Loading standalone cases...
                     </td>
                   </tr>
                 ) : pageRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
+                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
                       No cases match current filter.
                       <div className="mt-2">
                         <button
@@ -1254,7 +1239,6 @@ export default function RecordsPage() {
                     const isSelected = selectedIds.includes(r.id);
                     const classPure = formatClassPure(r.classNo);
                     const shortDate = formatShortDate(r.date);
-                    const lawFirm = r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES';
 
                     return (
                       <tr
@@ -1287,26 +1271,6 @@ export default function RecordsPage() {
                           <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
                             {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '', r.caseNo || String(idx + 1).padStart(3, '0'))}
                           </span>
-                        </td>
-
-                        {/* Col 4: Image Thumbnail */}
-                        <td className="hidden 2xl:table-cell p-2.5 text-center">
-                          {r.img && r.img.startsWith('data:image') ? (
-                            <div className="w-9 h-9 border border-[#0C0C0C] rounded bg-white p-0.5 overflow-hidden mx-auto shadow-[1px_1px_0_#0C0C0C]">
-                              <Image
-                                src={r.img}
-                                alt="Logo"
-                                width={36}
-                                height={36}
-                                className="object-contain w-full h-full"
-                                referrerPolicy="no-referrer"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-9 h-9 border border-[#0C0C0C] rounded bg-[#E8DFC7] flex items-center justify-center font-['DM_Mono',monospace] text-[0.6rem] font-bold text-[#666] mx-auto shadow-[1px_1px_0_#0C0C0C]">
-                              TM
-                            </div>
-                          )}
                         </td>
 
                         {/* Col 5: Case Name */}
@@ -1346,78 +1310,11 @@ export default function RecordsPage() {
                           )}
                         </td>
 
-                        {/* Col 9: Law Firm Name * */}
-                        <td className="hidden 2xl:table-cell p-2.5 text-[0.76rem] font-medium font-['DM_Mono',monospace] max-w-[180px] truncate" title={lawFirm}>
-                          <HighlightText text={lawFirm} query={searchQuery} />
-                        </td>
-
-                        {/* Col 10: Dispatched Date (ddd DD-MMM-YYYY) & Proof of Sending */}
-                        <td className="hidden 2xl:table-cell p-2.5 font-['DM_Mono',monospace] text-[0.72rem] text-[#0C0C0C] whitespace-nowrap">
-                          {r.dispatchedDate ? (
-                            <div>
-                              <div className="font-bold text-[#0284c7]">{r.dispatchedDate}</div>
-                              {r.trackingId && (
-                                <div className="text-[0.65rem] text-[#666]">Trk: {r.trackingId}</div>
-                              )}
-                              {r.dispatchedImage && (
-                                <button
-                                  type="button"
-                                  onClick={() => setProofModal({
-                                    open: true,
-                                    title: `Dispatch Proof / Receipt - Case ${r.folder} (${r.tm || 'No TM'})`,
-                                    url: r.dispatchedImage!,
-                                    docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`,
-                                    docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg')
-                                  })}
-                                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.65rem] font-bold bg-[#e0f2fe] text-[#0369a1] border border-[#0284c7] rounded hover:bg-[#bae6fd] cursor-pointer"
-                                  title="View Dispatch Receipt / Proof of Sending"
-                                >
-                                  <Receipt className="w-3 h-3 text-[#0284c7]" />
-                                  <span>Receipt Proof ✓</span>
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[#999]">—</span>
-                          )}
-                        </td>
-
-                        {/* Col 11: Delivered Date (DD-MMM-YY + Receiver name) */}
-                        <td className="hidden 2xl:table-cell p-2.5 font-['DM_Mono',monospace] text-[0.72rem] whitespace-nowrap">
-                          {r.deliveredDate ? (
-                            <div>
-                              <span className="font-bold text-[#0D9970]">{r.deliveredDate}</span>
-                              {r.receiverName && (
-                                <span className="text-[0.65rem] text-[#333] ml-1 font-normal">
-                                  ({r.receiverName})
-                                </span>
-                              )}
-                              {r.receiptImage && (
-                                <button
-                                  type="button"
-                                  onClick={() => setProofModal({
-                                    open: true,
-                                    title: `Delivery Receipt - Case ${r.folder}`,
-                                    url: r.receiptImage!,
-                                    docName: `delivery_receipt_${r.folder}`,
-                                    docType: 'image/jpeg'
-                                  })}
-                                  className="ml-1 inline-flex items-center gap-0.5 text-[0.65rem] text-[#15803d] font-bold bg-[#dcfce7] border border-[#16a34a] px-1 py-0.5 rounded hover:bg-[#bbf7d0] cursor-pointer"
-                                  title="View Delivery Receipt"
-                                >
-                                  <FileText className="w-2.5 h-2.5" />
-                                  <span>Receipt ✓</span>
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[#999]">—</span>
-                          )}
-                        </td>
-
                         {/* Col 12: Actions */}
                         <td className="p-2.5 text-center whitespace-nowrap">
                           <div className="flex items-center justify-center gap-1">
+                            {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1.5 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label="View dispatch proof"><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
+                            {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1.5 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label="View delivery receipt"><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
                             {((r.status || 'PENDING').toUpperCase().includes('PENDING') || (r.status || '').toUpperCase().includes('REVIEW')) && (
                               <Link
                                 href={`/trademark-application?retryId=${encodeURIComponent(String(r.id))}&retryFolder=${encodeURIComponent(r.folder || '')}&retryTm=${encodeURIComponent(r.tm || '')}`}
@@ -1564,17 +1461,10 @@ export default function RecordsPage() {
               <span>Open Help &amp; Rules</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                setSettingsModalOpen(true);
-              }}
-              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
-            >
+            <Link href="/settings" onClick={() => setFabOpen(false)} className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded">
               <Settings className="w-4 h-4 text-[#666]" />
-              <span>Toggle Settings</span>
-            </button>
+              <span>Workspace Settings</span>
+            </Link>
           </div>
         )}
 
@@ -2242,68 +2132,6 @@ export default function RecordsPage() {
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0C0C0C] text-[#FAF6EE] rounded cursor-pointer"
               >
                 Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =========================================================================
-          DIALOG 6: SETTINGS MODAL
-         ========================================================================= */}
-      {settingsModalOpen && (
-        <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-sm w-full p-6 relative">
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-              <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
-                <Settings className="w-5 h-5 text-[#666]" />
-                CMS Preferences
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSettingsModalOpen(false)}
-                className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 font-['Space_Grotesk'] text-[0.85rem]">
-              <div className="flex items-center justify-between">
-                <span>Show Law Firm Widget:</span>
-                <input
-                  type="checkbox"
-                  checked={showCharts}
-                  onChange={e => setShowCharts(e.target.checked)}
-                  className="w-4 h-4 cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span>Page Size:</span>
-                <select
-                  value={pageSize}
-                  onChange={e => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="p-1 border border-[#0C0C0C] bg-white rounded font-bold font-['DM_Mono',monospace] text-[0.75rem]"
-                >
-                  <option value={10}>10 rows</option>
-                  <option value={25}>25 rows</option>
-                  <option value={50}>50 rows</option>
-                  <option value={100}>100 rows</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-4 border-t-2 border-[#0C0C0C] mt-5">
-              <button
-                type="button"
-                onClick={() => setSettingsModalOpen(false)}
-                className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0C0C0C] text-[#FAF6EE] rounded cursor-pointer"
-              >
-                Save
               </button>
             </div>
           </div>

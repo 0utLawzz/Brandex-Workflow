@@ -78,7 +78,7 @@ export async function middleware(request: NextRequest) {
 
     // For page requests, redirect to /login so the user can easily log in inside the iframe
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('from', pathname);
+    loginUrl.searchParams.set('from', pathname === '/' ? '/records' : pathname);
     return NextResponse.redirect(loginUrl);
 }
 
