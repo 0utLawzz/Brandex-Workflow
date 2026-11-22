@@ -518,6 +518,6 @@ Before the live correction below, no production database, Supabase project, Apps
 
 ### Verification update — PR #9
 
-- GitHub Actions run `45079927411` completed successfully: dependency audit, Apps Script syntax, ESLint, all tests including the new workflow transition suite, Next.js production build, and required-document checks passed.
+- GitHub Actions run `45080110719` passed on code commit `a70bd930e0cd73df6407aa9495a60dd9536fa714`: dependency audit, Apps Script syntax, ESLint, all tests including the new workflow transition suite, Next.js production build, and required-document checks. The later commit is documentation-only.
 - Vercel preview status is not equivalent to CI: the latest READY branch preview is commit `cfed658f23dc913ccf74b9fe8c0725e685d99671`, before the final Edit Case UI additions. Later preview builds were canceled/blocked by the Vercel build-rate limit. The current PR head does not have a verified preview URL.
 - PR #9 remains draft/open. Authenticated UI QA and merge are still pending; do not merge or deploy to production based only on the successful CI run.
