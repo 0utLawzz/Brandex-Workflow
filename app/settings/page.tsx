@@ -4,7 +4,9 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { Settings, Save, RotateCcw, CheckCircle2, Table2, Users, FilePlus2, ShieldCheck } from 'lucide-react';
+import { Settings, Save, RotateCcw, CheckCircle2, Table2, Users, FilePlus2, ShieldCheck, Database } from 'lucide-react';
+import DataBackupModal from '@/app/components/DataBackupModal';
+import ClientCsvTools from '@/app/components/ClientCsvTools';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -12,6 +14,7 @@ export default function SettingsPage() {
   const [preferences, setPreferences] = useState<WorkspacePreferences>(DEFAULT_WORKSPACE_PREFERENCES);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [showBackupModal, setShowBackupModal] = useState(false);
 
   useEffect(() => { setPreferences(readWorkspacePreferences()); }, []);
 
@@ -72,13 +75,21 @@ export default function SettingsPage() {
         <section className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
           <h2 className="mb-3 text-lg font-bold">Client &amp; case naming</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Case reference</span><div className="mt-1 font-['DM_Mono',monospace] text-xl font-bold text-[#C94A00]">A005-010</div><p className="mt-1 text-xs text-[#666]">Prefix + 3-digit client code + 3-digit case number.</p></div>
+            <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Case reference</span><div className="mt-1 font-['DM_Mono',monospace] text-xl font-bold text-[#C94A00]">N-333-001</div><p className="mt-1 text-xs text-[#666]">Client prefix + client code + case number. Series stays separate.</p></div>
             <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Numbering</span><div className="mt-1 text-base font-bold">Per client + series</div><p className="mt-1 text-xs text-[#666]">Har client aur series ka apna sequence.</p></div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <Link href="/clients" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold"><Users className="h-4 w-4" /> Manage client prefixes</Link>
-            <Link href="/trademark-application" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold"><FilePlus2 className="h-4 w-4" /> Create / edit case series</Link>
+            <Link href="/trademark-application" className="inline-flex items-center gap-2 rounded border border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold"><FilePlus2 className="h-4 w-4" /> Create case</Link>
           </div>
+        </section>
+
+        <ClientCsvTools />
+
+        <section className="my-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-bold"><Database className="h-5 w-5 text-[#C94A00]" /> Backup &amp; restore</h2>
+          <p className="mb-3 text-xs text-[#666]">Download or review the existing backup package. Keep your separate historical backup unchanged.</p>
+          <button type="button" onClick={() => setShowBackupModal(true)} className="inline-flex items-center gap-2 rounded border-2 border-[#0C0C0C] bg-[#C94A00] px-4 py-2.5 text-sm font-bold text-white"><ShieldCheck className="h-4 w-4" /> Open backup tools</button>
         </section>
 
         <section className="mb-6 rounded-lg border border-[#0C0C0C]/20 bg-[#E8DFC7] p-4">
@@ -91,6 +102,7 @@ export default function SettingsPage() {
         </div>
       </main>
       <Footer />
+      <DataBackupModal isOpen={showBackupModal} onClose={() => setShowBackupModal(false)} />
     </div>
   );
 }
