@@ -333,7 +333,7 @@ Before the live correction below, no production database, Supabase project, Apps
 
 ### 2026-11-22 Phase 0 — initial read-only source and Supabase audit
 
-<badge>PARTIAL — no production changes</badge>
+**PARTIAL — no production changes**
 
 **Confirmed live Supabase baseline**
 - Project: `pjthtvkzuthxwpvcdqxy` (Brandex-Workflow), `ACTIVE_HEALTHY`, PostgreSQL `17.11.0.018`.
