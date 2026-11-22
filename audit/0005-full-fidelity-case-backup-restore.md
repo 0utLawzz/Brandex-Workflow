@@ -90,8 +90,8 @@ Do not test against production. Retain the original backup and a separately veri
 
 - **Implementation branch:** feat/phase2-backup-integrity-first.
 - **Current status:** first incremental implementation committed on feat/phase2-backup-integrity-first. Versioned package and asset-manifest coverage checks are in place; cloud restore is still incomplete.
-- **Implementation commit(s):** see branch history for the versioned backup package, asset manifest, backup UI warnings, and tests.
-- **Tests:** added; CI result pending.
+- **Implementation commit(s):** branch feat/phase2-backup-integrity-first; latest verified implementation commit before this ADR update: 8eaadee0803cdecd4ee2116bd3676a6ab6fa4767. PR #5: https://github.com/0utLawzz/Brandex-Workflow/pull/5.
+- **Tests:** GitHub Actions run 45040265099 passed: 32/32 tests, dependency audit (0 vulnerabilities), Apps Script syntax, lint (0 errors; one pre-existing React Hook warning), Next.js production build, and required-document checks.
 - **Known gaps:** history/document rows are not yet restored; the live schema lacks client_id; external Google Drive file bytes are not copied. This increment must not be described as full backup/restore.
 - **Production data/files changed:** No.
 - Update this section after each implementation PR with verified test evidence and remaining gaps.
