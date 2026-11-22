@@ -153,6 +153,21 @@ No source/runtime changes are included in this proposed ADR commit.
 
 ## 8. Verification
 
+### Initial read-only audit evidence (2026-11-22)
+
+- Connected Supabase project: `pjthtvkzuthxwpvcdqxy`, status `ACTIVE_HEALTHY`, PostgreSQL `17.11.0.018`.
+- Current row counts: 6 clients, 480 trademark records, 131 history rows, and 26 document-reference rows.
+- RLS is enabled on all four business tables; a read-only `pg_policies` query returned no policies for those tables. The current app's protected server-side service-role API remains the intended access path.
+- All 6 current clients have a non-empty client prefix and client code.
+- A read-only duplicate scan for populated client-code + series + case-number tuples returned no duplicate groups.
+- Current status pairs are mixed: 420 records have `status=DISPATCHED` and `filing_process=DISPATCHED`; 50 are DELIVERED/DELIVERED; 4 PENDING/PENDING; 4 REJECTED/REJECTED; 1 APPROVED/APPLICATION FILED; 1 IN REVIEW/APPLICATION FILED. This confirms that the two tracks are not consistently separated in current data. Do not mass-rewrite these values without a reviewed mapping.
+- Live `trademark_records` does not currently expose `client_id`, `dispatched_image`, `dispatched_doc_name`, or `dispatched_doc_type` columns, even though the code/schema template references some of these concepts. The only current migration file adds client folder metadata and the uniqueness index; it does not add those record columns.
+- The live schema has 480 records, while historical progress notes refer to earlier totals. Use current live read-only results as the baseline for this phase.
+- `supabase_schema.sql` still contains a project URL comment and placeholder JWT reference for a different project ref (`zbkgerbdnjmctqqnoqnd)); the application default URL and connected Supabase project use `pjthtvkzuthxwpvcdqxy`. Correct the stale schema comment/placeholder during the schema reconciliation phase; do not use the placeholder key.
+- Supabase's current Data API model requires both role grants and RLS policies for direct Data API access. The current app uses protected server-side service-role API routes; any new tables must be granted only to the necessary roles and protected with RLS. The October 30, 2026 default-grant change means new public tables should not be assumed to be exposed automatically.
+
+These checks were read-only. They did not change schema, rows, policies, or deployments.
+
 Required before marking implementation complete:
 
 - Unit tests for reference formatting, series independence, per-client/per-series numbering, and duplicate prevention.
