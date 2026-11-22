@@ -265,3 +265,67 @@ Before the live correction below, no production database, Supabase project, Apps
 - Full local verification passed: 22/22 tests, lint, type check, Apps Script syntax, diff check, and production build.
 - End-to-end production retry is now verified on existing Supabase case ID 242 (client 889, series X, case 1): the authenticated Records/form UI returned success; Apps Script created/reused the two Google Docs; Supabase stores two unique Google Docs references for that record; Drive metadata confirms both TM-1 and TM-48 files exist. The user confirmed the documents are inside the `889` folder shown in their Drive screenshot. The case count remains 474 and case 242's serial/status remain unchanged, so retry created no duplicate case and retained `DISPATCHED` workflow status.
 - Final current validation: `npm test` 22/22 pass; lint, TypeScript, Apps Script syntax, `git diff --check`, and production build pass. Latest application deployment is READY. Production data now has 474 migrated case rows and 2 generated document references for the verified retry. The source Google Sheet remains unchanged; Apps Script/Drive are used for document generation only.
+
+
+---
+
+## 2026-11-22 Phase-two user requirements and implementation handover
+
+### Current baseline verified for this phase
+
+- Current `main` commit at planning time: `d2b38ad2561078117783d8e7fc5188e2dcf60ef3`.
+- PR #1 (client/case naming and workflow), PR #2 (ADR process), and PR #3 (Records-first UI) are all merged. PR #1 merge was explicitly verified through GitHub PR metadata; its merge commit is `473da572b3ca4372cba80644aef30e14fd21eba8`.
+- Current main commit's GitHub combined status reports Vercel success.
+- Current source inspection confirms:
+  - `app/page.tsx` still renders a separate landing page with a large logo hero and quick links.
+  - `app/components/Navbar.tsx` currently has a circular logo, navigation order Records/Application/Clients/Settings/Home, and a visible Backup button.
+  - `app/settings/page.tsx` currently covers only a limited set of browser-local workspace preferences.
+  - `app/clients/page.tsx` currently exposes import/export controls, a large form, and an Address table column.
+  - `lib/case-reference.ts` currently builds the first reference segment from the case series, not the client category/prefix.
+  - `app/trademark-application/page.tsx` defaults the status field to `GENERATING APPLICATION`.
+  - `app/records/page.tsx` contains status transition, dispatch/delivery, pagination, and CSV import/export logic that must be regression-tested before editing.
+  - `lib/data.ts` contains law-firm/consultant master data suitable for reuse in a dropdown.
+  - `Code.gs` currently uses a configured main Drive folder ID; a user-selected Drive Picker folder flow is not yet verified.
+- Root `AGENT.md` was absent before this phase. It is now added on the planning branch as the agent operating guide and full implementation plan.
+- The existing `AGENT_PROGRESS.md` history has been preserved; this section is appended rather than replacing prior deployment/migration notes.
+
+### New user-approved clarifications
+
+- Visible reference is `N-333-001`: client category/prefix, client code, case number.
+- Series is a separate grouping field; it is not the client category and is not part of the visible three-segment reference.
+- Keep per-client + per-series case numbering unless a later ADR changes it.
+- A single client can contain multiple people/applicants and different applicant names across cases; applicant/person data remains case-specific.
+- Document generation outcome is separate from main application status.
+- Main application status defaults to `IN REVIEW`; approval/rejection follows review. Rejected cases do not proceed to dispatch. Approved cases remain approved until staff starts dispatch.
+- Dispatch asks for date and optionally proof image. Delivery retains tracking number and recipient/person details. All form fields, notes, job details, images, and attachments must be editable.
+- Records is the Home destination after login. Navigation order: Home, Clients, Cases, Create Case, Settings.
+- Settings is the home for brand identity, independent series management, backup/restore, import/export, spreadsheet template creation, display/sound/notification settings, and Drive setup.
+- UI should be compact, with breadcrumbs, pagination, expandable details, concise labels, boxed records alignment, and compact repository footer links.
+- New square/rounded logo mark and editable display name/prefix/tagline are required.
+- Drive Picker folder assignment and generation into the selected folder must be investigated and tested securely.
+- Spreadsheet template and CSV/JSON import/export must match the latest fields and be round-trip verified.
+
+### Documentation-first work completed on branch `feat/brandex-workflow-phase2-plan`
+
+- [x] Created proposed ADR 0004: `audit/0004-phase-two-workspace-series-workflow-drive.md`.
+- [x] Added ADR 0004 to `audit/README.md`.
+- [x] Created root `AGENT.md` with engineering constraints, approved rules, phased implementation checklist, Drive Picker setup prerequisites, and handover rules.
+- [x] Preserved all previous progress history and appended this phase-two baseline and handover.
+- [ ] Review documentation branch and open PR for the plan.
+- [ ] Implement Phase 0 source/runtime/schema audit.
+- [ ] Implement Phase 1 identity/reference/independent series.
+- [ ] Implement Phase 2 generation-vs-application workflow and complete edit support.
+- [ ] Implement Phase 3 navigation, breadcrumbs, pagination, compact page layouts.
+- [ ] Implement Phase 4 Settings, brand identity, backup/import/export, spreadsheet template, feedback preferences.
+- [ ] Implement Phase 5 Google Picker and selected-folder document generation.
+- [ ] Implement Phase 6 schema reconciliation/migration and import/export round-trip verification.
+- [ ] Implement Phase 7 full CI, handover, and authorized deployment verification.
+
+### Safety and deployment status for this phase
+
+- No application source code changed.
+- No Supabase schema or production records changed.
+- No Google Apps Script deployment or Google Drive file/folder changes performed.
+- No Vercel deployment performed.
+- The ADR is marked Proposed because implementation and migration design still require the Phase 0 audit.
+- Do not treat the plan branch as a production release. Continue from its branch after review; merge only after PR review and checks.
