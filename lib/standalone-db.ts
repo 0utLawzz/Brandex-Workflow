@@ -1,6 +1,7 @@
 'use client';
 
 import Papa from 'papaparse';
+import { createBackupPackage, validateBackupPackage } from './backup-package.ts';
 
 // =========================================================================
 // BRANDEX LAW ASSOCIATES — CSV AND BACKUP UTILITIES
@@ -80,6 +81,7 @@ export interface DocumentAttachment {
   file_name: string;
   file_type: string;
   file_url: string;
+  file_size?: number;
   created_at: string;
 }
 
@@ -799,15 +801,12 @@ class StandaloneDB {
   // BACKUP & RESTORE (FULL STANDALONE SOVEREIGNTY)
   // -------------------------------------------------------------
   public exportBackupJSON(dataOverrides: Partial<{ records: RecordItem[]; clients: ClientProfile[]; history: HistoryLog[]; documents: DocumentAttachment[] }> = {}): string {
-    const data = {
-      version: "2.0-standalone",
-      exportedAt: new Date().toISOString(),
-      appName: "Brandex Law Associates CMS",
+    const data = createBackupPackage({
       records: dataOverrides.records ?? this.getRecords(),
       clients: dataOverrides.clients ?? this.getClients(),
       history: dataOverrides.history ?? (this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]') : []),
       documents: dataOverrides.documents ?? (this.isBrowser() ? JSON.parse(localStorage.getItem(STORAGE_KEY_DOCS) || '[]') : [])
-    };
+    });
     return JSON.stringify(data, null, 2);
   }
 
@@ -838,26 +837,33 @@ class StandaloneDB {
     }
   }
 
-  public parseBackupJSON(jsonStr: string): { success: boolean; message: string; count: number; records?: RecordItem[]; clients?: Array<Omit<ClientProfile, 'id'>> } {
-    try {
-      const data = JSON.parse(jsonStr);
-      if (!data || typeof data !== 'object') return { success: false, message: 'Invalid JSON format', count: 0 };
-      if (Array.isArray(data.records) && data.records.some((record: any) => !record || typeof record !== 'object' || !Number.isFinite(Number(record.id)))) {
-        return { success: false, message: 'Backup contains a case without a valid ID', count: 0 };
-      }
-      if (Array.isArray(data.clients) && data.clients.some((client: any) => !client || typeof client !== 'object' || !Number.isFinite(Number(client.id)))) {
-        return { success: false, message: 'Backup contains a client without a valid ID', count: 0 };
-      }
-      return {
-        success: true,
-        message: `Backup contains ${Array.isArray(data.records) ? data.records.length : 0} records`,
-        count: Array.isArray(data.records) ? data.records.length : 0,
-        records: Array.isArray(data.records) ? data.records : undefined,
-        clients: Array.isArray(data.clients) ? data.clients.map(({ id: _id, ...client }: ClientProfile) => client) : undefined
-      };
-    } catch (err: any) {
-      return { success: false, message: err.message || 'Failed to parse backup JSON', count: 0 };
+  public parseBackupJSON(jsonStr: string): {
+    success: boolean;
+    message: string;
+    count: number;
+    records?: RecordItem[];
+    clients?: ClientProfile[];
+    history?: HistoryLog[];
+    documents?: DocumentAttachment[];
+    assets?: Array<Record<string, any>>;
+    backupStatus?: 'complete' | 'partial';
+  } {
+    const validated = validateBackupPackage(jsonStr);
+    if (!validated.success || !validated.data) {
+      return { success: false, message: validated.message, count: 0 };
     }
+    const data = validated.data;
+    return {
+      success: true,
+      message: validated.message,
+      count: Array.isArray(data.records) ? data.records.length : 0,
+      records: Array.isArray(data.records) ? data.records : [],
+      clients: Array.isArray(data.clients) ? data.clients : [],
+      history: Array.isArray(data.history) ? data.history : [],
+      documents: Array.isArray(data.documents) ? data.documents : [],
+      assets: Array.isArray(data.assets) ? data.assets : [],
+      backupStatus: data.backupStatus === 'complete' ? 'complete' : 'partial'
+    };
   }
 
   public clearAllData(): void {

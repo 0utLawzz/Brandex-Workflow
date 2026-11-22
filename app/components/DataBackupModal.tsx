@@ -13,7 +13,7 @@ interface DataBackupModalProps {
 
 export default function DataBackupModal({ isOpen, onClose, onDataChanged }: DataBackupModalProps) {
   const [importText, setImportText] = useState('');
-  const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
@@ -21,6 +21,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const handleExport = async () => {
     try {
       const json = await supabaseDB.getBackupSnapshot();
+      const parsed = JSON.parse(json);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -30,7 +31,9 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatusMsg({ text: 'Backup JSON downloaded successfully!', type: 'success' });
+      setStatusMsg(parsed.backupStatus === 'partial'
+        ? { text: `Backup downloaded, but it is PARTIAL: ${parsed.counts?.assetsMissingBytes || 0} external file(s) are only saved as links; their file contents are not included. Keep the original files safe.`, type: 'warning' }
+        : { text: 'Backup JSON downloaded. Review the backup report before relying on it for recovery.', type: 'success' });
     } catch (e: any) {
       setStatusMsg({ text: e.message || 'Failed to export backup', type: 'error' });
     }
@@ -41,8 +44,8 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
       const restored = await supabaseDB.restoreBackupJSON(content);
       const importedClientCount = restored.clients;
       setStatusMsg({
-        text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved. History and document links were not restored.`,
-        type: 'success'
+        text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved, but history, document links, and external file contents were not restored. This is not a full recovery.`,
+        type: 'warning'
       });
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
@@ -103,7 +106,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
 
         {statusMsg && (
           <div className={`p-3 mb-4 border-2 border-[#0C0C0C] text-[0.8rem] font-['DM_Mono',monospace] font-bold ${
-            statusMsg.type === 'success' ? 'bg-[#0D9970] text-white' : 'bg-[#C94A00] text-white'
+            statusMsg.type === 'success' ? 'bg-[#0D9970] text-white' : statusMsg.type === 'warning' ? 'bg-[#D4A800] text-[#0C0C0C]' : 'bg-[#C94A00] text-white'
           }`}>
             {statusMsg.text}
           </div>
@@ -113,7 +116,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">1. Download Backup File</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
-            Save a full snapshot of all your trademark records, client directory, and history logs as a JSON file.
+            Save a database snapshot with cases, clients, history, document references, and a file-asset manifest. External Drive files may be links only; check the report.
           </p>
           <button
             onClick={handleExport}
@@ -127,7 +130,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">2. Restore from Backup</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
-            Restore previously exported records onto any device or browser without needing an external database.
+            Cloud restore currently imports cases and clients only. It does not restore history, document links, or external file contents; do not use it as a full disaster-recovery restore.
           </p>
           <div className="flex gap-2">
             <input

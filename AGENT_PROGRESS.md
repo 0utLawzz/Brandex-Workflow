@@ -1,6 +1,6 @@
 # Brandex Workflow - Agent Progress
 
-Last updated: 2026-11-17
+Last updated: 2026-11-22
 
 ## Supabase-canonical transition (2026-11-17, active and not deployed)
 
@@ -397,10 +397,30 @@ Before the live correction below, no production database, Supabase project, Apps
 - [ ] Finish end-to-end verification of the existing generation/retry path and all attachments.
 - [ ] Finish the source-to-live-schema field reconciliation and prepare the safe additive migration proposal.
 
-### Documentation PR
+### Documentation PR #4 — merged
 
-- Open PR: [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4).
-- Branch: `feat/brandex-workflow-phase2-plan`.
-- Current head at last check: `ce61dc7a6014c1751566758b58fa947aceeeece4`.
-- PR remains open for review; it is documentation-only. No source or production changes were included.
-- No CI status was reported for the latest documentation head at the time of this update.
+- [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4) is merged.
+- Merge commit: `cc3e863ef0b921c6ce9e767fef62161c4b7f0326`.
+- The PR was documentation-only; it did not change application source or production data.
+
+
+## Phase-two continuation — PR #4 merged; backup integrity first (2026-11-22)
+
+- PR #4 is merged into main. Merge commit: cc3e863ef0b921c6ce9e767fef62161c4b7f0326.
+- Implementation branch created from the merged main: feat/phase2-backup-integrity-first.
+- Added ADR 0005, Full-fidelity case backup and safe restore. It is accepted as the implementation decision; no production restore is authorized.
+- Confirmed current backup gap in source: cloud JSON export includes cases, clients, history, and document-reference rows, but cloud restore inserts only cases and clients. History and document references are omitted because imported case IDs are reassigned.
+- Confirmed that document URLs are references only; the current export does not copy Google Drive file bytes. It cannot be described as a full file backup.
+- Current backup modal's success message explicitly states that history and document links were not restored. This is accurate but insufficient for the user's requested full recovery.
+- User's existing historical case backup must remain untouched. Keep a separate copy; do not use it as a test input that could be overwritten.
+- Priority next steps: (1) inspect all case/client/history/document/asset fields and relationships on current main; (2) design versioned package plus asset manifest; (3) implement dry-run and safe ID mapping; (4) restore history/document associations; (5) support actual file bytes where authorized and report unavailable assets; (6) test only against disposable storage/database.
+- No Supabase production rows, schema, RLS, Google Drive files/folders, Apps Script deployment, or Vercel deployment were changed in this continuation.
+- No implementation acceptance check is marked complete yet.
+
+- First implementation increment committed on this branch: versioned backup package format (3.0-brandex), case-linked asset manifest, explicit partial/complete coverage reporting, validation of history/document links against included case IDs, preservation of document file sizes, and warning UI when Drive file bytes are not included.
+- Added backup-package tests for case identity, client link, history/document association, embedded versus external assets, and broken relationship rejection. CI results are pending.
+- Important remaining gap: cloud restore still imports only cases and clients. It does not yet restore history or document references, and the current live schema lacks the client_id field required for explicit client relationship restoration. No production schema change has been made. Actual Google Drive file bytes are not copied by this increment; external files are reported as missing bytes, so the export is deliberately marked partial.
+- Next implementation gate: design and test an additive, transaction-safe restore strategy plus an approved client relationship migration; do not run a production migration or restore until separately reviewed and authorized.
+
+- CI run 45040265099 for commit 8eaadee0803cdecd4ee2116bd3676a6ab6fa4767 passed: 32/32 tests; npm audit found 0 vulnerabilities; Apps Script syntax check passed; lint passed with 0 errors and one pre-existing React Hook dependency warning; Next.js production build and required-document checks passed.
+- PR #5 remains open for review. No deployment or production mutation was performed.

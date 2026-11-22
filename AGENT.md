@@ -126,6 +126,10 @@ Folder IDs must be validated server-side. Do not expose backend tokens or servic
 - Do not import sample/test rows as production records.
 - Report duplicate and unresolved identities; do not invent missing identifiers.
 
+### 3.10 Mandatory case backup and restore safety
+
+Case backup is a top-priority acceptance requirement. Follow ADR 0005. Do not call a JSON export a full backup if it only contains database rows and external file URLs. A complete backup must preserve case identity (Series, client code, case number, client prefix, and client relationship), applicant-specific fields, status/legal stages, notes, dates, tracking/delivery fields, history, document-reference metadata, and actual asset bytes or an explicit list of assets that could not be copied. Restore must preflight, avoid overwriting existing rows, remap IDs safely where required, reattach history/documents/assets, detect duplicates, and report partial failures. Never test against production. Never overwrite or delete the user's existing historical case backup.
+
 ## 4. Phase-two task plan and acceptance criteria
 
 ### Phase 0 — Audit and baseline
@@ -175,7 +179,7 @@ Folder IDs must be validated server-side. Do not expose backend tokens or servic
 - [ ] Build structured Settings sections.
 - [ ] Add logo upload, display name, prefix/wordmark, and tagline persistence.
 - [ ] Add independent series management and connect it to Create Case.
-- [ ] Move backup/restore and import/export into Settings.
+- [ ] Move backup/restore and import/export into Settings. Backup/restore must meet ADR 0005: full case identity, history, document links, actual file assets, preflight, safe ID mapping, idempotency, and a verified restore report.
 - [ ] Add current-column spreadsheet template creation.
 - [ ] Add sound, motion, and notification preferences.
 - [ ] Ensure shared settings persist securely and are available consistently to authorized users.
@@ -196,7 +200,7 @@ Folder IDs must be validated server-side. Do not expose backend tokens or servic
 - [ ] Add preflight and postflight checks; provide rollback SQL.
 - [ ] Update `supabase_schema.sql` to match the intended clean-install schema without reintroducing permissive RLS.
 - [ ] Compare export columns and import mapping against all current fields.
-- [ ] Test CSV/JSON round-trip, backup/restore, duplicate handling, and custom series.
+- [ ] Test CSV/JSON round-trip, backup/restore, duplicate handling, and custom series. Backup/restore must pass ADR 0005 against a disposable target, including actual asset availability; JSON rows plus URLs alone are insufficient.
 - [ ] Generate a spreadsheet template with the exact approved columns and verify it.
 - **Exit:** migration reviewed and safely applied only after approval; row counts and relationships reconcile.
 
