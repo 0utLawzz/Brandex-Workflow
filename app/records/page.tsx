@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { standaloneDB, RecordItem, ClientProfile } from '@/lib/standalone-db';
+import { RecordItem, ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
@@ -37,7 +37,6 @@ import {
   Eye,
   Paperclip,
   ExternalLink,
-  FileSpreadsheet
 } from 'lucide-react';
 
 // Highlight query matches in text
@@ -180,7 +179,6 @@ export default function RecordsPage() {
   const [savingRecord, setSavingRecord] = useState(false);
 
   // File input refs
-  const csvFileInputRef = useRef<HTMLInputElement>(null);
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 
@@ -364,74 +362,6 @@ export default function RecordsPage() {
 
   const toggleSelectRow = (id: number) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  // CSV Export & Import Handlers
-  const handleExportCSV = async () => {
-    const recordsResult = await supabaseDB.getRecords();
-    if (recordsResult.error) {
-      setErrorMsg(`CSV export stopped because the records could not be read: ${recordsResult.error}`);
-      return;
-    }
-    const csvContent = standaloneDB.exportRecordsCSV(recordsResult.records);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Brandex_Records_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setBulkNotice('✓ Exported all records to CSV successfully.');
-    setTimeout(() => setBulkNotice(null), 4000);
-  };
-
-  const handleDownloadSampleCSV = () => {
-    const csvContent = standaloneDB.generateSampleRecordsCSV();
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'sample_brandex_records.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setBulkNotice('✓ Downloaded sample demo CSV template with realistic cases.');
-    setTimeout(() => setBulkNotice(null), 4000);
-  };
-
-  const handleImportCSVClick = () => {
-    csvFileInputRef.current?.click();
-  };
-
-  const handleCSVFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        const result = standaloneDB.importRecordsCSV(content, false);
-        if (result.success) {
-          try {
-            const importedCount = await supabaseDB.importRecords((result.records || []).map(({ id: _id, ...record }) => record));
-            await loadAllRecords();
-            setBulkNotice(`✓ Successfully imported ${importedCount} cases from CSV`);
-          } catch (err: any) {
-            await loadAllRecords();
-            setErrorMsg(err.message || 'Failed to save imported cases');
-          }
-        } else {
-          setErrorMsg(result.message);
-        }
-        setTimeout(() => setBulkNotice(null), 5000);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
   };
 
   // Bulk Reassign to Saved Client
@@ -692,15 +622,6 @@ export default function RecordsPage() {
     <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C] relative">
       <Navbar />
 
-      {/* Hidden CSV File Input */}
-      <input
-        type="file"
-        ref={csvFileInputRef}
-        accept=".csv,text/csv"
-        onChange={handleCSVFileChange}
-        className="hidden"
-      />
-
       {/* Hidden Receipt Image File Input */}
       <input
         type="file"
@@ -737,41 +658,6 @@ export default function RecordsPage() {
           </div>
 
           <div className="flex gap-2.5 flex-wrap items-center">
-            {/* CSV Import, Export & Sample Template */}
-            <button
-              type="button"
-              onClick={handleDownloadSampleCSV}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Download sample CSV template with demo trademark data"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0284c7]" /> Sample CSV
-            </button>
-
-            <button
-              type="button"
-              onClick={handleImportCSVClick}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Import cases from CSV file"
-            >
-              <Upload className="w-3.5 h-3.5 text-[#C94A00]" /> Import CSV
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Export all cases to CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-[#0D9970]" /> Export CSV
-            </button>
-
-            <Link
-              href="/trademark-application"
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#C94A00] text-white border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] no-underline font-bold flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" /> + New Case
-            </Link>
-
             <button
               onClick={loadAllRecords}
               className="p-2 border-[2px] border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded-[4px] shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
@@ -1420,7 +1306,7 @@ export default function RecordsPage() {
 
       {/* =========================================================================
           FLOATING ACTION BUTTON (FAB)
-          Quick access to Import CSV, Open Help, and Toggle Settings
+          Quick access to Open Help and Workspace Settings
          ========================================================================= */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
         {fabOpen && (
@@ -1428,30 +1314,6 @@ export default function RecordsPage() {
             <div className="font-['DM_Mono',monospace] text-[0.68rem] font-bold tracking-[1px] uppercase text-[#666] pb-1 border-b border-[#ddd] w-full text-left">
               Quick Actions
             </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                handleImportCSVClick();
-              }}
-              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
-            >
-              <Upload className="w-4 h-4 text-[#C94A00]" />
-              <span>Import CSV</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                handleExportCSV();
-              }}
-              className="flex items-center gap-2 w-full text-left font-['DM_Mono',monospace] text-[0.75rem] font-bold p-1.5 hover:bg-[#E8DFC7] rounded cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-[#0D9970]" />
-              <span>Export CSV</span>
-            </button>
 
             <button
               type="button"

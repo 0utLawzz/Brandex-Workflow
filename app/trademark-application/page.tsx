@@ -652,7 +652,7 @@ export default function TrademarkApplicationPage() {
 
       <div className="max-w-[880px] w-full mx-auto p-4 sm:p-7 pb-16 flex-1">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">Trademark Case Generator (MailMerge)</h1>
+          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">Case Generator</h1>
           <div className="flex gap-2.5 flex-wrap">
             <Link href="/clients" className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C]">
               Manage Clients
