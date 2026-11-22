@@ -1,6 +1,6 @@
 # Brandex Workflow - Agent Progress
 
-Last updated: 2026-11-17
+Last updated: 2026-11-22
 
 ## Supabase-canonical transition (2026-11-17, active and not deployed)
 
@@ -397,13 +397,11 @@ Before the live correction below, no production database, Supabase project, Apps
 - [ ] Finish end-to-end verification of the existing generation/retry path and all attachments.
 - [ ] Finish the source-to-live-schema field reconciliation and prepare the safe additive migration proposal.
 
-### Documentation PR
+### Documentation PR #4 — merged
 
-- Open PR: [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4).
-- Branch: `feat/brandex-workflow-phase2-plan`.
-- Current head at last check: `ce61dc7a6014c1751566758b58fa947aceeeece4`.
-- PR remains open for review; it is documentation-only. No source or production changes were included.
-- No CI status was reported for the latest documentation head at the time of this update.
+- [#4 — BrandEx phase-two workspace and workflow plan](https://github.com/0utLawzz/Brandex-Workflow/pull/4) is merged.
+- Merge commit: `cc3e863ef0b921c6ce9e767fef62161c4b7f0326`.
+- The PR was documentation-only; it did not change application source or production data.
 
 
 ## Phase-two continuation — PR #4 merged; backup integrity first (2026-11-22)
