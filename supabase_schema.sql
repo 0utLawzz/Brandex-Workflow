@@ -1,7 +1,7 @@
 -- ========================================================
 -- BRANDEX LAW ASSOCIATES - SUPABASE DATABASE SCHEMA
 -- Run this script in your Supabase SQL Editor:
--- https://supabase.com/dashboard/project/zbkgerbdnjmctqqnoqnd/sql
+-- https://supabase.com/dashboard/project/pjthtvkzuthxwpvcdqxy/sql
 -- ========================================================
 
 -- 1. Trademark Records Table
