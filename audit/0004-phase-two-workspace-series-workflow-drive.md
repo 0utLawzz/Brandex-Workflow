@@ -198,3 +198,15 @@ Required before marking implementation complete:
 - **Apps Script deployed or Drive changed:** No.
 - **Verification:** Current `main` source files and merged PR metadata were inspected. Automated application tests have not been run in this planning step.
 - Update this section after each implementation PR with commit, tests, migration verification, and deployment evidence.
+
+
+## Implementation update — consolidated UI pass (2026-11-22)
+
+- Branch: `feat/brandex-single-pass-ui`.
+- Root route now redirects to Records; primary navigation is Home, Clients, Cases, Create Case, with Settings opened from a compact gear link.
+- Removed the navbar backup action and placed backup tools in Settings. Client CSV template/import/export actions were moved into a Settings component.
+- Client page heading/form/table simplified: concise Client Profiles heading, expandable New Client form, and Address removed from the visible table while retained in client create/edit and export.
+- Case Generator heading shortened. Header logo now uses a rounded-square frame.
+- Data impact: none. No historical case references, client prefixes, series, or existing rows were changed. No Supabase migration, Drive mutation, Apps Script deployment, or production deployment was performed.
+- Verification: pending CI on the consolidated PR; visual production QA remains outstanding.
+- Remaining scope: independent Series settings, complete case workflow/edit parity, pagination/breadcrumbs, Google Picker, schema reconciliation, and full round-trip backup/restore.
