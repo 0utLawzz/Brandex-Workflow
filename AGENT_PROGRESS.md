@@ -481,3 +481,14 @@ Before the live correction below, no production database, Supabase project, Apps
 - No production schema, case/client rows, Google Drive, Apps Script, or Vercel production configuration changed. Migration has not been applied.
 - **Next implementation steps:** add migration and schema-template definition; implement authenticated server-side list/create/update operations and validation; add Settings management UI; replace the Create Case datalist with active shared series; add unit/API regression tests; run full CI and preview QA before opening a PR.
 - **Verification status:** read-only source inspection and ADR documentation only. Code implementation and automated tests are pending.
+
+
+### Shared Series implementation checkpoint
+
+- Added the additive migration `supabase/migrations/20261123090000_shared_case_series.sql`. It creates `public.case_series`, enables RLS, grants access only to `service_role`, and seeds A/X/N/B plus every distinct valid historical `selection_menu` value. Existing case rows are not modified.
+- Added the matching clean-install definition and service-role grants to `supabase_schema.sql`.
+- Added pure validation helpers and unit tests for series-code normalization, allowed characters/length, strict update fields, active-state type, and sort-order validation.
+- Added authenticated database API operations and server-side Supabase methods for listing, creating, and updating series. No delete operation exists. A series code rename is blocked when any existing case uses that code.
+- Added the Settings Series Management panel (list, create, edit unused code, activate/deactivate) and replaced the Create Case free-text/datalist control with the shared active-series selector. Inactive series remain selectable only while retrying an existing case. If the shared registry is unavailable, case creation fails closed.
+- No production migration has been applied. No production case/client rows, Google Drive files, Apps Script deployment, or Vercel production settings were changed.
+- Verification is pending: no local test/build execution has been performed from this session. Open a draft PR for GitHub CI and Vercel preview checks; do not merge/deploy until the migration has been reviewed, tested on a disposable Supabase target, and separately approved for production application.
