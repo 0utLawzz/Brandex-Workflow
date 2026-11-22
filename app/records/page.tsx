@@ -1285,7 +1285,7 @@ export default function RecordsPage() {
                         {/* Col 3: Case Ref in box of 3 col */}
                         <td className="p-2.5 text-center whitespace-nowrap">
                           <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
-                            {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '646', r.caseNo || String(idx + 1).padStart(3, '0'))}
+                            {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '', r.caseNo || String(idx + 1).padStart(3, '0'))}
                           </span>
                         </td>
 

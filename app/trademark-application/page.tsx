@@ -251,7 +251,12 @@ export default function TrademarkApplicationPage() {
       return;
     }
     if (client) {
-      const prefix = String(client.client_prefix || 'A').toUpperCase();
+      const prefix = String(client.client_prefix || '').trim().toUpperCase();
+      if (!prefix) {
+        setStatusType('error');
+        setStatusMsg('This existing client has no saved category prefix. Please edit the client profile and set A, X, N or a custom prefix before creating a new case.');
+        return;
+      }
       setSelectedClientPrefix(prefix);
       setSelectedClientName(client.client_name || client.name || '');
       setSelectedClientCity(client.city || '');
@@ -705,7 +710,7 @@ export default function TrademarkApplicationPage() {
                   <option value="">-- SELECT CLIENT TO AUTO-FETCH DETAILS --</option>
                   {savedClients.map(c => (
                     <option key={c.id} value={c.id}>
-                      [{c.client_prefix || 'A'}-{String(c.client_code).padStart(3, '0')}] {c.client_name} — {c.trading_as || c.address}
+                      [{c.client_prefix || 'PREFIX NEEDED'}-{String(c.client_code).padStart(3, '0')}] {c.client_name} — {c.trading_as || c.address}
                     </option>
                   ))}
                 </select>

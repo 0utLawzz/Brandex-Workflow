@@ -499,7 +499,7 @@ export default function ClientsPage() {
                   {clients.map((c, idx) => (
                     <tr key={idx} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
                       <td className="p-2.5 font-['DM_Mono',monospace] font-bold text-[#C94A00]">
-                        {c.client_prefix || 'A'}-{String(c.client_code).padStart(3, '0')}
+                        {c.client_prefix ? `${c.client_prefix}-${String(c.client_code).padStart(3, '0')}` : `PREFIX NEEDED · ${String(c.client_code).padStart(3, '0')}`}
                       </td>
                       <td className="p-2.5 font-bold">
                         <div>{c.client_name}</div>
@@ -565,7 +565,7 @@ export default function ClientsPage() {
               <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Prefix</label>
-                  <input type="text" list="brandex-edit-prefixes" maxLength={8} value={editFormData.client_prefix || 'A'}
+                  <input type="text" list="brandex-edit-prefixes" maxLength={8} value={editFormData.client_prefix || ''}
                     onChange={e => setEditFormData({ ...editFormData, client_prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
                   <datalist id="brandex-edit-prefixes"><option value="A" /><option value="X" /><option value="N" /><option value="B" /></datalist>
