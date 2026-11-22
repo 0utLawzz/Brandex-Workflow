@@ -770,26 +770,22 @@ export default function TrademarkApplicationPage() {
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">
                     Selection Menu <span className="text-[#C94A00]">*</span>
                   </label>
-                  <input
-                    type="text"
-                    list="brandex-case-series"
+                  <select
                     required
-                    maxLength={8}
                     value={selectionMenu}
-                    onChange={e => handleSeriesChange(e.target.value)}
-                    onBlur={() => {
-                      try {
-                        const normalized = normalizeCaseSeries(selectionMenu);
-                        setSelectionMenu(normalized);
-                        void refreshCaseNumber(clientCode, normalized);
-                      } catch (error) {
-                        setStatusType('error');
-                        setStatusMsg(error instanceof Error ? error.message : 'Invalid case series.');
-                      }
+                    disabled={seriesLoading || !!seriesLoadError || (seriesOptions.every(item => !item.is_active) && !generationPending)}
+                    onChange={e => {
+                      handleSeriesChange(e.target.value);
+                      void refreshCaseNumber(clientCode, e.target.value);
                     }}
-                    className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] font-bold"
-                  />
-                  <datalist id="brandex-case-series"><option value="X" /><option value="A" /><option value="N" /><option value="B" /></datalist>
+                    className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] font-bold disabled:opacity-60"
+                  >
+                    {seriesLoading && <option value={selectionMenu}>Loading shared series…</option>}
+                    {!seriesLoading && seriesOptions.filter(item => item.is_active || (generationPending && item.series_code === selectionMenu)).map(item => (
+                      <option key={item.id} value={item.series_code}>{item.series_code}{item.is_active ? '' : ' (inactive — existing case)'}</option>
+                    ))}
+                  </select>
+                  {seriesLoadError && <p role="alert" className="mt-1 text-xs font-semibold text-red-700">{seriesLoadError}</p>}
                 </div>
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">
@@ -1174,7 +1170,7 @@ export default function TrademarkApplicationPage() {
             <div className="flex gap-4">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || seriesLoading || !!seriesLoadError || (!generationPending && seriesOptions.every(item => !item.is_active))}
                 className="font-['DM_Mono',monospace] text-[0.9rem] font-bold tracking-[1px] uppercase py-3.5 px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[5px_5px_0_#0C0C0C] cursor-pointer hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[7px_7px_0_#0C0C0C] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
               >
                 {submitting ? 'Saving & Generating Case...' : '⚡ Generate & Save Case Documents'}
