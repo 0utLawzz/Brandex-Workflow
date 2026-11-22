@@ -76,7 +76,7 @@ export default function SettingsPage() {
         <section className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
           <h2 className="mb-3 text-lg font-bold">Client &amp; case naming</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Case reference</span><div className="mt-1 font-['DM_Mono',monospace] text-xl font-bold text-[#C94A00]">N-333-001</div><p className="mt-1 text-xs text-[#666]">Client prefix + client code + case number. Series stays separate.</p></div>
+            <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Case reference</span><div className="mt-1 font-['DM_Mono',monospace] text-xl font-bold text-[#C94A00]">N-333-001</div><p className="mt-1 text-xs text-[#666]">Selected series + client code + case number. Client category prefix stays separate.</p></div>
             <div className="rounded border border-[#0C0C0C]/20 bg-white p-3"><span className="text-xs text-[#666]">Numbering</span><div className="mt-1 text-base font-bold">Per client + series</div><p className="mt-1 text-xs text-[#666]">Har client aur series ka apna sequence.</p></div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
