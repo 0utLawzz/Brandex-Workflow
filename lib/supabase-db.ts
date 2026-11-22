@@ -44,7 +44,7 @@ async function assertUniqueCaseReference(
   const series = normalizeCaseSeries(identity.selectionMenu);
   const codeVariants = Array.from(new Set([code, String(Number(code))]));
   const caseVariants = Array.from(new Set([caseNo, String(Number(caseNo))]));
-  const { data, error } = await withSupabaseTimeout(
+  const { data, error } = await withSupabaseTimeout<any>(
     client.from('trademark_records')
       .select('id, client_code, selection_menu, case_no')
       .in('client_code', codeVariants)
