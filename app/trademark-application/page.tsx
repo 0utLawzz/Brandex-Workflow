@@ -574,10 +574,10 @@ export default function TrademarkApplicationPage() {
           setStatusType('info');
           setGenerationPending(true);
           const savedStatus = recordSavedToSupabase
-            ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is stored in Supabase.`
+            ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) is stored in Supabase.`
             : retryGeneration && lastSavedToAppsScript
-              ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) cannot be retried as a Supabase case.`
-              : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) was not saved to the system of record.`;
+              ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) cannot be retried as a Supabase case.`
+              : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) was not saved to the system of record.`;
           setStatusMsg(
             `${savedStatus}\n` +
             `Note on Document Generation: ${errMsg}.` +
@@ -591,10 +591,10 @@ export default function TrademarkApplicationPage() {
         setStatusType('info');
         setGenerationPending(true);
         const savedStatus = recordSavedToSupabase
-          ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) is safely saved.`
+          ? `✅ CASE SAVED IN SUPABASE DATABASE!\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) is safely saved.`
           : retryGeneration && lastSavedToAppsScript
-            ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) cannot be retried as a Supabase case.`
-            : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${clientCode}-${selectionMenu}-${caseNo}) was not saved to the system of record.`;
+            ? `⚠ CASE NOT FOUND IN SUPABASE.\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) cannot be retried as a Supabase case.`
+            : `⚠ CASE NOT SAVED IN SUPABASE.\nRecord "${payload.folder}" (#${formatCaseReference(selectionMenu, clientCode, caseNo)}) was not saved to the system of record.`;
         setStatusMsg(
           `${savedStatus}\n` +
           `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
