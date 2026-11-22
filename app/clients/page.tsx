@@ -15,6 +15,8 @@ export default function ClientsPage() {
   const [dbSource, setDbSource] = useState<'supabase' | 'local'>('supabase');
   const [clientCode, setClientCode] = useState('646');
   const [clientPrefix, setClientPrefix] = useState('A');
+  const [clientCity, setClientCity] = useState('');
+  const [clientFolderReference, setClientFolderReference] = useState('');
   const [clientName, setClientName] = useState('');
   const [fatherName, setFatherName] = useState('');
   const [tradingAs, setTradingAs] = useState('');
@@ -59,7 +61,9 @@ export default function ClientsPage() {
     setEditingClient(client);
     setEditFormData({
       client_code: client.client_code,
-      client_prefix: client.client_prefix || 'A',
+      client_prefix: client.client_prefix || '',
+      city: client.city || '',
+      folder_reference: client.folder_reference || '',
       client_name: client.client_name,
       father_name: client.father_name || '',
       trading_as: client.trading_as || '',
@@ -81,7 +85,9 @@ export default function ClientsPage() {
     try {
       const updated = await supabaseDB.updateClient(editingClient.id, {
         client_code: (editFormData.client_code || '').replace(/\D/g, '').slice(0, 3).padStart(3, '0'),
-        client_prefix: String(editFormData.client_prefix || 'A').trim().toUpperCase(),
+        client_prefix: String(editFormData.client_prefix || '').trim().toUpperCase(),
+        city: (editFormData.city || '').trim().toUpperCase(),
+        folder_reference: (editFormData.folder_reference || '').trim().toUpperCase(),
         client_name: (editFormData.client_name || '').trim().toUpperCase(),
         father_name: (editFormData.father_name || '').trim().toUpperCase(),
         trading_as: (editFormData.trading_as || '').trim().toUpperCase(),
@@ -121,6 +127,8 @@ export default function ClientsPage() {
       const added = await supabaseDB.addClient({
         client_code: clientCode.trim().padStart(3, '0'),
         client_prefix: clientPrefix.trim().toUpperCase(),
+        city: clientCity.trim().toUpperCase(),
+        folder_reference: clientFolderReference.trim().toUpperCase(),
         client_name: clientName.trim().toUpperCase(),
         father_name: fatherName.trim().toUpperCase(),
         trading_as: tradingAs.trim().toUpperCase(),
@@ -136,6 +144,8 @@ export default function ClientsPage() {
 
       // Reset form
       setClientName('');
+      setClientCity('');
+      setClientFolderReference('');
       setFatherName('');
       setTradingAs('');
       setCnic('');
@@ -409,6 +419,16 @@ export default function ClientsPage() {
               />
             </div>
 
+            <div>
+              <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">City</label>
+              <input type="text" placeholder="ISLAMABAD" value={clientCity} onChange={e => setClientCity(e.target.value.toUpperCase())}
+                className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]" />
+            </div>
+            <div>
+              <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">Additional Folder Reference</label>
+              <input type="text" placeholder="CA / OPTIONAL" value={clientFolderReference} onChange={e => setClientFolderReference(e.target.value.toUpperCase())}
+                className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]" />
+            </div>
             <div className="sm:col-span-2">
               <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">
                 Client Registered Address *
@@ -606,6 +626,16 @@ export default function ClientsPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">City</label>
+                  <input type="text" value={editFormData.city || ''} onChange={e => setEditFormData({ ...editFormData, city: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Additional Folder Reference</label>
+                  <input type="text" value={editFormData.folder_reference || ''} onChange={e => setEditFormData({ ...editFormData, folder_reference: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase" />
+                </div>
+              </div>
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Assigned Law Firm / Consultant</label>
                 <input

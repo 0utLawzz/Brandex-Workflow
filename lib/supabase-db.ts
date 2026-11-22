@@ -117,7 +117,9 @@ export function mapRowToClient(row: any): ClientProfile {
   return {
     id: Number(row.id),
     client_code: row.client_code || '',
-    client_prefix: row.client_prefix || 'A',
+    client_prefix: row.client_prefix || '',
+    city: row.city || '',
+    folder_reference: row.folder_reference || '',
     client_name: row.name || row.client_name || '',
     father_name: row.father_name || '',
     trading_as: row.company_name || row.trading_as || '',
@@ -133,6 +135,8 @@ export function mapClientToRow(client: Partial<ClientProfile>): Record<string, a
   const row: Record<string, any> = {};
   if (client.client_code !== undefined) row.client_code = client.client_code;
   if (client.client_prefix !== undefined) row.client_prefix = client.client_prefix;
+  if (client.city !== undefined) row.city = client.city;
+  if (client.folder_reference !== undefined) row.folder_reference = client.folder_reference;
   if (client.client_name !== undefined) row.name = client.client_name;
   if (client.father_name !== undefined) row.father_name = client.father_name;
   if (client.trading_as !== undefined) row.company_name = client.trading_as;

@@ -60,6 +60,8 @@ export interface ClientProfile {
   consultant_name: string;
   client_code: string;
   client_prefix?: string;
+  city?: string;
+  folder_reference?: string;
   total_cases: number;
   created_at: string;
 }
