@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect } from 'react';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { standaloneDB, ClientProfile } from '@/lib/standalone-db';
+import { ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
-import { Trash2, Plus, Users, ShieldCheck, Download, Upload, Pencil, X, Database, FileSpreadsheet } from 'lucide-react';
+import { Trash2, Plus, Users, ShieldCheck, Pencil, X } from 'lucide-react';
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientProfile[]>([]);
@@ -26,6 +25,7 @@ export default function ClientsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // Edit Client Modal State
   const [editingClient, setEditingClient] = useState<ClientProfile | null>(null);
@@ -180,141 +180,23 @@ export default function ClientsPage() {
     }
   };
 
-  const clientFileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleDownloadSampleCSV = () => {
-    const csvContent = standaloneDB.generateSampleClientsCSV();
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sample_brandex_clients.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setSuccessMsg('Sample client CSV template downloaded.');
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
-  const handleImportCSVClick = () => {
-    clientFileInputRef.current?.click();
-  };
-
-  const handleCSVFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        const result = standaloneDB.importClientsCSV(content, false);
-        if (result.success) {
-          try {
-            const importedCount = await supabaseDB.importClients(result.clients || []);
-            await loadClients();
-            setSuccessMsg(`Successfully imported ${importedCount} client profiles from CSV`);
-          } catch (err: any) {
-            await loadClients();
-            setErrorMsg(err.message || 'Failed to save imported clients');
-          }
-        } else {
-          setErrorMsg(result.message);
-        }
-        setTimeout(() => {
-          setSuccessMsg('');
-          setErrorMsg('');
-        }, 5000);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleExportCSV = async () => {
-    const clientsResult = await supabaseDB.getClients();
-    if (clientsResult.error) {
-      setErrorMsg(`CSV export stopped because the client directory could not be read: ${clientsResult.error}`);
-      return;
-    }
-    const csvContent = standaloneDB.exportClientsCSV(clientsResult.clients);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `brandex-clients-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setSuccessMsg('Exported all client profiles to CSV.');
-    setTimeout(() => setSuccessMsg(''), 4000);
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-[#F0E8D0] text-[#0C0C0C]">
       <Navbar />
 
-      {/* Hidden Client CSV File Input */}
-      <input
-        type="file"
-        ref={clientFileInputRef}
-        accept=".csv,text/csv"
-        onChange={handleCSVFileChange}
-        className="hidden"
-      />
-
       <div className="max-w-[1050px] w-full mx-auto p-4 sm:p-7 pb-16 flex-1">
-        {/* Top Header */}
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+        {/* Compact page header */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold px-2 py-0.5 bg-[#0C0C0C] text-[#FAF6EE] rounded border border-[#0C0C0C]">
-                BRANDEX LAW ASSOCIATES
-              </span>
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-                CLIENT &amp; APPLICANT REGISTRY
-              </span>
-            </div>
-            <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1px] leading-tight">
-              Client Profiles &amp; Ledger Directory
-            </h1>
+            <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1px] leading-tight">Client Profiles</h1>
+            <p className="mt-1 text-xs text-[#666]">{clients.length} saved client profiles</p>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
-            <button
-              type="button"
-              onClick={handleDownloadSampleCSV}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Download sample client CSV template"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0284c7]" /> Sample CSV
-            </button>
-            <button
-              type="button"
-              onClick={handleImportCSVClick}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Import clients from CSV"
-            >
-              <Upload className="w-3.5 h-3.5 text-[#C94A00]" /> Import CSV
-            </button>
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#FAF6EE] text-[#0C0C0C] border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] hover:bg-white cursor-pointer font-bold"
-              title="Export all clients to CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-[#0D9970]" /> Export CSV
-            </button>
-            <Link
-              href="/trademark-application"
-              className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3 bg-[#C94A00] text-white border-[2px] border-[#0C0C0C] rounded-[4px] shadow-[2px_2px_0_#0C0C0C] no-underline font-bold"
-            >
-              + New Application
-            </Link>
-          </div>
+          <button type="button" onClick={() => setShowAddForm(open => !open)} aria-expanded={showAddForm} className="inline-flex items-center gap-2 rounded border-2 border-[#0C0C0C] bg-[#C94A00] px-4 py-2.5 text-sm font-bold text-white shadow-[3px_3px_0_#0C0C0C]">
+            {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{showAddForm ? 'Close form' : 'New Client'}
+          </button>
         </div>
 
+        {showAddForm && (
         {/* Add Client Form */}
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-6 rounded-[6px] mb-8">
           <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
@@ -467,14 +349,14 @@ export default function ClientsPage() {
           </form>
         </div>
 
+        )}
+
         {/* Clients Table */}
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-6 rounded-[6px]">
           <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">
-              Saved Client Directory ({clients.length})
-            </h2>
+            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">Client Directory ({clients.length})</h2>
             <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#0D9970] font-bold">
-              ✓ Saved in this browser
+              ✓ {dbSource === 'supabase' ? 'Connected to cloud' : 'Local data'}
             </div>
           </div>
 
@@ -493,7 +375,6 @@ export default function ClientsPage() {
                     <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Client Name</th>
                     <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Trading As / Firm</th>
                     <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">CNIC</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Address</th>
                     <th className="p-2.5 text-center font-['DM_Mono',monospace] text-[0.7rem]">Actions</th>
                   </tr>
                 </thead>
@@ -513,9 +394,6 @@ export default function ClientsPage() {
                       </td>
                       <td className="p-2.5 font-medium">{c.trading_as || '—'}</td>
                       <td className="p-2.5 font-['DM_Mono',monospace] text-[0.78rem]">{c.cnic || '—'}</td>
-                      <td className="p-2.5 text-[0.78rem] max-w-xs truncate" title={c.address}>
-                        {c.address || '—'}
-                      </td>
                       <td className="p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
