@@ -117,8 +117,8 @@ export function mapRowToRecord(row: any): RecordItem {
     deliveredDate: row.delivered_date || row.deliveredDate || '',
     receiverName: row.receiver_name || row.receiverName || '',
     receiptImage: row.receipt_image || row.receiptImage || '',
-    createdAt: row.created_at || new Date().toISOString(),
-    updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || row.created_at || ''
   };
 }
 

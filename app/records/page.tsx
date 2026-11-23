@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import DriveFolderPicker from '@/app/components/DriveFolderPicker';
+import MonthlyCaseChart from '@/app/components/MonthlyCaseChart';
 import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
@@ -757,13 +758,13 @@ export default function RecordsPage() {
           {/* Box 1: Total */}
           <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C]">
             <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 01 · TOTAL CASES
+              TOTAL CASES
             </div>
             <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
               {stats.total}
             </div>
             <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#0D9970] mt-1 font-bold">
-              ✓ Full Case Sovereignty
+              All saved cases
             </div>
           </div>
 
@@ -775,7 +776,7 @@ export default function RecordsPage() {
           >
             <div className="flex items-center justify-between mb-1">
               <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#0C0C0C] uppercase">
-                BOX 02 · PENDING / IN REVIEW
+                PENDING / IN REVIEW
               </span>
               <span className="font-['DM_Mono',monospace] text-[0.65rem] bg-[#0C0C0C] text-[#FAF6EE] px-1.5 py-0.2 rounded font-bold">
                 DEFAULT
@@ -796,7 +797,7 @@ export default function RecordsPage() {
               }`}
           >
             <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 03 · APPROVED / REJECTED
+              APPROVED / REJECTED
             </div>
             <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
               {stats.approvedRejected}
@@ -814,7 +815,7 @@ export default function RecordsPage() {
               }`}
           >
             <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 04 · DISPATCHED / DELIVERED
+              DISPATCHED / DELIVERED
             </div>
             <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
               {stats.dispatchedDelivered}
@@ -825,6 +826,8 @@ export default function RecordsPage() {
             </div>
           </div>
         </div>
+
+        <MonthlyCaseChart records={allRecords} />
 
         {/* =========================================================================
             LAW FIRM WIDGET (Replaced Workflow Stage Distribution)
