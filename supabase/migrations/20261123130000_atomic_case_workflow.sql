@@ -24,7 +24,7 @@ BEGIN
 
   IF target_status = 'DISPATCHED' AND (
     nullif(trim(COALESCE(p_meta->>'dispatchedDate', '')), '') IS NULL OR
-    nullif(trim(COALESCE(p_meta->>'trackingId', p_meta->>'dispatchedNote', '')), '') IS NULL OR
+    COALESCE(NULLIF(trim(p_meta->>'trackingId'), ''), NULLIF(trim(p_meta->>'dispatchedNote'), '')) IS NULL OR
     nullif(trim(COALESCE(p_meta->>'dispatchedImage', '')), '') IS NULL
   ) THEN RAISE EXCEPTION 'Dispatch date, tracking/note, and proof are required'; END IF;
 
@@ -37,7 +37,9 @@ BEGIN
   WITH changed AS (
     UPDATE public.trademark_records AS r
     SET status = target_status,
-        tracking_id = CASE WHEN p_meta ? 'trackingId' THEN p_meta->>'trackingId' ELSE r.tracking_id END,
+        tracking_id = CASE WHEN p_meta ? 'trackingId' OR p_meta ? 'dispatchedNote'
+          THEN COALESCE(NULLIF(trim(p_meta->>'trackingId'), ''), NULLIF(trim(p_meta->>'dispatchedNote'), ''))
+          ELSE r.tracking_id END,
         dispatched_date = CASE WHEN p_meta ? 'dispatchedDate' THEN p_meta->>'dispatchedDate' ELSE r.dispatched_date END,
         dispatched_note = CASE WHEN p_meta ? 'dispatchedNote' THEN p_meta->>'dispatchedNote' ELSE r.dispatched_note END,
         delivered_date = CASE WHEN p_meta ? 'deliveredDate' THEN p_meta->>'deliveredDate' ELSE r.delivered_date END,

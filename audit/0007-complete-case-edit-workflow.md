@@ -83,6 +83,13 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - **Authenticated QA:** pending because the latest branch head does not have a current preview. Do not merge until a current preview is available and the Records editor/workflow is checked.
 - Production schema/data, Google Drive, Apps Script, and Vercel production configuration: not changed.
 
+### Review follow-up — 2026-11-23
+
+- Fresh Codex review of commit `cba8ffa` identified one P1 and four P2 findings around same-state generation status handling, blank tracking-note fallback, encoded notes/no-image preservation, attachment draft isolation, and base64 request-size expansion.
+- The follow-up fix keeps new-case generation on the status already written by `addRecord`; normalizes blank tracking values to the dispatch note in the atomic RPC; sends the shared notes/no-image pair together; clears attachment drafts on case changes; and enforces an 8 MiB raw combined inline-asset cap for Edit Case requests.
+- Added regression tests for the encoded companion field, data-URL byte estimation/cap, and SQL fallback contract. Local verification after the fixes: 46 tests passed, lint has only the two pre-existing hook warnings, and the production build passed.
+- The fix is intentionally not merged or deployed to production. CI, Preview, authenticated QA, and a follow-up review are required on the new commit.
+
 ### Verification-gate continuation
 
 - Live production schema comparison confirmed that dispatch proof columns are not present on `trademark_records`; implementation now sends proof only through the existing `trademark_documents` reference table.

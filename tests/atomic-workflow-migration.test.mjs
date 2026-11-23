@@ -19,4 +19,6 @@ test('workflow migration makes status, proof reference, and history atomic', () 
   assert.doesNotMatch(sql, /SET dispatched_image\s*=/i);
   assert.doesNotMatch(sql, /SET dispatched_doc_name\s*=/i);
   assert.doesNotMatch(sql, /SET dispatched_doc_type\s*=/i);
+  assert.match(sql, /NULLIF\(trim\(p_meta->>'trackingId'\), ''\)/);
+  assert.match(sql, /NULLIF\(trim\(p_meta->>'dispatchedNote'\), ''\)/);
 });

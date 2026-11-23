@@ -10,7 +10,7 @@ import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import { validateWorkflowTransition } from '@/lib/case-workflow';
-import { buildCaseEditUpdates } from '@/lib/case-edit-payload';
+import { buildCaseEditUpdates, getInlineAssetBytes, MAX_INLINE_ASSET_BYTES } from '@/lib/case-edit-payload';
 import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
@@ -190,6 +190,8 @@ export default function RecordsPage() {
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setNewDocumentName('');
+    setNewDocumentUrl('');
     if (!editingRecord?.id) { setEditingDocuments([]); return; }
     let active = true;
     setLoadingEditingDocuments(true);
@@ -560,7 +562,7 @@ export default function RecordsPage() {
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > 12 * 1024 * 1024) { setErrorMsg('Delivery receipt must be an image no larger than 12 MB.'); e.target.value = ''; return; }
+    if (!file.type.startsWith('image/') || file.size > MAX_INLINE_ASSET_BYTES) { setErrorMsg('Delivery receipt must be an image no larger than 8 MB.'); e.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
@@ -574,8 +576,8 @@ export default function RecordsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 12 * 1024 * 1024) {
-      alert('Proof file size exceeds 12MB limit.');
+    if (file.size > MAX_INLINE_ASSET_BYTES) {
+      alert('Proof file size exceeds 8 MB limit.');
       return;
     }
 
@@ -622,6 +624,9 @@ export default function RecordsPage() {
       const updates = originalEditingRecord
         ? buildCaseEditUpdates(editingRecord, originalEditingRecord)
         : editingRecord;
+      if (getInlineAssetBytes(updates) > MAX_INLINE_ASSET_BYTES) {
+        throw new Error('Combined inline images must be 8 MB or smaller.');
+      }
       if (Object.keys(updates).length > 0) {
         await supabaseDB.updateRecordWithHistory(editingRecord.id, updates, 'Case metadata edited directly in CMS');
       }
@@ -1593,7 +1598,7 @@ export default function RecordsPage() {
                         Click to upload Courier Booking Receipt or Airway Bill
                       </p>
                       <p className="font-['Space_Grotesk'] text-[0.65rem] text-[#666] mt-0.5">
-                        Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 12MB)
+                        Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 8 MB)
                       </p>
                     </div>
                   )}
@@ -1877,7 +1882,7 @@ export default function RecordsPage() {
                 <div className="rounded border-2 border-[#0C0C0C] bg-white p-2">
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-2">Applicant / Mark Image</label>
                   {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><Image src={editingRecord.img} alt="Applicant mark" width={56} height={56} className="h-14 w-14 rounded border object-contain" unoptimized /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
-                  <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>12*1024*1024){setErrorMsg('Applicant image must be an image no larger than 12 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
+                  <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Applicant image must be an image no larger than 8 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
                 </div>
               </div>
 
@@ -1976,7 +1981,7 @@ export default function RecordsPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 12 * 1024 * 1024 || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 12 MB.'); e.target.value = ''; return; }
+                        if (file.size > MAX_INLINE_ASSET_BYTES || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 8 MB.'); e.target.value = ''; return; }
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           setEditingRecord(prev => prev ? ({
@@ -2029,7 +2034,7 @@ export default function RecordsPage() {
               <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
                 <div className="mb-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold">DELIVERY RECEIPT</div>
                 {editingRecord.receiptImage ? <div className="flex items-center gap-2"><button type="button" onClick={()=>setProofModal({open:true,title:`Delivery Receipt - ${editingRecord.folder}`,url:editingRecord.receiptImage!,docName:`Delivery_Receipt_${editingRecord.folder}`,docType:'image/jpeg'})} className="rounded border border-[#0C0C0C] bg-[#dcfce7] px-2 py-1 text-xs font-bold">View receipt</button><button type="button" onClick={()=>setEditingRecord({...editingRecord,receiptImage:''})} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <p className="mb-2 text-xs text-[#666]">No delivery receipt attached.</p>}
-                <input type="file" accept="image/*" className="mt-2 block w-full text-xs" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')||file.size>12*1024*1024){setErrorMsg('Delivery receipt must be an image no larger than 12 MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,receiptImage:ev.target?.result as string}):null);reader.readAsDataURL(file);e.target.value='';}} />
+                <input type="file" accept="image/*" className="mt-2 block w-full text-xs" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')||file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Delivery receipt must be an image no larger than 8 MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,receiptImage:ev.target?.result as string}):null);reader.readAsDataURL(file);e.target.value='';}} />
               </div>
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Internal Notes</label>

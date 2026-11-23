@@ -555,3 +555,10 @@ Before the live correction below, no production database, Supabase project, Apps
 - The workflow decision dialog opened with Approve/Reject controls and Save Decision, then was canceled. No production workflow transition, edit, attachment, or deletion was submitted.
 - Preview currently resolves to the production-sized dataset; therefore write-path UI QA was intentionally not run against production. Disposable Supabase rollback-only integration tests remain the write-path evidence.
 - Production key inventory contains 7 variables; Preview contains those 7 plus Preview-only `NEXT_PUBLIC_SUPABASE_URL`. Secret-value equality is not yet independently verifiable because Vercel stores secrets write-only and the Vercel connector was unavailable during this check.
+
+### 2026-11-23 Codex review findings and fixes
+
+- Fresh Codex review of exact head `cba8ffa` found one P1 and four P2 issues: generation's same-state `IN REVIEW` update incorrectly called the forward-transition RPC; blank tracking IDs did not fall back to dispatch notes in SQL; Edit Case could drop the encoded no-image companion when notes changed; attachment drafts could carry from one case to another; and 12 MB raw-file controls could exceed the 12 MiB JSON request limit after base64 expansion.
+- Fixed the generation path to rely on the already-saved `IN REVIEW` status, normalized blank tracking IDs to the dispatch-note fallback in the atomic migration, kept `notes`/`noImg` paired in edit payloads, reset attachment drafts whenever the edited case changes, and capped inline assets at 8 MB raw with a combined edit-payload check.
+- Added regression/contract coverage. Local verification: 46 tests passed, lint has only the two pre-existing React Hook warnings, and the production build passed.
+- Changes are not yet pushed or deployed; rerun CI, preview, authenticated read-only QA, and Codex review after the fix commit. No production data/schema, Drive, Apps Script, or production deployment was changed.
