@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { ClientProfile } from '@/lib/standalone-db';
@@ -26,6 +26,15 @@ export default function ClientsPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [prefixFilter, setPrefixFilter] = useState('');
+  const [sort, setSort] = useState<{ field: 'client_prefix' | 'client_code' | 'client_name' | 'trading_as' | 'phone' | 'email'; descending: boolean }>({ field: 'client_code', descending: false });
+  const visibleClients = useMemo(() => clients.filter(client =>
+    (!prefixFilter || client.client_prefix === prefixFilter) &&
+    [client.client_prefix, client.client_code, client.client_name, client.father_name, client.trading_as, client.consultant_name, client.city, client.phone, client.email]
+      .some(value => String(value || '').toLowerCase().includes(search.trim().toLowerCase()))
+  ).sort((a, b) => String(a[sort.field] || '').localeCompare(String(b[sort.field] || ''), undefined, { numeric: true, sensitivity: 'base' }) * (sort.descending ? -1 : 1)), [clients, search, prefixFilter, sort]);
+  const sortHeading = (field: typeof sort.field, label: string) => <button type="button" onClick={() => setSort(current => ({ field, descending: current.field === field && !current.descending }))}>{label} {sort.field === field ? sort.descending ? '↓' : '↑' : '↕'}</button>;
 
   // Edit Client Modal State
   const [editingClient, setEditingClient] = useState<ClientProfile | null>(null);
@@ -354,12 +363,17 @@ export default function ClientsPage() {
         {/* Clients Table */}
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-6 rounded-[6px]">
           <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">Client Directory ({clients.length})</h2>
+            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">Client Directory ({visibleClients.length}/{clients.length})</h2>
             <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#0D9970] font-bold">
               ✓ {dbSource === 'supabase' ? 'Connected to cloud' : 'Local data'}
             </div>
           </div>
 
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <input type="search" aria-label="Search clients" placeholder="Search clients, business, contact…" value={search} onChange={event => setSearch(event.target.value)} className="min-w-60 rounded border-2 border-[#0C0C0C] bg-white p-2 text-sm" />
+            <select aria-label="Filter client prefix" value={prefixFilter} onChange={event => setPrefixFilter(event.target.value)} className="rounded border-2 border-[#0C0C0C] bg-white p-2 text-sm"><option value="">All prefixes</option>{Array.from(new Set(clients.map(client => client.client_prefix).filter(Boolean))).sort().map(prefix => <option key={prefix} value={prefix}>{prefix}</option>)}</select>
+            {(search || prefixFilter) && <button type="button" onClick={() => { setSearch(''); setPrefixFilter(''); }} className="text-sm underline">Clear filters</button>}
+          </div>
           {loading ? (
             <div className="p-8 text-center font-['DM_Mono',monospace]">Loading client directory...</div>
           ) : clients.length === 0 ? (
@@ -371,29 +385,35 @@ export default function ClientsPage() {
               <table className="w-full border-collapse text-[0.85rem]">
                 <thead>
                   <tr className="bg-[#0C0C0C] text-[#FAF6EE]">
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Code</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Client Name</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Trading As / Firm</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">CNIC</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_prefix', 'Prefix')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_code', 'Code')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_name', 'Client / S/O')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('trading_as', 'Business / Consultant')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('phone', 'Phone')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('email', 'Email')}</th>
                     <th className="p-2.5 text-center font-['DM_Mono',monospace] text-[0.7rem]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {clients.map((c, idx) => (
-                    <tr key={idx} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
+                  {visibleClients.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-sm">No clients match these filters.</td></tr>}
+                  {visibleClients.map(c => (
+                    <tr key={c.id} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
+                      <td className="p-2.5 font-bold">{c.client_prefix || '—'}</td>
                       <td className="p-2.5 font-['DM_Mono',monospace] font-bold text-[#C94A00]">
-                        {c.client_prefix ? `${c.client_prefix}-${String(c.client_code).padStart(3, '0')}` : `PREFIX NEEDED · ${String(c.client_code).padStart(3, '0')}`}
+                        {c.client_code || '—'}
                       </td>
                       <td className="p-2.5 font-bold">
                         <div>{c.client_name}</div>
+                        {c.city && <div className="text-xs font-normal text-[#666]">{c.city}</div>}
                         {c.father_name && (
                           <div className="text-[0.7rem] text-[#666] font-normal font-['DM_Mono',monospace]">
                             S/O: {c.father_name}
                           </div>
                         )}
                       </td>
-                      <td className="p-2.5 font-medium">{c.trading_as || '—'}</td>
-                      <td className="p-2.5 font-['DM_Mono',monospace] text-[0.78rem]">{c.cnic || '—'}</td>
+                      <td className="p-2.5 font-medium">{c.trading_as || '—'}<div className="text-xs text-[#666]">{c.consultant_name}</div></td>
+                      <td className="p-2.5 text-xs">{c.phone || '—'}</td>
+                      <td className="p-2.5 text-xs">{c.email || '—'}</td>
                       <td className="p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button

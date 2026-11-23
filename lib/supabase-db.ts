@@ -150,6 +150,8 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
 // Helper to map DB row to ClientProfile
 export function mapRowToClient(row: any): ClientProfile {
   return {
+    phone: row.phone || '',
+    email: row.email || '',
     id: Number(row.id),
     client_code: row.client_code || '',
     client_prefix: row.client_prefix || '',

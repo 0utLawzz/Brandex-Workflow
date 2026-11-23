@@ -22,6 +22,18 @@ globalThis.localStorage = new MemoryStorage();
 
 const { standaloneDB } = await import('../lib/standalone-db.ts');
 
+test('client CSV validates every identity before any local writes', () => {
+  standaloneDB.clearAllData();
+  const missing = standaloneDB.importClientsCSV('Client Code,Full Name\n123,VALID\n,MISSING');
+  assert.equal(missing.success, false);
+  assert.match(missing.message, /never generated/);
+  assert.deepEqual(standaloneDB.getClients(), []);
+  const duplicate = standaloneDB.importClientsCSV('Client Code,Full Name\n1,FIRST\n001,SECOND');
+  assert.equal(duplicate.success, false);
+  assert.match(duplicate.message, /duplicate client code 001/);
+  assert.deepEqual(standaloneDB.getClients(), []);
+});
+
 test('records CSV round-trip preserves client, series, and case number', () => {
   standaloneDB.clearAllData();
   standaloneDB.addRecord({

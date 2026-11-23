@@ -52,6 +52,8 @@ export interface RecordItem {
 }
 
 export interface ClientProfile {
+  phone?: string;
+  email?: string;
   id: number;
   client_name: string;
   father_name: string;
@@ -664,6 +666,7 @@ class StandaloneDB {
       const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
 
       const existing = persist ? this.getClients() : [];
+      const seenCodes = new Set(existing.map(client => client.client_code));
       let importedCount = 0;
       const importedClients: Array<Omit<ClientProfile, 'id'>> = [];
 
@@ -675,7 +678,11 @@ class StandaloneDB {
         const name = val(colName);
         if (!name) continue;
 
-        const clientCode = val(colCode) || String(646 + existing.length + importedCount);
+        const rawCode = val(colCode);
+        if (!/^\d{1,3}$/.test(rawCode)) throw new Error(`Row ${i + 1}: client code must contain 1 to 3 digits. Missing identities are never generated.`);
+        const clientCode = rawCode.padStart(3, '0');
+        if (seenCodes.has(clientCode)) throw new Error(`Row ${i + 1}: duplicate client code ${clientCode}. No clients were imported.`);
+        seenCodes.add(clientCode);
         
         const importedClient = {
           client_code: clientCode.padStart(3, '0'),
@@ -692,10 +699,10 @@ class StandaloneDB {
           created_at: new Date().toISOString()
         };
         importedClients.push(importedClient);
-        if (persist) this.addClient(importedClient);
         importedCount++;
       }
 
+      if (persist) importedClients.forEach(client => this.addClient(client));
       return { success: true, message: `Successfully imported ${importedCount} client profiles from CSV`, count: importedCount, clients: importedClients };
     } catch (e: any) {
       return { success: false, message: e.message || "Failed to parse client CSV file", count: 0 };
