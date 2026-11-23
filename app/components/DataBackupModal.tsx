@@ -19,6 +19,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [preflight, setPreflight] = useState<RestorePreflight | null>(null);
   const [checking, setChecking] = useState(false);
+  const [allowMissingAssets, setAllowMissingAssets] = useState(false);
 
   if (!isOpen) return null;
 
@@ -46,16 +47,31 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const importBackup = async (content: string) => {
     setChecking(true);
     setPreflight(null);
+    setImportText('');
+    setAllowMissingAssets(false);
     try {
       const destination = await supabaseDB.getBackupSnapshot();
       const report = preflightRestore(content, destination);
       setPreflight(report);
+      if (report.valid) setImportText(content);
       setStatusMsg({ text: report.valid ? 'Preflight completed. No data was changed. Review collisions and missing files below.' : 'Preflight failed. No data was changed.', type: report.valid ? 'warning' : 'error' });
     } catch (err: any) {
       setStatusMsg({ text: err.message || 'Failed to inspect backup', type: 'error' });
     } finally {
       setChecking(false);
     }
+  };
+
+  const executeRestore = async () => {
+    if (!preflight?.valid || !importText || !confirm('Restore the reviewed cases, clients, history and document references into the administrator-approved target? Existing identities will never be overwritten.')) return;
+    setChecking(true);
+    try {
+      const report = await supabaseDB.restoreBackupJSON(importText, { confirmed: true, allowMissingAssets });
+      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references. ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Referenced embedded files retained.'} Series/settings recovery is separate.`, type: report.missingAssets ? 'warning' : 'success' });
+      onDataChanged?.();
+    } catch (error) {
+      setStatusMsg({ text: error instanceof Error ? error.message : 'Restore failed.', type: 'error' });
+    } finally { setChecking(false); }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -135,7 +151,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">2. Restore from Backup</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
-            Inspect a backup against the current cloud snapshot before restoring. This check reports identities, relationships, collisions and unavailable files without changing data. Restore execution awaits the verified transactional recovery path.
+            Inspect a backup against the current cloud snapshot before restoring. Execution requires an administrator-enabled target and explicit confirmation. Existing case/client identities are preserved; conflicts stop the transaction.
           </p>
           <div className="flex gap-2">
             <input
@@ -157,6 +173,10 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
             <dl className="grid grid-cols-2 gap-2">{Object.entries(preflight.counts).map(([key, count]) => <React.Fragment key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{count}</dd></React.Fragment>)}</dl>
             {preflight.errors.map((error, index) => <p key={`error-${index}`} className="mt-2 text-red-800">{error}</p>)}
             {preflight.warnings.map((warning, index) => <p key={`warning-${index}`} className="mt-2 text-amber-900">{warning}</p>)}
+            {preflight.valid && <div className="mt-3 border-t pt-3">
+              {preflight.counts.missingAssets > 0 && <label className="mb-3 flex items-start gap-2"><input type="checkbox" checked={allowMissingAssets} onChange={event => setAllowMissingAssets(event.target.checked)} />I accept a partial file recovery: unavailable external bytes will not be restored.</label>}
+              <button type="button" disabled={checking || (preflight.counts.missingAssets > 0 && !allowMissingAssets)} onClick={() => void executeRestore()} className="rounded border-2 border-[#0C0C0C] bg-[#C94A00] px-3 py-2 font-bold text-white disabled:opacity-50">{checking ? 'Working…' : 'Confirm database restore'}</button>
+            </div>}
           </div>}
         </div>
 

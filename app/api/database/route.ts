@@ -175,7 +175,7 @@ export async function POST(request: Request) {
         break;
       case 'restoreBackupJSON':
         if (typeof body.json !== 'string' || body.json.length > 10 * 1024 * 1024) return invalidPayload('A valid backup file is required.', 413);
-        result = await supabaseDB.restoreBackupJSON(body.json);
+        result = await supabaseDB.restoreBackupJSON(body.json, { confirmed: body.options?.confirmed === true, allowMissingAssets: body.options?.allowMissingAssets === true });
         break;
       default:
         return invalidPayload('Unknown database operation.');

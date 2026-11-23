@@ -5,6 +5,10 @@ import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
 import { validateWorkflowTransition } from './case-workflow';
 import { readAllRows } from './read-all-rows';
+import { preflightRestore } from './restore-preflight';
+import { assertRecoveryTarget } from './recovery-policy';
+import type { RecoveryOptions, RecoveryReport } from './recovery-policy';
+import { createBackupPackage } from './backup-package';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -765,18 +769,25 @@ class SupabaseDBService {
     return importedCount;
   }
 
-  public async restoreBackupJSON(json: string): Promise<{ count: number; clients: number }> {
-    if (typeof window !== 'undefined') return requestDatabase('restoreBackupJSON', { json });
-    const parsed = standaloneDB.parseBackupJSON(json);
-    if (!parsed.success) throw new Error(parsed.message);
-    const { isConfigured } = getSupabaseCredentials();
+  public async restoreBackupJSON(json: string, options: RecoveryOptions = { confirmed: false, allowMissingAssets: false }): Promise<RecoveryReport> {
+    if (typeof window !== 'undefined') return requestDatabase('restoreBackupJSON', { json, options });
+    const { isConfigured, url } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Backup was not restored.');
-
-    const records = (parsed.records || []).map(({ id: _id, ...record }) => record);
-    const clients = parsed.clients || [];
-    if (records.length) await this.importRecords(records);
-    if (clients.length) await this.importClients(clients);
-    return { count: records.length, clients: clients.length };
+    const projectRef = assertRecoveryTarget(url, process.env.RECOVERY_RESTORE_ENABLED, process.env.RECOVERY_RESTORE_PROJECT_REF, options.confirmed === true);
+    const packageData = JSON.parse(json);
+    const raw = packageData.databaseSnapshot;
+    if (packageData.schemaVersion !== 3 || !raw || ['records', 'clients', 'history', 'documents'].some(key => !Array.isArray(raw[key]))) throw new Error('A version 3 backup with the original database snapshot is required. Legacy backups need reviewed conversion.');
+    // Inspect the actual rows that the RPC will receive, not a potentially different portable view.
+    const actualPackage = createBackupPackage({ records: raw.records.map(mapRowToRecord), clients: raw.clients.map(mapRowToClient), history: raw.history, documents: raw.documents });
+    const destination = await this.getBackupSnapshot();
+    const preflight = preflightRestore(JSON.stringify(actualPackage), destination);
+    if (!preflight.valid) throw new Error(`Restore preflight failed: ${preflight.errors.join(' ')}`);
+    if (preflight.counts.missingAssets && options.allowMissingAssets !== true) throw new Error('File bytes are missing. Review the partial recovery warning before proceeding.');
+    const snapshot = { clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents };
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('restore_recovery_snapshot', { p_snapshot: snapshot }));
+    if (error) throw new Error(`Atomic restore failed: ${error.message}. No partial database restore was committed; retry the same file to check an uncertain response.`);
+    if (!data || !data.caseIdMap || !data.clientIdMap || ['records', 'clients', 'history', 'documents'].some(key => !Number.isSafeInteger(data[key]))) throw new Error('Restore response is incomplete. Retry the same file to retrieve the stored report.');
+    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, alreadyRestored: data.alreadyRestored === true, missingAssets: preflight.counts.missingAssets, projectRef };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {
