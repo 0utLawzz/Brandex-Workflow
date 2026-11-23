@@ -95,3 +95,4 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - Single and bulk transition callers now use the RPC; transition history is no longer a separate UI/API write. The migration remains unapplied pending a production-equivalent disposable target.
 - Edit Case now uses the migration's metadata RPC so the changed-field update, optional proof reference, and `RECORD UPDATED` history row commit together.
 - Both RPCs are `SECURITY INVOKER` and executable only by `service_role`; no public `SECURITY DEFINER` endpoint is introduced.
+- Disposable Supabase project `clviaughxebohniopzyg` was made production-shaped additively and verified with rollback-only fixtures. Lifecycle, rejection, mixed-selection rollback, and atomic metadata/proof/history checks passed; original row counts remained unchanged. Production was read-only throughout.
