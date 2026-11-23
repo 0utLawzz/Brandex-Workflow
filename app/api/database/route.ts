@@ -171,7 +171,7 @@ export async function POST(request: Request) {
         result = await supabaseDB.saveDocumentReferences(body.documents);
         break;
       case 'getBackupSnapshot':
-        result = await supabaseDB.getBackupSnapshot();
+        result = await supabaseDB.getBackupSnapshot(body.includeAssets === true);
         break;
       case 'restoreBackupJSON':
         if (typeof body.json !== 'string' || body.json.length > 10 * 1024 * 1024) return invalidPayload('A valid backup file is required.', 413);

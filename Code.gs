@@ -63,6 +63,9 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "Authentication required" });
     }
 
+    if (body.action === "exportBackupAsset") {
+      return jsonResponse(exportBackupAsset(body.fileId));
+    }
     if (body.action === "generateFromForm") {
       var result = processFormSubmission(body);
       return jsonResponse({
@@ -85,6 +88,34 @@ function doPost(e) {
 function isAuthorizedBackendRequest(body) {
   var expectedToken = PropertiesService.getScriptProperties().getProperty("RECORDS_ACCESS_TOKEN");
   return Boolean(expectedToken && body && body.accessToken && body.accessToken === expectedToken);
+}
+
+function exportBackupAsset(fileId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(fileId || ''))) throw new Error('Invalid Drive file ID');
+  var file = DriveApp.getFileById(fileId);
+  if (file.isTrashed()) throw new Error('Drive file is in trash');
+  if (file.getSize() > 8 * 1024 * 1024) throw new Error('Drive file exceeds backup byte limit');
+  var mime = file.getMimeType();
+  var formats = {
+    'application/vnd.google-apps.document': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.google-apps.presentation': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  };
+  var blob;
+  if (formats[mime]) {
+    var response = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '/export?mimeType=' + encodeURIComponent(formats[mime]), {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) throw new Error('Google Workspace file export failed');
+    blob = response.getBlob().setContentType(formats[mime]);
+  } else {
+    if (mime.indexOf('application/vnd.google-apps.') === 0) throw new Error('Unsupported native Google file type');
+    blob = file.getBlob();
+  }
+  var bytes = blob.getBytes();
+  if (bytes.length > 8 * 1024 * 1024) throw new Error('Exported file exceeds backup byte limit');
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes).map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  return { ok: true, name: file.getName(), originalMimeType: mime, dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(bytes), sha256: hash };
 }
 
 function jsonResponse(obj) {

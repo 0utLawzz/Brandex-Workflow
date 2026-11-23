@@ -25,7 +25,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
 
   const handleExport = async () => {
     try {
-      const json = await supabaseDB.getBackupSnapshot();
+      const json = await supabaseDB.getBackupSnapshot(true);
       const parsed = JSON.parse(json);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);

@@ -9,6 +9,7 @@ import { preflightRestore } from './restore-preflight';
 import { assertRecoveryTarget } from './recovery-policy';
 import type { RecoveryOptions, RecoveryReport } from './recovery-policy';
 import { createBackupPackage } from './backup-package';
+import { copyBackupAssets } from './backup-assets';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -702,8 +703,8 @@ class SupabaseDBService {
     }
   }
 
-  public async getBackupSnapshot(): Promise<string> {
-    if (typeof window !== 'undefined') return requestDatabase('getBackupSnapshot');
+  public async getBackupSnapshot(includeAssets = false): Promise<string> {
+    if (typeof window !== 'undefined') return requestDatabase('getBackupSnapshot', { includeAssets });
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('get_recovery_snapshot'));
@@ -718,6 +719,19 @@ class SupabaseDBService {
     // Preserve original database values alongside the portable application map.
     exported.databaseSnapshot = data;
     exported.capturedAt = data.capturedAt;
+    if (includeAssets) {
+      exported.assetCopies = await copyBackupAssets(exported.assets, async fileId => {
+        const response = await proxyAppsScript({ action: 'exportBackupAsset', fileId });
+        const file = await response.json();
+        if (!response.ok || !file.ok) throw new Error(file.error || 'Drive export failed.');
+        return file;
+      });
+      const missing = exported.assetCopies.filter((copy: any) => !copy.dataUrl).length;
+      exported.backupStatus = missing ? 'partial' : 'complete';
+      exported.counts.assetsMissingBytes = missing;
+      exported.counts.assetsWithBytes = exported.assetCopies.length - missing;
+      exported.backupNotice = missing ? `${missing} assets could not be copied. See assetCopies for individual failures.` : 'Referenced asset copies have verified SHA-256 checksums. Native Google files are exported to Office formats; Google sharing, revisions and comments are not preserved.';
+    }
     return JSON.stringify(exported, null, 2);
   }
 
