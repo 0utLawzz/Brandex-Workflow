@@ -547,3 +547,11 @@ Before the live correction below, no production database, Supabase project, Apps
 - Inspected project `brandex-workflow` environment targets without decrypting or exposing secrets. Production-scoped values already had Preview counterparts for `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_APPS_SCRIPT_URL`, `NEXT_SUPABASE_ANON_KEY`, `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN`.
 - Added the missing Preview-scoped `NEXT_PUBLIC_APPS_SCRIPT_URL` using the Production config value. No Production value was changed, and no secret value was written to the repository or chat.
 - A fresh Preview deployment is being triggered by this documentation-only branch commit so the exact-head preview loads the synchronized Preview environment.
+
+### 2026-11-23 authenticated Preview QA and env audit
+
+- Exact-head Preview deployment for commit `c1dd9753e175871c3c9199e5a4f4e8b58d0cb589` is READY at `https://brandex-workflow-m0ma4nwfr-projectsb.vercel.app/records`.
+- Authenticated read-only UI QA loaded 481 records. Edit Case opened for `X-896-001 / AKRAM TEA STORE`; the complete editor rendered case-series, identity/metadata, image, dispatch/delivery, linked attachments, delivery receipt, notes, and Save/Cancel controls. Existing linked attachments loaded successfully (7 visible links).
+- The workflow decision dialog opened with Approve/Reject controls and Save Decision, then was canceled. No production workflow transition, edit, attachment, or deletion was submitted.
+- Preview currently resolves to the production-sized dataset; therefore write-path UI QA was intentionally not run against production. Disposable Supabase rollback-only integration tests remain the write-path evidence.
+- Production key inventory contains 7 variables; Preview contains those 7 plus Preview-only `NEXT_PUBLIC_SUPABASE_URL`. Secret-value equality is not yet independently verifiable because Vercel stores secrets write-only and the Vercel connector was unavailable during this check.

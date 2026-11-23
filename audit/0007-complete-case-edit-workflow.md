@@ -97,3 +97,11 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - Both RPCs are `SECURITY INVOKER` and executable only by `service_role`; no public `SECURITY DEFINER` endpoint is introduced.
 - Disposable Supabase project `clviaughxebohniopzyg` was made production-shaped additively and verified with rollback-only fixtures. Lifecycle, rejection, mixed-selection rollback, and atomic metadata/proof/history checks passed; original row counts remained unchanged. Production was read-only throughout.
 - Vercel Preview environment audit found all Production-scoped runtime values already mirrored to Preview except `NEXT_PUBLIC_APPS_SCRIPT_URL`; that missing Preview config was synchronized without changing Production or exposing secret values. The branch documentation commit triggers a fresh exact-head Preview deployment.
+
+### Authenticated Preview evidence
+
+- Exact-head Preview deployment `c1dd9753e175871c3c9199e5a4f4e8b58d0cb589` reached READY at `https://brandex-workflow-m0ma4nwfr-projectsb.vercel.app/records`.
+- Read-only browser QA loaded 481 records; Edit Case rendered the expanded metadata/proof/attachment surface, and 7 existing linked attachments loaded for `X-896-001 / AKRAM TEA STORE`.
+- The Approve/Reject workflow dialog rendered and was canceled without submitting. No production record, attachment, Drive file, or workflow transition was mutated.
+- Because the Preview is connected to a production-sized dataset, transition/edit/attachment writes were not performed in Preview; transactional write-path coverage is recorded from the disposable Supabase rollback tests.
+- Production has 7 environment keys and Preview has those keys plus `NEXT_PUBLIC_SUPABASE_URL`; secret-value equivalence remains pending a working Vercel env API or secure manual re-entry because secret values are write-only.
