@@ -69,14 +69,28 @@ function HighlightText({ text, query }: { text?: string | number | null; query: 
 
 // Format short date
 function formatShortDate(d?: string) {
-  if (!d) return '—';
-  const str = String(d).trim();
-  // If in format "Wednesday, 15 October 2026", take last 3 tokens
-  if (str.includes(',')) {
-    const afterComma = str.split(',')[1]?.trim();
-    if (afterComma) return afterComma;
-  }
-  return str;
+  const value = toDateInputValue(d || '');
+  if (!value) return d || '—';
+  const [year, month, day] = value.split('-');
+  return `${day}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(month) - 1]}-${year.slice(-2)}`;
+}
+
+type TableColumn = 'date' | 'reference' | 'folder' | 'classNo' | 'status' | 'filingProcess' | 'appName';
+function columnValue(record: RecordItem, column: TableColumn): string {
+  if (column === 'reference') return formatCaseReference(record.selectionMenu || '', record.clientCode || '', record.caseNo || '');
+  return String(record[column] || '');
+}
+
+function ColumnControl({ label, value, direction, onSort, onFilter }: {
+  label: string; value: string; direction?: 'asc' | 'desc'; onSort: () => void; onFilter: (value: string) => void;
+}) {
+  return <div className="min-w-20">
+    <button type="button" onClick={onSort} className="whitespace-nowrap" aria-label={`Sort by ${label}`}>{label} {direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : '↕'}</button>
+    <details className="mt-1 text-[10px] font-normal normal-case tracking-normal">
+      <summary className="cursor-pointer">{value ? 'Filtered' : 'Filter'}</summary>
+      <input aria-label={`Filter ${label}`} value={value} onChange={event => onFilter(event.target.value)} className="mt-1 w-24 rounded border px-1 py-1 text-black" placeholder="Contains…" />
+    </details>
+  </div>;
 }
 
 // Format class number purely as number (1-45)
@@ -99,7 +113,9 @@ export default function RecordsPage() {
   const [filterYear, setFilterYear] = useState('');
   const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'mark' | 'status'>('date-desc');
-  const [pageSize, setPageSize] = useState<number>(25);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string>>>({});
+  const [columnSort, setColumnSort] = useState<{ column: TableColumn; direction: 'asc' | 'desc' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [showCharts, setShowCharts] = useState(true);
 
@@ -229,19 +245,8 @@ export default function RecordsPage() {
 
   // Helper date parser
   const parseDateForSort = (d: string) => {
-    if (!d) return 0;
-    const months: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-    const parts = String(d).toUpperCase().trim().split(/[-\/\s,]+/);
-    if (parts.length < 3) return 0;
-    let day = 0;
-    let mon = 0;
-    let year = 0;
-    for (const p of parts) {
-      if (/^\d{4}$/.test(p)) year = parseInt(p, 10);
-      else if (/^\d{1,2}$/.test(p) && !day) day = parseInt(p, 10);
-      else if (months[p.substring(0, 3)] !== undefined) mon = months[p.substring(0, 3)];
-    }
-    return new Date(year || 2026, mon, day || 1).getTime();
+    const value = toDateInputValue(d || '');
+    return value ? Date.parse(`${value}T00:00:00Z`) : 0;
   };
 
   // List of all unique consultants for multi-select filter
@@ -270,6 +275,7 @@ export default function RecordsPage() {
     const y = filterYear.trim();
 
     const filtered = allRecords.filter(r => {
+      if (Object.entries(columnFilters).some(([column, value]) => !columnValue(r, column as TableColumn).toLowerCase().includes((value || '').trim().toLowerCase()))) return false;
       const recordStatus = String(r.status || '').toUpperCase();
 
       // Default Status Filter: PENDING & IN REVIEW
@@ -312,13 +318,26 @@ export default function RecordsPage() {
     });
 
     return filtered.sort((a, b) => {
+      if (columnSort) {
+        const left = columnValue(a, columnSort.column);
+        const right = columnValue(b, columnSort.column);
+        const comparison = columnSort.column === 'date'
+          ? toDateInputValue(left).localeCompare(toDateInputValue(right))
+          : left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+        return comparison * (columnSort.direction === 'asc' ? 1 : -1);
+      }
       if (sortBy === 'date-desc') return parseDateForSort(b.date) - parseDateForSort(a.date);
       if (sortBy === 'date-asc') return parseDateForSort(a.date) - parseDateForSort(b.date);
       if (sortBy === 'mark') return (a.folder || '').localeCompare(b.folder || '');
       if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '');
       return 0;
     });
-  }, [allRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy]);
+  }, [allRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy, columnFilters, columnSort]);
+
+  const columnControl = (column: TableColumn, label: string) => <ColumnControl label={label} value={columnFilters[column] || ''}
+    direction={columnSort?.column === column ? columnSort.direction : undefined}
+    onSort={() => { setColumnSort(current => ({ column, direction: current?.column === column && current.direction === 'asc' ? 'desc' : 'asc' })); setCurrentPage(1); }}
+    onFilter={value => { setColumnFilters(current => ({ ...current, [column]: value })); setCurrentPage(1); }} />;
 
   // 4 BOX STATISTICS & LAW FIRM WIDGET DATA
   const stats = useMemo(() => {
@@ -865,7 +884,8 @@ export default function RecordsPage() {
         {/* =========================================================================
             CONTROLS, SHORT FILTER BUTTONS & MULTI-SELECT CONSULTANT
            ========================================================================= */}
-        <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-4 rounded-[6px] mb-6">
+        <details className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-4 rounded-[6px] mb-6">
+          <summary className="cursor-pointer text-right font-bold">Filters</summary>
           <div className="flex flex-col gap-3">
             {/* Short Filter Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
@@ -904,7 +924,7 @@ export default function RecordsPage() {
               <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] uppercase text-[#666]">
                 Consultant Filter:
               </span>
-              {allConsultantsList.slice(0, 5).map(cName => {
+              {allConsultantsList.map(cName => {
                 const isSelected = selectedConsultants.includes(cName);
                 return (
                   <button
@@ -968,7 +988,7 @@ export default function RecordsPage() {
               {/* Sort By */}
               <select
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value as any)}
+                onChange={e => { setSortBy(e.target.value as typeof sortBy); setColumnSort(null); setCurrentPage(1); }}
                 className="p-2.5 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.8rem] rounded-[4px] cursor-pointer font-bold"
               >
                 <option value="date-desc">Recent Date (Newest)</option>
@@ -990,7 +1010,7 @@ export default function RecordsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </details>
 
         {/* =========================================================================
             BULK ACTIONS TOOLBAR (WHEN ROWS ARE CHECKED)
@@ -1110,32 +1130,34 @@ export default function RecordsPage() {
 
                   {/* Col 2: Date (Short, sorted by recent date) */}
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Date
+                    {columnControl('date', 'Date')}
                   </th>
 
                   {/* Col 3: Case Ref in box of 3 col */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Case Reference
+                    {columnControl('reference', 'Case Reference')}
                   </th>
 
                   {/* Col 5: Case Name */}
+                  <th className="p-2 text-center text-[0.68rem]">Image</th>
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Case Name
+                    {columnControl('folder', 'Case Name')}
                   </th>
 
                   {/* Col 6: Class (1-45) Just Numbers */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Class
+                    {columnControl('classNo', 'Class')}
                   </th>
 
                   {/* Col 7: Workflow Stage */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Workflow Stage
+                    {columnControl('status', 'Workflow Status')}
                   </th>
 
                   {/* Col 8: Applicant */}
+                  <th className="p-2 text-left text-[0.68rem]">{columnControl('filingProcess', 'Legal Case Stage')}</th>
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Applicant
+                    {columnControl('appName', 'Applicant')}
                   </th>
 
                   {/* Actions */}
@@ -1148,14 +1170,14 @@ export default function RecordsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace]">
+                    <td colSpan={10} className="p-12 text-center font-['DM_Mono',monospace]">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C94A00]" />
                       Loading standalone cases...
                     </td>
                   </tr>
                 ) : pageRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
+                    <td colSpan={10} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
                       No cases match current filter.
                       <div className="mt-2">
                         <button
@@ -1164,6 +1186,9 @@ export default function RecordsPage() {
                             setFilterStatus('ALL');
                             setSearchQuery('');
                             setSelectedConsultants([]);
+                            setColumnFilters({});
+                            setFilterYear('');
+                            setCurrentPage(1);
                           }}
                           className="font-bold underline text-[#C94A00] cursor-pointer"
                         >
@@ -1207,12 +1232,13 @@ export default function RecordsPage() {
                         {/* Col 3: Case Ref in box of 3 col */}
                         <td className="p-2.5 text-center whitespace-nowrap">
                           <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
-                            {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '', r.caseNo || String(idx + 1).padStart(3, '0'))}
+                            {formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '').split('-').map((segment, index) => <React.Fragment key={index}>{index > 0 && <span className="mx-1 text-[#666]">-</span>}<span>{segment}</span></React.Fragment>)}
                           </span>
                         </td>
 
                         {/* Col 5: Case Name */}
-                        <td className="p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
+                        <td className="p-2 text-center">{r.img ? <a href={r.img} target="_blank" rel="noopener noreferrer" aria-label={`View logo for ${r.folder}`}><Image src={r.img} alt={`${r.folder} logo`} width={40} height={40} unoptimized className="h-10 w-10 rounded border object-contain" /></a> : <span aria-label="No image">—</span>}</td>
+                        <td className="min-w-[240px] w-[30%] p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
                           <HighlightText text={r.folder} query={searchQuery} />
                           {r.tm && (
                             <div className="text-[0.68rem] text-[#666] font-normal font-['DM_Mono',monospace]">
@@ -1232,11 +1258,11 @@ export default function RecordsPage() {
                             <span className={`inline-block font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 rounded-[3px] border border-[#0C0C0C] shadow-[1px_1px_0_#0C0C0C] uppercase ${statusBadge(r.status)}`}>
                               {r.status || 'PENDING'}
                             </span>
-                            {r.filingProcess && <span className="text-[0.58rem] leading-tight text-[#666] max-w-[130px] text-center">{r.filingProcess}</span>}
                           </div>
                         </td>
 
                         {/* Col 8: Applicant */}
+                        <td className="p-2.5 text-center"><span className="inline-block rounded border border-[#0C0C0C] bg-white px-2 py-1 text-[0.68rem] font-bold">{r.filingProcess || '—'}</span></td>
                         <td className="p-2.5 text-[0.78rem]">
                           <div className="font-bold">
                             <HighlightText text={r.appName} query={searchQuery} />
@@ -1250,7 +1276,7 @@ export default function RecordsPage() {
 
                         {/* Col 12: Actions */}
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="grid grid-cols-3 items-center justify-items-center gap-1">
                             {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1.5 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label="View dispatch proof"><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
                             {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1.5 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label="View delivery receipt"><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
                             {((r.status || 'PENDING').toUpperCase().includes('PENDING') || (r.status || '').toUpperCase().includes('REVIEW')) && (
