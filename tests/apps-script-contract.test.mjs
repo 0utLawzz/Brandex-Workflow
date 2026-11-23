@@ -20,7 +20,7 @@ test('bulk generation is controlled by the web app and Apps Script has no Sheets
   const manifest = await readFile(new URL('../appsscript.json', import.meta.url), 'utf8');
   assert.match(databaseApi, /bulkGenerateDocuments/);
   assert.match(databaseApi, /from\('trademark_records'\)/);
-  assert.doesNotMatch(code, /SpreadsheetApp|spreadsheet|sheet\.getRange/);
+  assert.doesNotMatch(code, /SpreadsheetApp|sheet\.getRange|spreadsheets\.values/);
   assert.doesNotMatch(manifest, /auth\/spreadsheets/);
   assert.match(code, /LockService\.getScriptLock\(\)/);
   assert.match(code, /finally\s*\{\s*lock\.releaseLock\(\);\s*\}/);

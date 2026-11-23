@@ -10,6 +10,7 @@ import { assertRecoveryTarget } from './recovery-policy';
 import type { RecoveryOptions, RecoveryReport } from './recovery-policy';
 import { createBackupPackage } from './backup-package';
 import { copyBackupAssets } from './backup-assets';
+import { proxyAppsScript } from './apps-script-proxy';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
