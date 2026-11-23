@@ -4,6 +4,8 @@ import React, { useState, useRef } from 'react';
 import { Download, Upload, RefreshCw, X, ShieldCheck, Database, Check } from 'lucide-react';
 import { standaloneDB } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
+import { preflightRestore } from '@/lib/restore-preflight';
+import type { RestorePreflight } from '@/lib/restore-preflight';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -15,6 +17,8 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const [importText, setImportText] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [preflight, setPreflight] = useState<RestorePreflight | null>(null);
+  const [checking, setChecking] = useState(false);
 
   if (!isOpen) return null;
 
@@ -40,16 +44,17 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   };
 
   const importBackup = async (content: string) => {
+    setChecking(true);
+    setPreflight(null);
     try {
-      const restored = await supabaseDB.restoreBackupJSON(content);
-      const importedClientCount = restored.clients;
-      setStatusMsg({
-        text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved, but history, document links, and external file contents were not restored. This is not a full recovery.`,
-        type: 'warning'
-      });
-      if (onDataChanged) onDataChanged();
+      const destination = await supabaseDB.getBackupSnapshot();
+      const report = preflightRestore(content, destination);
+      setPreflight(report);
+      setStatusMsg({ text: report.valid ? 'Preflight completed. No data was changed. Review collisions and missing files below.' : 'Preflight failed. No data was changed.', type: report.valid ? 'warning' : 'error' });
     } catch (err: any) {
-      setStatusMsg({ text: err.message || 'Failed to import backup', type: 'error' });
+      setStatusMsg({ text: err.message || 'Failed to inspect backup', type: 'error' });
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -130,7 +135,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">2. Restore from Backup</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
-            Cloud restore currently imports cases and clients only. It does not restore history, document links, or external file contents; do not use it as a full disaster-recovery restore.
+            Inspect a backup against the current cloud snapshot before restoring. This check reports identities, relationships, collisions and unavailable files without changing data. Restore execution awaits the verified transactional recovery path.
           </p>
           <div className="flex gap-2">
             <input
@@ -141,12 +146,18 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
               className="hidden"
             />
             <button
+              disabled={checking}
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#0D9970] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer"
             >
-              <Upload className="w-4 h-4" /> CHOOSE BACKUP FILE (.JSON)
+              <Upload className="w-4 h-4" /> {checking ? 'CHECKING…' : 'CHECK BACKUP FILE (.JSON)'}
             </button>
           </div>
+          {preflight && <div role="status" className="mt-4 text-sm">
+            <dl className="grid grid-cols-2 gap-2">{Object.entries(preflight.counts).map(([key, count]) => <React.Fragment key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{count}</dd></React.Fragment>)}</dl>
+            {preflight.errors.map((error, index) => <p key={`error-${index}`} className="mt-2 text-red-800">{error}</p>)}
+            {preflight.warnings.map((warning, index) => <p key={`warning-${index}`} className="mt-2 text-amber-900">{warning}</p>)}
+          </div>}
         </div>
 
         {/* Clear Browser Data */}
