@@ -700,38 +700,21 @@ class SupabaseDBService {
 
   public async getBackupSnapshot(): Promise<string> {
     if (typeof window !== 'undefined') return requestDatabase('getBackupSnapshot');
-    const [recordsResult, clientsResult] = await Promise.all([this.getRecords(), this.getClients()]);
-    if (recordsResult.error || clientsResult.error) {
-      throw new Error(`Backup stopped because cloud data could not be read: ${recordsResult.error || clientsResult.error}`);
-    }
-    if (recordsResult.source !== clientsResult.source) {
-      throw new Error('Backup stopped because case and client data came from different sources. Reload and retry after the connection is restored.');
-    }
     const { isConfigured } = getSupabaseCredentials();
-    let history: HistoryLog[] | undefined;
-    let documents: DocumentAttachment[] | undefined;
-    if (isConfigured) {
-      const client = getSupabaseClient();
-      const [historyResult, documentsResult] = await Promise.all([
-        readTable(client, 'trademark_history'),
-        readTable(client, 'trademark_documents')
-      ]);
-      if (historyResult.error || documentsResult.error) {
-        throw new Error(`Backup stopped because history or document data could not be read: ${historyResult.error?.message || documentsResult.error?.message}`);
-      }
-      history = (historyResult.data || []).map((row: any) => ({
-        id: Number(row.id), record_id: Number(row.record_id), action: row.status || row.action || 'STAGE_UPDATE', notes: row.notes || '', created_at: row.created_at || ''
-      }));
-      documents = (documentsResult.data || []).map((row: any) => ({
-        id: Number(row.id), record_id: Number(row.record_id), file_name: row.file_name || '', file_size: Number(row.file_size) || undefined, file_type: row.file_type || '', file_url: row.file_url || '', created_at: row.created_at || ''
-      }));
-    }
-    return standaloneDB.exportBackupJSON({
-      records: recordsResult.records,
-      clients: clientsResult.clients,
-      ...(history ? { history } : {}),
-      ...(documents ? { documents } : {})
-    });
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('get_recovery_snapshot'));
+    if (error) throw new Error(`Consistent backup snapshot unavailable: ${error.message}. Verify the reviewed recovery migration before retrying.`);
+    if (!data || ['records', 'clients', 'history', 'documents', 'series'].some(key => !Array.isArray(data[key]))) throw new Error('Backup snapshot returned incomplete collections.');
+    const exported = JSON.parse(standaloneDB.exportBackupJSON({
+      records: data.records.map(mapRowToRecord),
+      clients: data.clients.map(mapRowToClient),
+      history: data.history.map((row: any) => ({ ...row, action: row.status })),
+      documents: data.documents,
+    }));
+    // Preserve original database values alongside the portable application map.
+    exported.databaseSnapshot = data;
+    exported.capturedAt = data.capturedAt;
+    return JSON.stringify(exported, null, 2);
   }
 
   public async addClient(client: Omit<ClientProfile, 'id'> & { id?: number }): Promise<ClientProfile> {
