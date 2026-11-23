@@ -3,6 +3,7 @@ import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment
 import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
+import { validateWorkflowTransition } from './case-workflow';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -131,6 +132,8 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.img !== undefined) row.logo_url = record.img;
   if (record.dispatchedDate !== undefined) row.dispatched_date = record.dispatchedDate;
   if (record.dispatchedNote !== undefined) row.dispatched_note = record.dispatchedNote;
+  // Dispatch proof is stored as a row in trademark_documents. These columns are
+  // absent from the live production schema and must never be sent to trademark_records.
   if (record.deliveredDate !== undefined) row.delivered_date = record.deliveredDate;
   if (record.receiverName !== undefined) row.receiver_name = record.receiverName;
   if (record.receiptImage !== undefined) row.receipt_image = record.receiptImage;
@@ -382,6 +385,38 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const row = mapRecordToRow(updates);
+      if (updates.status !== undefined) {
+        const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
+          client.from('trademark_records').select('status').eq('id', id).maybeSingle()
+        );
+        if (statusReadError) throw new Error(`Could not verify the current workflow status: ${statusReadError.message}`);
+        if (!currentStatusRow) throw new Error('Case was not found while validating its workflow transition.');
+        const transition = validateWorkflowTransition(currentStatusRow.status, updates.status, updates);
+        if (!transition.valid) throw new Error(transition.error || 'This workflow transition is not allowed.');
+
+        const { error: transitionError } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
+          p_ids: [id],
+          p_new_status: updates.status,
+          p_audit_note: updates.notes || `Case marked as ${updates.status}`,
+          p_meta: {
+            dispatchedDate: updates.dispatchedDate,
+            dispatchedNote: updates.dispatchedNote,
+            trackingId: updates.trackingId,
+            dispatchedImage: updates.dispatchedImage,
+            dispatchedDocName: updates.dispatchedDocName,
+            dispatchedDocType: updates.dispatchedDocType,
+            deliveredDate: updates.deliveredDate,
+            receiverName: updates.receiverName,
+            receiptImage: updates.receiptImage,
+          },
+        }));
+        if (transitionError) throw new Error(`Atomic workflow transition failed: ${transitionError.message}`);
+        const { data: transitioned, error: transitionedError } = await withSupabaseTimeout(
+          client.from('trademark_records').select().eq('id', id).maybeSingle()
+        );
+        if (transitionedError) throw new Error(`Workflow transition succeeded but case reload failed: ${transitionedError.message}`);
+        return transitioned ? mapRowToRecord(transitioned) : null;
+      }
       if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
         const { data: current, error: currentError } = await withSupabaseTimeout(
           client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
@@ -399,26 +434,18 @@ class SupabaseDBService {
         if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
       }
 
-      let result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
-      if (result.error && result.error.message.includes('dispatched_image')) {
-        delete row.dispatched_image;
-        delete row.dispatched_doc_name;
-        delete row.dispatched_doc_type;
-        result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
-      }
+      const result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
       if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
       if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
 
       const updated = mapRowToRecord(result.data);
       if (updates.dispatchedImage) {
-        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert([{
+        await this.saveDocumentReferences([{
           record_id: id,
           file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
           file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
           file_url: updates.dispatchedImage,
-          created_at: new Date().toISOString()
-        }]));
-        if (documentError) throw new Error(`Case was updated, but dispatch proof reference save failed: ${documentError.message}`);
+        }]);
       }
       return updated;
     }
@@ -440,6 +467,48 @@ class SupabaseDBService {
     throw new Error('Supabase server credentials are not configured. Case was not deleted.');
   }
 
+  public async updateRecordWithHistory(id: number, updates: Partial<RecordItem>, auditNote: string): Promise<RecordItem | null> {
+    if (typeof window !== 'undefined') return requestDatabase('updateRecordWithHistory', { id, updates, auditNote });
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured. Case was not updated.');
+    if (updates.status !== undefined) throw new Error('Workflow status changes must use the guarded transition operation.');
+
+    const client = getSupabaseClient();
+    const payload: Record<string, unknown> = mapRecordToRow(updates);
+    delete payload.updated_at;
+    if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
+      const { data: current, error: currentError } = await withSupabaseTimeout(
+        client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
+      );
+      if (currentError) throw new Error(`Could not read current case identity: ${currentError.message}`);
+      if (!current) throw new Error('Case was not found while validating its reference.');
+      const identity = {
+        clientCode: String(updates.clientCode ?? current.client_code ?? ''),
+        selectionMenu: String(updates.selectionMenu ?? current.selection_menu ?? 'A'),
+        caseNo: String(updates.caseNo ?? current.case_no ?? ''),
+      };
+      await assertUniqueCaseReference(client, identity, id);
+      if (updates.clientCode !== undefined) payload.client_code = identity.clientCode.replace(/\D/g, '').padStart(3, '0');
+      if (updates.selectionMenu !== undefined) payload.selection_menu = normalizeCaseSeries(identity.selectionMenu);
+      if (updates.caseNo !== undefined) payload.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
+    }
+    if (updates.dispatchedImage !== undefined) payload.dispatchedImage = updates.dispatchedImage;
+    if (updates.dispatchedDocName !== undefined) payload.dispatchedDocName = updates.dispatchedDocName;
+    if (updates.dispatchedDocType !== undefined) payload.dispatchedDocType = updates.dispatchedDocType;
+
+    const { error } = await withSupabaseTimeout(client.rpc('apply_case_metadata_update', {
+      p_id: id,
+      p_updates: payload,
+      p_audit_note: auditNote,
+    }));
+    if (error) throw new Error(`Atomic case edit failed: ${error.message}`);
+    const { data, error: readError } = await withSupabaseTimeout(
+      client.from('trademark_records').select().eq('id', id).maybeSingle()
+    );
+    if (readError) throw new Error(`Case was updated but reload failed: ${readError.message}`);
+    return data ? mapRowToRecord(data) : null;
+  }
+
   public async bulkUpdateStatus(
     ids: number[],
     newStatus: string,
@@ -447,6 +516,7 @@ class SupabaseDBService {
     meta?: {
       dispatchedDate?: string;
       dispatchedNote?: string;
+      trackingId?: string;
       dispatchedImage?: string;
       dispatchedDocName?: string;
       dispatchedDocType?: string;
@@ -462,43 +532,13 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const updatePayload: Record<string, any> = {
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-          ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
-          ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),
-          ...(meta?.deliveredDate ? { delivered_date: meta.deliveredDate } : {}),
-          ...(meta?.receiverName ? { receiver_name: meta.receiverName } : {}),
-          ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
-        };
-
-      const { error } = await withSupabaseTimeout(client
-          .from('trademark_records')
-          .update(updatePayload)
-          .in('id', ids));
-      if (error) throw new Error(`Supabase bulk status update failed: ${error.message}`);
-
-      if (meta?.dispatchedImage) {
-        const docRows = ids.map(id => ({
-            record_id: id,
-            file_name: meta.dispatchedDocName || `Dispatch_Receipt_${id}`,
-            file_type: meta.dispatchedDocType || (meta.dispatchedImage!.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
-            file_url: meta.dispatchedImage,
-            created_at: new Date().toISOString()
-        }));
-        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert(docRows));
-        if (documentError) throw new Error(`Dispatch proof save failed: ${documentError.message}`);
-      }
-
-      const historyRows = ids.map(id => ({
-          record_id: id,
-          status: newStatus,
-          notes: auditNote || `Bulk stage updated to ${newStatus}`,
-          created_at: new Date().toISOString()
+      const { error } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
+        p_ids: ids,
+        p_new_status: newStatus,
+        p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`,
+        p_meta: meta || {},
       }));
-
-      const { error: historyError } = await withSupabaseTimeout(client.from('trademark_history').insert(historyRows));
-      if (historyError) throw new Error(`Status updated, but history logging failed: ${historyError.message}`);
+      if (error) throw new Error(`Atomic bulk workflow transition failed: ${error.message}`);
     }
 
     if (!getSupabaseCredentials().isConfigured) throw new Error('Supabase server credentials are not configured. Bulk status update was not saved.');
@@ -837,6 +877,27 @@ class SupabaseDBService {
 
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. History was not saved.');
     throw new Error('Supabase history could not be saved.');
+  }
+
+  public async getDocumentReferences(recordId: number): Promise<DocumentAttachment[]> {
+    if (typeof window !== 'undefined') return requestDatabase('getDocumentReferences', { recordId });
+    if (!Number.isSafeInteger(recordId) || recordId < 1) throw new Error('A valid case ID is required.');
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
+    const client = getSupabaseClient();
+    const { data, error } = await withSupabaseTimeout(
+      client.from('trademark_documents').select('*').eq('record_id', recordId).order('id', { ascending: false })
+    );
+    if (error) throw new Error(`Case attachments could not be loaded: ${error.message}`);
+    return (data || []).map((row: any) => ({
+      id: Number(row.id),
+      record_id: Number(row.record_id),
+      file_name: String(row.file_name || 'Attachment'),
+      file_type: String(row.file_type || ''),
+      file_url: String(row.file_url || ''),
+      file_size: row.file_size == null ? undefined : Number(row.file_size),
+      created_at: String(row.created_at || ''),
+    }));
   }
 
   public async saveDocumentReferences(documents: Array<Omit<DocumentAttachment, 'id' | 'created_at'> & { file_size?: number }>): Promise<number> {

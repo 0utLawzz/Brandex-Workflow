@@ -5,10 +5,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
-import { RecordItem, ClientProfile } from '@/lib/standalone-db';
+import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
+import { validateWorkflowTransition } from '@/lib/case-workflow';
+import { buildCaseEditUpdates, getInlineAssetBytes, MAX_INLINE_ASSET_BYTES } from '@/lib/case-edit-payload';
 import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
@@ -176,11 +178,29 @@ export default function RecordsPage() {
 
   // Edit Single Record Modal
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
+  const [originalEditingRecord, setOriginalEditingRecord] = useState<RecordItem | null>(null);
   const [savingRecord, setSavingRecord] = useState(false);
+  const [editingDocuments, setEditingDocuments] = useState<DocumentAttachment[]>([]);
+  const [loadingEditingDocuments, setLoadingEditingDocuments] = useState(false);
+  const [newDocumentName, setNewDocumentName] = useState('');
+  const [newDocumentUrl, setNewDocumentUrl] = useState('');
 
   // File input refs
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setNewDocumentName('');
+    setNewDocumentUrl('');
+    if (!editingRecord?.id) { setEditingDocuments([]); return; }
+    let active = true;
+    setLoadingEditingDocuments(true);
+    supabaseDB.getDocumentReferences(editingRecord.id)
+      .then(documents => { if (active) setEditingDocuments(documents); })
+      .catch(error => { if (active) setErrorMsg(error instanceof Error ? error.message : 'Case attachments could not be loaded.'); })
+      .finally(() => { if (active) setLoadingEditingDocuments(false); });
+    return () => { active = false; };
+  }, [editingRecord?.id]);
 
   useEffect(() => {
     const preferences = readWorkspacePreferences();
@@ -410,6 +430,9 @@ export default function RecordsPage() {
     const current = (record.status || '').toUpperCase();
 
     if (targetStage === 'APPROVED_OR_REJECTED') {
+      const approved = validateWorkflowTransition(current, 'APPROVED');
+      const rejected = validateWorkflowTransition(current, 'REJECTED');
+      if (!approved.valid && !rejected.valid) { setErrorMsg(approved.error || rejected.error || 'This case cannot be advanced from its current status.'); return; }
       setApproveRejectModal({
         open: true,
         record,
@@ -417,6 +440,7 @@ export default function RecordsPage() {
         notes: ''
       });
     } else if (targetStage === 'DISPATCHED') {
+      if (current !== 'APPROVED') { setErrorMsg('Only APPROVED cases can be dispatched.'); return; }
       setDispatchModal({
         open: true,
         record,
@@ -428,6 +452,7 @@ export default function RecordsPage() {
         dispatchedDocType: record.dispatchedDocType || ''
       });
     } else if (targetStage === 'DELIVERED') {
+      if (current !== 'DISPATCHED') { setErrorMsg('Only DISPATCHED cases can be marked delivered.'); return; }
       setDeliveredModal({
         open: true,
         record,
@@ -447,7 +472,6 @@ export default function RecordsPage() {
         status: approveRejectModal.decision,
         notes: approveRejectModal.notes ? `${r.notes || ''} [Decision: ${approveRejectModal.notes}]` : r.notes
       });
-      await supabaseDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
       setBulkNotice(`✓ Case ${r.folder} marked as ${approveRejectModal.decision}`);
     } else if (approveRejectModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, approveRejectModal.decision, approveRejectModal.notes || `Bulk marked as ${approveRejectModal.decision}`);
@@ -476,16 +500,12 @@ export default function RecordsPage() {
         dispatchedDocName: dispatchModal.dispatchedDocName,
         dispatchedDocType: dispatchModal.dispatchedDocType
       });
-      await supabaseDB.addHistory(
-        r.id,
-        'DISPATCHED',
-        `Dispatched on ${dispatchModal.date}. Trk: ${dispatchModal.trackingId || 'N/A'}. ${dispatchModal.note || ''}${dispatchModal.dispatchedImage ? ' [Receipt / Proof of Sending Attached]' : ''}`
-      );
       setBulkNotice(`✓ Case ${r.folder} marked as DISPATCHED.`);
     } else if (dispatchModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
         dispatchedDate: dispatchModal.date,
         dispatchedNote: dispatchModal.note,
+        trackingId: dispatchModal.trackingId,
         dispatchedImage: dispatchModal.dispatchedImage,
         dispatchedDocName: dispatchModal.dispatchedDocName,
         dispatchedDocType: dispatchModal.dispatchedDocType
@@ -520,7 +540,6 @@ export default function RecordsPage() {
         receiverName: deliveredModal.receiverName,
         receiptImage: deliveredModal.receiptImage
       });
-      await supabaseDB.addHistory(r.id, 'DELIVERED', `Delivered on ${deliveredModal.date} to receiver: ${deliveredModal.receiverName}`);
       setBulkNotice(`✓ Case ${r.folder} marked as DELIVERED to ${deliveredModal.receiverName}`);
     } else if (deliveredModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DELIVERED', `Bulk delivered on ${deliveredModal.date}. Receiver: ${deliveredModal.receiverName}`, {
@@ -543,6 +562,7 @@ export default function RecordsPage() {
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > MAX_INLINE_ASSET_BYTES) { setErrorMsg('Delivery receipt must be an image no larger than 8 MB.'); e.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
@@ -556,8 +576,8 @@ export default function RecordsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 12 * 1024 * 1024) {
-      alert('Proof file size exceeds 12MB limit.');
+    if (file.size > MAX_INLINE_ASSET_BYTES) {
+      alert('Proof file size exceeds 8 MB limit.');
       return;
     }
 
@@ -575,17 +595,45 @@ export default function RecordsPage() {
     e.target.value = '';
   };
 
+  const handleAddDocumentReference = async () => {
+    if (!editingRecord) return;
+    const name = newDocumentName.trim();
+    const rawUrl = newDocumentUrl.trim();
+    if (!name || !rawUrl) { setErrorMsg('Enter both an attachment name and a secure document URL.'); return; }
+    let parsed: URL;
+    try { parsed = new URL(rawUrl); } catch { setErrorMsg('Enter a valid HTTPS document URL.'); return; }
+    if (parsed.protocol !== 'https:') { setErrorMsg('Only secure HTTPS document links are accepted.'); return; }
+    try {
+      await supabaseDB.saveDocumentReferences([{ record_id: editingRecord.id, file_name: name, file_type: 'application/octet-stream', file_url: parsed.toString() }]);
+      setEditingDocuments(await supabaseDB.getDocumentReferences(editingRecord.id));
+      setNewDocumentName('');
+      setNewDocumentUrl('');
+      setBulkNotice('Attachment link saved. Existing documents were preserved.');
+      setTimeout(() => setBulkNotice(null), 4000);
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Attachment link could not be saved.'); }
+  };
+
   // Handle single record edit save
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
+    const cnicDigits = String(editingRecord.cnic || '').replace(/\D/g, '');
+    if (cnicDigits && !/^\d{13}$/.test(cnicDigits)) { setErrorMsg('CNIC must contain exactly 13 digits (for example, 35201-1234567-1).'); return; }
     setSavingRecord(true);
     try {
-      await supabaseDB.updateRecord(editingRecord.id, editingRecord);
-      await supabaseDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in CMS');
+      const updates = originalEditingRecord
+        ? buildCaseEditUpdates(editingRecord, originalEditingRecord)
+        : editingRecord;
+      if (getInlineAssetBytes(updates) > MAX_INLINE_ASSET_BYTES) {
+        throw new Error('Combined inline images must be 8 MB or smaller.');
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabaseDB.updateRecordWithHistory(editingRecord.id, updates, 'Case metadata edited directly in CMS');
+      }
       setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
       setEditingRecord(null);
-      loadAllRecords();
+      setOriginalEditingRecord(null);
+      await loadAllRecords();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update record');
     } finally {
@@ -1218,6 +1266,7 @@ export default function RecordsPage() {
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"
+                              disabled={!['PENDING', 'IN REVIEW', 'IN_REVIEW', 'PENDING / IN REVIEW', 'PENDING IN REVIEW', 'PENDING_IN_REVIEW'].includes(String(r.status || '').toUpperCase())}
                               onClick={() => handleOpenStageTransition(r, 'APPROVED_OR_REJECTED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#FFE066] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Approve or Reject"
@@ -1227,6 +1276,7 @@ export default function RecordsPage() {
 
                             <button
                               type="button"
+                              disabled={String(r.status || '').toUpperCase() !== 'APPROVED'}
                               onClick={() => handleOpenStageTransition(r, 'DISPATCHED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#e0f2fe] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Mark Dispatched"
@@ -1236,6 +1286,7 @@ export default function RecordsPage() {
 
                             <button
                               type="button"
+                              disabled={String(r.status || '').toUpperCase() !== 'DISPATCHED'}
                               onClick={() => handleOpenStageTransition(r, 'DELIVERED')}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#EBF7F2] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Advance: Mark Delivered"
@@ -1246,7 +1297,7 @@ export default function RecordsPage() {
                             {/* Edit Case details */}
                             <button
                               type="button"
-                              onClick={() => setEditingRecord({ ...r })}
+                              onClick={() => { setEditingRecord({ ...r }); setOriginalEditingRecord({ ...r }); }}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Edit Case Details"
                             >
@@ -1547,7 +1598,7 @@ export default function RecordsPage() {
                         Click to upload Courier Booking Receipt or Airway Bill
                       </p>
                       <p className="font-['Space_Grotesk'] text-[0.65rem] text-[#666] mt-0.5">
-                        Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 12MB)
+                        Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 8 MB)
                       </p>
                     </div>
                   )}
@@ -1566,6 +1617,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDispatch}
+                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim()) || !dispatchModal.dispatchedImage}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Save Dispatch
@@ -1670,6 +1722,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDelivered}
+                disabled={!deliveredModal.date.trim() || !deliveredModal.receiverName.trim() || !deliveredModal.receiptImage}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#15803d] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Confirm Delivery
@@ -1684,7 +1737,7 @@ export default function RecordsPage() {
          ========================================================================= */}
       {editingRecord && (
         <div className="fixed inset-0 z-[1200] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-lg w-full p-6 relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#FAF6EE] border-[3.5px] border-[#0C0C0C] shadow-[8px_8px_0_#0C0C0C] rounded-[6px] max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
               <h3 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px] flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-[#C94A00]" />
@@ -1692,7 +1745,7 @@ export default function RecordsPage() {
               </h3>
               <button
                 type="button"
-                onClick={() => setEditingRecord(null)}
+                onClick={() => { setEditingRecord(null); setOriginalEditingRecord(null); }}
                 className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -1702,7 +1755,7 @@ export default function RecordsPage() {
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Series / Prefix</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Series</label>
                   <input type="text" list="brandex-edit-series" required maxLength={8} value={editingRecord.selectionMenu || 'A'}
                     onChange={e => setEditingRecord({ ...editingRecord, selectionMenu: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) })}
                     className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold" />
@@ -1783,6 +1836,54 @@ export default function RecordsPage() {
                   onChange={e => setEditingRecord({ ...editingRecord, appName: e.target.value.toUpperCase() })}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase font-bold"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Father / Representative Name</label>
+                  <input type="text" value={editingRecord.fatherName || ''} onChange={e => setEditingRecord({ ...editingRecord, fatherName: e.target.value.toUpperCase() })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded uppercase" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">CNIC</label>
+                  <input type="text" maxLength={15} placeholder="35201-1234567-1" value={editingRecord.cnic || ''} onChange={e => setEditingRecord({ ...editingRecord, cnic: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Applicant Address</label>
+                <textarea rows={2} value={editingRecord.address || ''} onChange={e => setEditingRecord({ ...editingRecord, address: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Filing Date</label>
+                  <input type="date" value={toDateInputValue(editingRecord.date || editingRecord.issueDate)} onChange={e => setEditingRecord({ ...editingRecord, date: e.target.value, issueDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Expiry Date</label>
+                  <input type="date" value={toDateInputValue(editingRecord.expiryDate || '')} onChange={e => setEditingRecord({ ...editingRecord, expiryDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Year</label>
+                  <input type="text" value={editingRecord.year || ''} onChange={e => setEditingRecord({ ...editingRecord, year: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Application Type</label>
+                  <input type="text" value={editingRecord.appType || ''} onChange={e => setEditingRecord({ ...editingRecord, appType: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+              </div>
+              <div>
+                <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Class Description</label>
+                <textarea rows={2} value={editingRecord.classDesc || ''} onChange={e => setEditingRecord({ ...editingRecord, classDesc: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Consultant / Law Firm Address</label>
+                  <textarea rows={2} value={editingRecord.conAddr || ''} onChange={e => setEditingRecord({ ...editingRecord, conAddr: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
+                </div>
+                <div className="rounded border-2 border-[#0C0C0C] bg-white p-2">
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-2">Applicant / Mark Image</label>
+                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><Image src={editingRecord.img} alt="Applicant mark" width={56} height={56} className="h-14 w-14 rounded border object-contain" unoptimized /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
+                  <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Applicant image must be an image no larger than 8 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
+                </div>
               </div>
 
               <div>
@@ -1880,6 +1981,7 @@ export default function RecordsPage() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
+                        if (file.size > MAX_INLINE_ASSET_BYTES || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 8 MB.'); e.target.value = ''; return; }
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           setEditingRecord(prev => prev ? ({
@@ -1917,6 +2019,23 @@ export default function RecordsPage() {
                 </div>
               </div>
 
+              <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
+                <div className="mb-2 flex items-center gap-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold"><Paperclip className="h-4 w-4" /> LINKED CASE ATTACHMENTS</div>
+                {loadingEditingDocuments ? <p className="text-xs text-[#666]">Loading attachments…</p> : editingDocuments.length ? (
+                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={document.file_url} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
+                ) : <p className="mb-3 text-xs text-[#666]">No linked attachments recorded.</p>}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
+                  <input value={newDocumentName} onChange={e=>setNewDocumentName(e.target.value)} placeholder="Attachment name" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
+                  <input value={newDocumentUrl} onChange={e=>setNewDocumentUrl(e.target.value)} placeholder="https://drive.google.com/…" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
+                  <button type="button" onClick={handleAddDocumentReference} className="rounded border-2 border-[#0C0C0C] bg-[#E8DFC7] px-3 py-2 text-xs font-bold">Add link</button>
+                </div>
+                <p className="mt-1 text-[0.65rem] text-[#666]">Adds a secure link only; existing files and links are never deleted or moved.</p>
+              </div>
+              <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
+                <div className="mb-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold">DELIVERY RECEIPT</div>
+                {editingRecord.receiptImage ? <div className="flex items-center gap-2"><button type="button" onClick={()=>setProofModal({open:true,title:`Delivery Receipt - ${editingRecord.folder}`,url:editingRecord.receiptImage!,docName:`Delivery_Receipt_${editingRecord.folder}`,docType:'image/jpeg'})} className="rounded border border-[#0C0C0C] bg-[#dcfce7] px-2 py-1 text-xs font-bold">View receipt</button><button type="button" onClick={()=>setEditingRecord({...editingRecord,receiptImage:''})} className="text-xs font-bold text-red-700 underline">Remove</button></div> : <p className="mb-2 text-xs text-[#666]">No delivery receipt attached.</p>}
+                <input type="file" accept="image/*" className="mt-2 block w-full text-xs" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(!file.type.startsWith('image/')||file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Delivery receipt must be an image no larger than 8 MB.');e.target.value='';return;}const reader=new FileReader();reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,receiptImage:ev.target?.result as string}):null);reader.readAsDataURL(file);e.target.value='';}} />
+              </div>
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Internal Notes</label>
                 <textarea

@@ -503,3 +503,62 @@ Before the live correction below, no production database, Supabase project, Apps
 - Vercel preview deployment completed successfully for the latest code commit.
 - Supabase management connector returned a permission error during a read-only attempt to inspect live schema/migration metadata. No Supabase write or migration was attempted.
 - PR #8 remains a draft and is not merged. Production migration and production data remain untouched. Before merge: obtain authorized read-only schema inspection, test the migration on a disposable Supabase target, and complete authenticated UI QA on the preview.
+
+### 2026-11-23 — Complete case editing and guarded workflow implementation
+
+- Started the consolidated follow-up on `feat/complete-case-edit-workflow` after PR #8 and authenticated Settings → Series Management UI verification.
+- Created ADR 0007 before implementation. It records the existing partial edit form, separate application status/legal filing stage, and the requirement to preserve existing references, client-prefix separation, attachments, Drive folders, and the historical backup.
+- Added `lib/case-workflow.ts` with shared transition validation and regression tests. Approval/rejection is limited to pending/in-review cases; dispatch requires APPROVED plus date, tracking/note, and proof; delivery requires DISPATCHED plus date, receiver, and receipt. Rejected cases cannot be dispatched.
+- Enforced transition validation in the server-side Supabase update and bulk-update paths, not only the UI. The Records actions are disabled when the current status is not eligible.
+- Expanded the existing Edit Case dialog with father/representative name, CNIC validation, applicant address, filing/expiry dates, year, application type, class description, consultant address, applicant image, delivery receipt, and linked attachment listing/add-by-HTTPS-link.
+- Added an authenticated API operation to read existing document references. New links are appended through the existing `trademark_documents` table; existing links are not deleted or moved.
+- Added separate `PAYMENT SUBMITTED` and `REGISTRATION COMPLETED` legal filing stages. Main application status, legal filing stage, and document-generation progress remain distinct.
+- Updated `STATUS_AND_COLUMNS.md` and ADR index. No production schema migration, production data change, Google Drive mutation, Apps Script deployment, backup overwrite, or Vercel production configuration change was performed.
+- Verification status: GitHub CI, preview deployment, and authenticated end-to-end QA are pending. Do not merge or deploy to production until checks pass and the user verifies the preview.
+
+### Verification update — PR #9
+
+- GitHub Actions run `45080110719` passed on code commit `a70bd930e0cd73df6407aa9495a60dd9536fa714`: dependency audit, Apps Script syntax, ESLint, all tests including the new workflow transition suite, Next.js production build, and required-document checks. The later commit is documentation-only.
+- Vercel preview status is not equivalent to CI: the latest READY branch preview is commit `cfed658f23dc913ccf74b9fe8c0725e685d99671`, before the final Edit Case UI additions. Later preview builds were canceled/blocked by the Vercel build-rate limit. The current PR head does not have a verified preview URL.
+- PR #9 remains draft/open. Authenticated UI QA and merge are still pending; do not merge or deploy to production based only on the successful CI run.
+
+### 2026-11-23 verification-gate continuation
+
+- Read-only live schema comparison confirmed production `public.trademark_records` has 481 rows and does not contain `dispatched_image`, `dispatched_doc_name`, or `dispatched_doc_type`; dispatch proof remains represented through `trademark_documents`.
+- Updated `mapRecordToRow`, single updates, and bulk workflow payloads so unsupported proof columns are never sent to `trademark_records`; proof references continue through `trademark_documents`.
+- Added `buildCaseEditUpdates` and wired Edit Case to submit only changed editable fields, preventing unrelated lifecycle/proof defaults from being rewritten. Added regression tests for narrow payloads and proof retention.
+- Added a conditional current-status predicate to single workflow updates so a concurrent status change fails closed instead of being overwritten.
+- Local verification after changes: `npm test` passed 43 tests; `npm run lint` passed with two pre-existing React hook warnings; `npm run build` passed. No Supabase writes, Drive operations, Apps Script deployment, production deployment, or merge performed.
+- The connected disposable Supabase project remains non-equivalent (10 minimal `trademark_records` rows and only `selection_menu`); migration/integration verification and authenticated UI QA remain blocked until a controlled production-equivalent fixture and legitimate authenticated browser session are available.
+
+### Atomic workflow correction
+
+- Added `supabase/migrations/20261123130000_atomic_case_workflow.sql`, an additive service-role-only RPC that conditionally updates eligible cases, writes dispatch proof to `trademark_documents`, and writes `trademark_history` in one transaction. A concurrent or mixed-eligibility request rolls back completely.
+- Single and bulk workflow paths now call the RPC; UI no longer performs a second, separate history write for transitions. The RPC intentionally uses only columns present in the read-only production schema.
+- Added a migration contract test. Local verification now passes 44 tests, lint has only the two pre-existing hook warnings, and the production build passes.
+- The migration has not been applied to production or the incomplete disposable project. Applying it requires a production-equivalent disposable target and a controlled migration run.
+- Added `apply_case_metadata_update` to the same migration and routed Edit Case through it, so a metadata update plus its `RECORD UPDATED` history row (and optional proof reference) is also atomic.
+- Tightened both RPCs to `SECURITY INVOKER`; execute is revoked from public/anon/authenticated and granted only to `service_role`, avoiding a public `SECURITY DEFINER` endpoint.
+- Disposable project `clviaughxebohniopzyg` was brought to production-shaped additive schema without rewriting its existing 10 records or 6 series rows. The migration and RPCs were applied there, then verified inside rollback transactions: approve → dispatch proof → deliver/history, rejected dispatch blocking, mixed-selection rollback, and atomic metadata edit + proof + history all passed. Final counts remain `trademark_records=10`, `case_series=6`, `trademark_history=0`, `trademark_documents=0`.
+- Supabase advisors after the check reported no health lints; the only security warning was the pre-existing `public.rls_auto_enable()` function, and the only performance findings before the check were addressed with record-id indexes on history/documents. No production project was written.
+
+### Vercel Preview environment synchronization
+
+- Inspected project `brandex-workflow` environment targets without decrypting or exposing secrets. Production-scoped values already had Preview counterparts for `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_APPS_SCRIPT_URL`, `NEXT_SUPABASE_ANON_KEY`, `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN`.
+- Added the missing Preview-scoped `NEXT_PUBLIC_APPS_SCRIPT_URL` using the Production config value. No Production value was changed, and no secret value was written to the repository or chat.
+- A fresh Preview deployment is being triggered by this documentation-only branch commit so the exact-head preview loads the synchronized Preview environment.
+
+### 2026-11-23 authenticated Preview QA and env audit
+
+- Exact-head Preview deployment for commit `c1dd9753e175871c3c9199e5a4f4e8b58d0cb589` is READY at `https://brandex-workflow-m0ma4nwfr-projectsb.vercel.app/records`.
+- Authenticated read-only UI QA loaded 481 records. Edit Case opened for `X-896-001 / AKRAM TEA STORE`; the complete editor rendered case-series, identity/metadata, image, dispatch/delivery, linked attachments, delivery receipt, notes, and Save/Cancel controls. Existing linked attachments loaded successfully (7 visible links).
+- The workflow decision dialog opened with Approve/Reject controls and Save Decision, then was canceled. No production workflow transition, edit, attachment, or deletion was submitted.
+- Preview currently resolves to the production-sized dataset; therefore write-path UI QA was intentionally not run against production. Disposable Supabase rollback-only integration tests remain the write-path evidence.
+- Production key inventory contains 7 variables; Preview contains those 7 plus Preview-only `NEXT_PUBLIC_SUPABASE_URL`. Secret-value equality is not yet independently verifiable because Vercel stores secrets write-only and the Vercel connector was unavailable during this check.
+
+### 2026-11-23 Codex review findings and fixes
+
+- Fresh Codex review of exact head `cba8ffa` found one P1 and four P2 issues: generation's same-state `IN REVIEW` update incorrectly called the forward-transition RPC; blank tracking IDs did not fall back to dispatch notes in SQL; Edit Case could drop the encoded no-image companion when notes changed; attachment drafts could carry from one case to another; and 12 MB raw-file controls could exceed the 12 MiB JSON request limit after base64 expansion.
+- Fixed the generation path to rely on the already-saved `IN REVIEW` status, normalized blank tracking IDs to the dispatch-note fallback in the atomic migration, kept `notes`/`noImg` paired in edit payloads, reset attachment drafts whenever the edited case changes, and capped inline assets at 8 MB raw with a combined edit-payload check.
+- Added regression/contract coverage. Local verification: 46 tests passed, lint has only the two pre-existing React Hook warnings, and the production build passed.
+- Changes are not yet pushed or deployed; rerun CI, preview, authenticated read-only QA, and Codex review after the fix commit. No production data/schema, Drive, Apps Script, or production deployment was changed.

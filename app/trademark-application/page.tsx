@@ -592,7 +592,8 @@ export default function TrademarkApplicationPage() {
 
           setStatusType('success');
           if (recordSavedToSupabase && insertedRecordId) {
-            await supabaseDB.updateRecord(insertedRecordId, { status: 'IN REVIEW' });
+            // addRecord already saves new cases as IN REVIEW. Do not route this
+            // same-state confirmation through the forward-transition RPC.
             setStatus('IN REVIEW');
             payload.status = 'IN REVIEW';
           }
