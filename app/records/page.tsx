@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
+import DriveFolderPicker from '@/app/components/DriveFolderPicker';
 import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
@@ -1779,6 +1780,7 @@ export default function RecordsPage() {
             </div>
 
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Case Drive destination</p><DriveFolderPicker recordId={editingRecord.id} onSaved={() => { setBulkNotice('Case destination saved. Future generation will use this folder.'); }} /></div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Series</label>

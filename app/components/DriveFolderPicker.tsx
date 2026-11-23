@@ -11,7 +11,7 @@ function loadScript(url: string): Promise<void> {
   return scripts.get(url)!;
 }
 
-export default function DriveFolderPicker({ clientId, onSaved }: { clientId: number; onSaved: (folderId: string) => void }) {
+export default function DriveFolderPicker({ clientId, recordId, onSaved }: { clientId?: number; recordId?: number; onSaved: (folderId: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const choose = async () => {
@@ -30,7 +30,7 @@ export default function DriveFolderPicker({ clientId, onSaved }: { clientId: num
         if (result.action === google.picker.Action.CANCEL) { setBusy(false); return; }
         if (result.action !== google.picker.Action.PICKED) return;
         try {
-          const response = await fetch('/api/drive/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, folderId: result.docs[0].id, oauthToken: token }) });
+          const response = await fetch('/api/drive/folder', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, recordId, folderId: result.docs[0].id, oauthToken: token }) });
           const saved = await response.json();
           if (!response.ok || !saved.ok) throw new Error(saved.error || 'Folder could not be saved.');
           onSaved(saved.folderId); setMessage(`Saved destination: ${saved.name}`);

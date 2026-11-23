@@ -35,7 +35,7 @@ test('document retries reuse existing named documents in the case folder', () =>
   assert.match(bulkGenerator, /folder\.getFilesByName\(docName\)/);
   assert.doesNotMatch(returnGenerator, /if \(existing\.hasNext\(\)\) return existing\.next\(\)/);
   assert.doesNotMatch(bulkGenerator, /if \(existing\.hasNext\(\)\) return existing\.next\(\)/);
-  assert.match(code, /existingLogo\.hasNext\(\) \? existingLogo\.next\(\) : newFolder\.createFile\(blob\)/);
+  assert.match(code, /existingLogo\.hasNext\(\) \? existingLogo\.next\(\) : logoFolder\.createFile\(blob\)/);
 });
 
 test('a failed Apps Script run can be retried without reading or appending a sheet row', () => {

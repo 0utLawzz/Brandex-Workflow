@@ -1,5 +1,6 @@
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { supabaseDB } from '@/lib/supabase-db';
+import { resolveGenerationDestination } from '@/lib/generation-destination';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,7 +116,10 @@ export async function POST(request: Request) {
     }
 
     const { recordId: _recordId, ...generationPayload } = payload;
-    const generatedResponse = await proxyAppsScript(generationPayload);
+    let destination;
+    try { destination = await resolveGenerationDestination(recordId); }
+    catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Destination unavailable.' }, { status: 409 }); }
+    const generatedResponse = await proxyAppsScript({ ...generationPayload, ...destination });
     if (!generatedResponse.ok) return generatedResponse;
 
     const generated = await generatedResponse.clone().json().catch(() => null);

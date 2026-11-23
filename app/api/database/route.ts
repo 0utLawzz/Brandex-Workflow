@@ -2,6 +2,7 @@ import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { standaloneDB } from '@/lib/standalone-db';
+import { resolveGenerationDestination } from '@/lib/generation-destination';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,10 @@ export async function POST(request: Request) {
           const record = mapRowToRecord(row);
           const missing = [!record.folder && 'mark/folder', !record.classNo && 'class', !record.appType && 'application type', !record.appName && 'applicant', !record.appTrade && 'trading name', !record.year && 'year', !record.address && 'applicant address', !record.fatherName && 'father name', !record.cnic && 'CNIC', !record.date && 'issue date', !/^\d{1,3}$/.test(record.clientCode || '') && 'client code', !/^[A-Z][A-Z0-9]{0,7}$/.test((record.selectionMenu || '').toUpperCase()) && 'case series', !/^\d{1,3}$/.test(record.caseNo || '') && 'case number'].filter(Boolean);
           if (missing.length) { results.push({ id, ok: false, error: `Missing required Supabase fields: ${missing.join(', ')}.` }); continue; }
-          const response = await proxyAppsScript({ action: 'generateFromForm', category: record.category, selectionMenu: record.selectionMenu, clientCode: record.clientCode, caseNo: record.caseNo, serialNo: record.serialNo || '',
+          let destination;
+          try { destination = await resolveGenerationDestination(id); }
+          catch (error) { results.push({ id, ok: false, error: error instanceof Error ? error.message : 'Destination unavailable.' }); continue; }
+          const response = await proxyAppsScript({ ...destination, action: 'generateFromForm', category: record.category, selectionMenu: record.selectionMenu, clientCode: record.clientCode, caseNo: record.caseNo, serialNo: record.serialNo || '',
               folder: record.folder, tm: record.tm, classNo: record.classNo, classDesc: record.classDesc, appType: record.appType, appName: record.appName,
               appSo: record.fatherName, appCnic: record.cnic, issueDate: record.issueDate || record.date, expiryDate: record.expiryDate,
               appTrade: record.appTrade, appAdd: record.address, year: record.year, conName: record.conName, conAdd: record.conAddr, noImg: record.noImg || '[NO IMAGE PROVIDED]',

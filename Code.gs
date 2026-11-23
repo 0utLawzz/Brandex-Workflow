@@ -319,7 +319,9 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
   }
 
-  var parentFolder = DriveApp.getFolderById(mainFolderId);
+  var selectedDestination = Boolean(formData.driveFolderId);
+  if (selectedDestination) validateDriveFolder(formData.driveFolderId);
+  var parentFolder = DriveApp.getFolderById(selectedDestination ? formData.driveFolderId : mainFolderId);
   var newFolder;
   if (formData && (formData.clientCode || formData.caseNo)) {
     var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
@@ -337,13 +339,16 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
       + (rowData.tm && rowData.tm !== "PENDING" ? " " + rowData.tm : "")
       + (rowData.classNo ? " C" + String(rowData.classNo).replace(/\D/g, "") : "");
     var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
-    var clientRootFolder = getOrCreateClientFolder(parentFolder, clientRootName);
-    var clientFolder = getOrCreateClientFolder(clientRootFolder, clientFolderName);
+    var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
+    var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
     newFolder = getOrCreateClientFolder(clientFolder, caseFolderName);
   } else {
     newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
   }
 
+  var logoFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Logo') : newFolder;
+  var documentsFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Documents') : newFolder;
+  if (selectedDestination) getOrCreateClientFolder(newFolder, 'Dispatch');
   var imageId = "";
   var tmImageBlob = null;
   var imageWarning = "";
@@ -362,8 +367,8 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
       var imageFileName = safeName + "_logo." + ext;
 
       var blob = Utilities.newBlob(bytes, formData.imageMime || "image/jpeg", imageFileName);
-      var existingLogo = newFolder.getFilesByName(imageFileName);
-      var file = existingLogo.hasNext() ? existingLogo.next() : newFolder.createFile(blob);
+      var existingLogo = logoFolder.getFilesByName(imageFileName);
+      var file = existingLogo.hasNext() ? existingLogo.next() : logoFolder.createFile(blob);
       imageId = file.getId();
       tmImageBlob = blob;
 
@@ -400,15 +405,15 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
 
   var tm1Doc = null, tm48Doc = null;
   if (tm1TemplateId) {
-    tm1Doc = generateWordDocReturn(tm1TemplateId, newFolder, rowData.folder + " - TM-1",
+    tm1Doc = generateWordDocReturn(tm1TemplateId, documentsFolder, rowData.folder + " - TM-1",
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
   }
   if (tm48TemplateId) {
-    tm48Doc = generateWordDocReturn(tm48TemplateId, newFolder, rowData.folder + " - TM-48",
+    tm48Doc = generateWordDocReturn(tm48TemplateId, documentsFolder, rowData.folder + " - TM-48",
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 
-  var attachments = saveAdditionalFiles(newFolder, formData && formData.additionalFiles, formData || {});
+  var attachments = saveAdditionalFiles(documentsFolder, formData && formData.additionalFiles, formData || {});
 
   return {
     folderUrl: newFolder.getUrl(),
