@@ -470,7 +470,6 @@ export default function RecordsPage() {
         status: approveRejectModal.decision,
         notes: approveRejectModal.notes ? `${r.notes || ''} [Decision: ${approveRejectModal.notes}]` : r.notes
       });
-      await supabaseDB.addHistory(r.id, approveRejectModal.decision, approveRejectModal.notes || `Case marked as ${approveRejectModal.decision}`);
       setBulkNotice(`✓ Case ${r.folder} marked as ${approveRejectModal.decision}`);
     } else if (approveRejectModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, approveRejectModal.decision, approveRejectModal.notes || `Bulk marked as ${approveRejectModal.decision}`);
@@ -499,11 +498,6 @@ export default function RecordsPage() {
         dispatchedDocName: dispatchModal.dispatchedDocName,
         dispatchedDocType: dispatchModal.dispatchedDocType
       });
-      await supabaseDB.addHistory(
-        r.id,
-        'DISPATCHED',
-        `Dispatched on ${dispatchModal.date}. Trk: ${dispatchModal.trackingId || 'N/A'}. ${dispatchModal.note || ''}${dispatchModal.dispatchedImage ? ' [Receipt / Proof of Sending Attached]' : ''}`
-      );
       setBulkNotice(`✓ Case ${r.folder} marked as DISPATCHED.`);
     } else if (dispatchModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DISPATCHED', `Bulk dispatched on ${dispatchModal.date}. ${dispatchModal.note}`, {
@@ -544,7 +538,6 @@ export default function RecordsPage() {
         receiverName: deliveredModal.receiverName,
         receiptImage: deliveredModal.receiptImage
       });
-      await supabaseDB.addHistory(r.id, 'DELIVERED', `Delivered on ${deliveredModal.date} to receiver: ${deliveredModal.receiverName}`);
       setBulkNotice(`✓ Case ${r.folder} marked as DELIVERED to ${deliveredModal.receiverName}`);
     } else if (deliveredModal.isBulk && selectedIds.length > 0) {
       await supabaseDB.bulkUpdateStatus(selectedIds, 'DELIVERED', `Bulk delivered on ${deliveredModal.date}. Receiver: ${deliveredModal.receiverName}`, {

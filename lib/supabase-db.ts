@@ -385,16 +385,37 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const row = mapRecordToRow(updates);
-      let expectedStatus: string | undefined;
       if (updates.status !== undefined) {
         const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
           client.from('trademark_records').select('status').eq('id', id).maybeSingle()
         );
         if (statusReadError) throw new Error(`Could not verify the current workflow status: ${statusReadError.message}`);
         if (!currentStatusRow) throw new Error('Case was not found while validating its workflow transition.');
-        expectedStatus = String(currentStatusRow.status || '');
         const transition = validateWorkflowTransition(currentStatusRow.status, updates.status, updates);
         if (!transition.valid) throw new Error(transition.error || 'This workflow transition is not allowed.');
+
+        const { error: transitionError } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
+          p_ids: [id],
+          p_new_status: updates.status,
+          p_audit_note: updates.notes || `Case marked as ${updates.status}`,
+          p_meta: {
+            dispatchedDate: updates.dispatchedDate,
+            dispatchedNote: updates.dispatchedNote,
+            trackingId: updates.trackingId,
+            dispatchedImage: updates.dispatchedImage,
+            dispatchedDocName: updates.dispatchedDocName,
+            dispatchedDocType: updates.dispatchedDocType,
+            deliveredDate: updates.deliveredDate,
+            receiverName: updates.receiverName,
+            receiptImage: updates.receiptImage,
+          },
+        }));
+        if (transitionError) throw new Error(`Atomic workflow transition failed: ${transitionError.message}`);
+        const { data: transitioned, error: transitionedError } = await withSupabaseTimeout(
+          client.from('trademark_records').select().eq('id', id).maybeSingle()
+        );
+        if (transitionedError) throw new Error(`Workflow transition succeeded but case reload failed: ${transitionedError.message}`);
+        return transitioned ? mapRowToRecord(transitioned) : null;
       }
       if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
         const { data: current, error: currentError } = await withSupabaseTimeout(
@@ -413,12 +434,7 @@ class SupabaseDBService {
         if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
       }
 
-      let updateQuery = client.from('trademark_records').update(row).eq('id', id);
-      if (expectedStatus !== undefined) updateQuery = updateQuery.eq('status', expectedStatus);
-      const result = await withSupabaseTimeout(updateQuery.select().maybeSingle());
-      if (updates.status !== undefined && !result.data && !result.error) {
-        throw new Error('Workflow transition was not applied because the case changed concurrently. Reload the case and try again.');
-      }
+      const result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
       if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
       if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
 
@@ -474,53 +490,13 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const { data: currentRows, error: currentRowsError } = await withSupabaseTimeout(
-        client.from('trademark_records').select('id, status').in('id', ids)
-      );
-      if (currentRowsError) throw new Error(`Could not verify selected case statuses: ${currentRowsError.message}`);
-      if (!Array.isArray(currentRows) || currentRows.length !== ids.length) throw new Error('One or more selected cases could not be found; no workflow status was changed.');
-      for (const current of currentRows) {
-        const transition = validateWorkflowTransition(current.status, newStatus, meta || {});
-        if (!transition.valid) throw new Error(`Case #${current.id}: ${transition.error || 'Workflow transition not allowed.'} No selected cases were changed.`);
-      }
-      const updatePayload: Record<string, any> = {
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-          ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
-          ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),
-          ...(meta?.trackingId ? { tracking_id: meta.trackingId } : {}),
-          ...(meta?.deliveredDate ? { delivered_date: meta.deliveredDate } : {}),
-          ...(meta?.receiverName ? { receiver_name: meta.receiverName } : {}),
-          ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
-        };
-
-      const { error } = await withSupabaseTimeout(client
-          .from('trademark_records')
-          .update(updatePayload)
-          .in('id', ids));
-      if (error) throw new Error(`Supabase bulk status update failed: ${error.message}`);
-
-      if (meta?.dispatchedImage) {
-        const docRows = ids.map(id => ({
-            record_id: id,
-            file_name: meta.dispatchedDocName || `Dispatch_Receipt_${id}`,
-            file_type: meta.dispatchedDocType || (meta.dispatchedImage!.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
-            file_url: meta.dispatchedImage,
-            created_at: new Date().toISOString()
-        }));
-        const { error: documentError } = await withSupabaseTimeout(client.from('trademark_documents').insert(docRows));
-        if (documentError) throw new Error(`Dispatch proof save failed: ${documentError.message}`);
-      }
-
-      const historyRows = ids.map(id => ({
-          record_id: id,
-          status: newStatus,
-          notes: auditNote || `Bulk stage updated to ${newStatus}`,
-          created_at: new Date().toISOString()
+      const { error } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
+        p_ids: ids,
+        p_new_status: newStatus,
+        p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`,
+        p_meta: meta || {},
       }));
-
-      const { error: historyError } = await withSupabaseTimeout(client.from('trademark_history').insert(historyRows));
-      if (historyError) throw new Error(`Status updated, but history logging failed: ${historyError.message}`);
+      if (error) throw new Error(`Atomic bulk workflow transition failed: ${error.message}`);
     }
 
     if (!getSupabaseCredentials().isConfigured) throw new Error('Supabase server credentials are not configured. Bulk status update was not saved.');

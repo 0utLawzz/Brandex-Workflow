@@ -530,3 +530,10 @@ Before the live correction below, no production database, Supabase project, Apps
 - Added a conditional current-status predicate to single workflow updates so a concurrent status change fails closed instead of being overwritten.
 - Local verification after changes: `npm test` passed 43 tests; `npm run lint` passed with two pre-existing React hook warnings; `npm run build` passed. No Supabase writes, Drive operations, Apps Script deployment, production deployment, or merge performed.
 - The connected disposable Supabase project remains non-equivalent (10 minimal `trademark_records` rows and only `selection_menu`); migration/integration verification and authenticated UI QA remain blocked until a controlled production-equivalent fixture and legitimate authenticated browser session are available.
+
+### Atomic workflow correction
+
+- Added `supabase/migrations/20261123130000_atomic_case_workflow.sql`, an additive service-role-only RPC that conditionally updates eligible cases, writes dispatch proof to `trademark_documents`, and writes `trademark_history` in one transaction. A concurrent or mixed-eligibility request rolls back completely.
+- Single and bulk workflow paths now call the RPC; UI no longer performs a second, separate history write for transitions. The RPC intentionally uses only columns present in the read-only production schema.
+- Added a migration contract test. Local verification now passes 44 tests, lint has only the two pre-existing hook warnings, and the production build passes.
+- The migration has not been applied to production or the incomplete disposable project. Applying it requires a production-equivalent disposable target and a controlled migration run.

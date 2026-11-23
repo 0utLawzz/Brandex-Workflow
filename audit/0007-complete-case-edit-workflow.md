@@ -88,3 +88,8 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - Live production schema comparison confirmed that dispatch proof columns are not present on `trademark_records`; implementation now sends proof only through the existing `trademark_documents` reference table.
 - Edit Case now sends a narrow changed-field payload, and single status updates include a conditional current-status predicate to fail closed on a concurrent change.
 - Local checks after these changes: 43 tests passed, lint passed with two pre-existing hook warnings, and the production build passed. Disposable Supabase migration/integration verification and authenticated exact-head UI QA remain pending; no production or test-project writes were made.
+
+### Atomic workflow correction
+
+- Added `20261123130000_atomic_case_workflow.sql` with a service-role-only transactional RPC for guarded status changes, proof-reference insertion, and history insertion. It uses the existing production-compatible columns and rolls back when any selected case is missing or ineligible.
+- Single and bulk transition callers now use the RPC; transition history is no longer a separate UI/API write. The migration remains unapplied pending a production-equivalent disposable target.
