@@ -122,6 +122,10 @@ export async function POST(request: Request) {
         if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object') return invalidPayload('A valid case ID and updates are required.');
         result = await supabaseDB.updateRecord(Number(body.id), body.updates);
         break;
+      case 'updateRecordWithHistory':
+        if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object' || typeof body.auditNote !== 'string') return invalidPayload('A valid case ID, updates, and audit note are required.');
+        result = await supabaseDB.updateRecordWithHistory(Number(body.id), body.updates, body.auditNote);
+        break;
       case 'deleteRecord':
         if (!Number.isSafeInteger(Number(body.id))) return invalidPayload('A valid case ID is required.');
         result = await supabaseDB.deleteRecord(Number(body.id));

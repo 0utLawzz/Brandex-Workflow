@@ -623,9 +623,8 @@ export default function RecordsPage() {
         ? buildCaseEditUpdates(editingRecord, originalEditingRecord)
         : editingRecord;
       if (Object.keys(updates).length > 0) {
-        await supabaseDB.updateRecord(editingRecord.id, updates);
+        await supabaseDB.updateRecordWithHistory(editingRecord.id, updates, 'Case metadata edited directly in CMS');
       }
-      await supabaseDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in CMS');
       setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
       setEditingRecord(null);
       setOriginalEditingRecord(null);

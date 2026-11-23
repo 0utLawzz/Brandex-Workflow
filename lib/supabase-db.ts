@@ -467,6 +467,48 @@ class SupabaseDBService {
     throw new Error('Supabase server credentials are not configured. Case was not deleted.');
   }
 
+  public async updateRecordWithHistory(id: number, updates: Partial<RecordItem>, auditNote: string): Promise<RecordItem | null> {
+    if (typeof window !== 'undefined') return requestDatabase('updateRecordWithHistory', { id, updates, auditNote });
+    const { isConfigured } = getSupabaseCredentials();
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured. Case was not updated.');
+    if (updates.status !== undefined) throw new Error('Workflow status changes must use the guarded transition operation.');
+
+    const client = getSupabaseClient();
+    const payload: Record<string, unknown> = mapRecordToRow(updates);
+    delete payload.updated_at;
+    if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
+      const { data: current, error: currentError } = await withSupabaseTimeout(
+        client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
+      );
+      if (currentError) throw new Error(`Could not read current case identity: ${currentError.message}`);
+      if (!current) throw new Error('Case was not found while validating its reference.');
+      const identity = {
+        clientCode: String(updates.clientCode ?? current.client_code ?? ''),
+        selectionMenu: String(updates.selectionMenu ?? current.selection_menu ?? 'A'),
+        caseNo: String(updates.caseNo ?? current.case_no ?? ''),
+      };
+      await assertUniqueCaseReference(client, identity, id);
+      if (updates.clientCode !== undefined) payload.client_code = identity.clientCode.replace(/\D/g, '').padStart(3, '0');
+      if (updates.selectionMenu !== undefined) payload.selection_menu = normalizeCaseSeries(identity.selectionMenu);
+      if (updates.caseNo !== undefined) payload.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
+    }
+    if (updates.dispatchedImage !== undefined) payload.dispatchedImage = updates.dispatchedImage;
+    if (updates.dispatchedDocName !== undefined) payload.dispatchedDocName = updates.dispatchedDocName;
+    if (updates.dispatchedDocType !== undefined) payload.dispatchedDocType = updates.dispatchedDocType;
+
+    const { error } = await withSupabaseTimeout(client.rpc('apply_case_metadata_update', {
+      p_id: id,
+      p_updates: payload,
+      p_audit_note: auditNote,
+    }));
+    if (error) throw new Error(`Atomic case edit failed: ${error.message}`);
+    const { data, error: readError } = await withSupabaseTimeout(
+      client.from('trademark_records').select().eq('id', id).maybeSingle()
+    );
+    if (readError) throw new Error(`Case was updated but reload failed: ${readError.message}`);
+    return data ? mapRowToRecord(data) : null;
+  }
+
   public async bulkUpdateStatus(
     ids: number[],
     newStatus: string,
