@@ -10,6 +10,7 @@ import ClientCsvTools from '@/app/components/ClientCsvTools';
 import CaseCsvTools from '@/app/components/CaseCsvTools';
 import SeriesManagement from '@/app/components/SeriesManagement';
 import SharedBrandSettings from '@/app/components/SharedBrandSettings';
+import { CASE_MERGE_FIELDS } from '@/lib/merge-contract';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -88,6 +89,7 @@ export default function SettingsPage() {
         </section>
 
         <SharedBrandSettings />
+        <details className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4"><summary className="cursor-pointer font-bold">Mail merge &amp; API field map</summary><p className="my-3 text-xs">Permanent text tags use double braces. {'{{IMAGE}}'} inserts the logo; URL tags insert text only. YEAR means Using Since; DATE is document generation date.</p><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr><th className="p-2">Tag</th><th className="p-2">API field</th><th className="p-2">Case field</th><th className="p-2">Storage</th></tr></thead><tbody>{CASE_MERGE_FIELDS.map(field => <tr key={field.tag} className="border-t"><td className="p-2 font-mono">{'{{' + field.tag + '}}'}</td><td className="p-2">{field.api}</td><td className="p-2">{field.record}</td><td className="p-2">{field.storage}</td></tr>)}</tbody></table></div></details>
         <SeriesManagement />
 
         <ClientCsvTools />

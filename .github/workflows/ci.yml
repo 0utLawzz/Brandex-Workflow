@@ -38,6 +38,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Verify canonical mail merge contract
+        run: node scripts/sync-merge-contract.mjs --check
+
       - name: Build
         run: npm run build
 
