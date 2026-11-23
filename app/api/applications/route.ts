@@ -1,6 +1,7 @@
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { supabaseDB } from '@/lib/supabase-db';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
+import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,17 +28,13 @@ export async function POST(request: Request) {
     let payload: Record<string, unknown>;
 
     try {
-        const contentLength = Number(request.headers.get('content-length') || 0);
-        if (contentLength > 16 * 1024 * 1024) {
-            return Response.json({ ok: false, error: 'Application payload is too large.' }, { status: 413 });
-        }
-        const body: unknown = await request.json();
+        const body = await readBoundedJson(request, 16 * 1024 * 1024);
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
             return Response.json({ ok: false, error: 'Invalid application payload.' }, { status: 400 });
         }
         payload = body as Record<string, unknown>;
-    } catch {
-        return Response.json({ ok: false, error: 'Invalid application payload.' }, { status: 400 });
+    } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Invalid application payload.' }, { status: error instanceof RequestPayloadError ? error.status : 400 });
     }
 
     if (payload.action !== 'generateFromForm') {

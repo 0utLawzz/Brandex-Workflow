@@ -3,6 +3,7 @@ import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { standaloneDB } from '@/lib/standalone-db';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
+import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,13 +40,11 @@ export async function POST(request: Request) {
 
   let body: Record<string, any>;
   try {
-    const length = Number(request.headers.get('content-length') || 0);
-    if (length > 12 * 1024 * 1024) return invalidPayload('Database request is too large.', 413);
-    const value: unknown = await request.json();
+    const value = await readBoundedJson(request, 12 * 1024 * 1024);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidPayload('Invalid database request.');
     body = value as Record<string, any>;
-  } catch {
-    return invalidPayload('Invalid database request.');
+  } catch (error) {
+    return invalidPayload(error instanceof Error ? error.message : 'Invalid database request.', error instanceof RequestPayloadError ? error.status : 400);
   }
 
   try {
