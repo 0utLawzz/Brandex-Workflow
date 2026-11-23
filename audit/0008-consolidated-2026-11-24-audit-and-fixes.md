@@ -1,11 +1,55 @@
 # ADR 0008 — Consolidated Audit, User Findings and Repository Reset Baseline
 
 **Date:** 2026-11-24  
-**Status:** Proposed for evidence-based verification; NO fixes authorized by this document alone  
+**Status:** Active audit and implementation authorized by user on 2026-11-24; production migration/merge/deployment require separate confirmation
 **Baseline:** GitHub `main` at PR #9 merge `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`  
 **Scope:** PRs #1–#9 + user findings #01–#17 + security, runtime, deployment, data safety, developer experience, documentation and code hygiene.
 
 ## Decision — Single source of truth from November 24
+
+### Current execution evidence — 2026-11-24 reset
+
+Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #10 head `5a28bcb5c0ef1952e9a9920d34be9975dd2edf5e`. User's current authorization supersedes planning-only restrictions below for implementation and dependency-checked final cleanup. Production restrictions remain in force. Historical implementation records retain their original dates and are not current status claims.
+
+| Gate | Status | Independently observed evidence |
+|---|---|---|
+| PR #1–#9 merged | PASS | GitHub fetch of all nine PRs confirms merged; #9 merge `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`. Feature verification remains pending. |
+| Baseline preview built | PASS | Vercel `dpl_5BhpTs1g5KUKP8jpYQgmtaTojzQ1`, READY, PR #10 head `5a28bcb`; build readiness only. |
+| Production commit | PASS | Vercel `dpl_BQX9YQKPhbH136nfiewzqVztqDbe`, READY, production target, main `6ec9f6b`. |
+| Production atomic RPC parity | FAIL | Read-only pg_proc query on `pjthtvkzuthxwpvcdqxy`: no `apply_case_%` functions. Current `lib/supabase-db.ts` invokes both workflow and metadata RPCs. Production save/transition success cannot be claimed. |
+| Test atomic RPC presence | PASS | `clviaughxebohniopzyg`: both `apply_case_metadata_update` and `apply_case_workflow_transition`; SECURITY INVOKER; EXECUTE ACL only postgres/service_role. Actual behavior retest pending. |
+| Table RLS | PASS | Both projects: clients, trademark_records, trademark_history, trademark_documents, case_series have RLS enabled; no public policies. This does not alone prove application authorization. |
+| Security advisors | PENDING | Production advisor returned five informational RLS-without-policy notices, observed 2026-11-23. No policy changes justified until server authorization audit completes. |
+| Clean install/build | PENDING | Fresh Git clone completed. Host Node v24.22.0/npm 11.19.1; CI uses Node 22. Lockfile/install/build verification pending. |
+| Findings #01–#17 runtime acceptance | PENDING | Source review started; no new runtime acceptance or production writes performed. |
+
+Next: finish source-to-requirement mapping, verify install/tests, compare database columns/functions/grants and deployment environment isolation; then implement confirmed missing behavior. Preserve one consolidated log here throughout the work.
+
+### Source acceptance map (runtime acceptance remains PENDING)
+
+| Requirement | Status | Evidence / next gate |
+|---|---|---|
+| #01 full-field persistence | FAIL | Expanded editor exists; metadata RPC called by `lib/supabase-db.ts` is absent from production. Verify every field and attachments against disposable schema. |
+| #02 Picker | FAIL | Client `folder_reference` exists, but no Picker implementation in current application source. Verify Google configuration and server folder validation before integration. |
+| #03 integrated Home | FAIL | `app/page.tsx` only redirects to `/records`; user explicitly requires integrated Home. |
+| #04 breadcrumbs | PENDING | Inspect shared navigation and render every page. |
+| #05 heading | FAIL | `app/records/page.tsx` still renders `Case Records & Workflow Timeline`. |
+| #06–#07 layout/filter/sort | FAIL | Current table headers are static; sorting/filtering in useMemo precedes page slicing (retain dataset scope), but header controls and collapsed filter layout missing. |
+| #08 table/analytics | FAIL | `lib/workspace-preferences.ts` defaults to 25; table lacks separate thumbnail/legal-stage columns. Existing summary needs filing-date audit. |
+| #09 Clients | PENDING | Current directory source/render audit outstanding. |
+| #10–#12 form | PENDING | Shared series exists and is independent in source; verify client selection, all labels, dates and classification against requirements. |
+| #13 progress | FAIL | `app/trademark-application/page.tsx` increments progress by timer every 1300 ms to 88 regardless of operation completion. Replace with actual operation milestones. |
+| #14 canonical mapping | FAIL | `lib/case-fields.ts` covers a subset of persistence fields; Code.gs duplicates merge maps. Full field contract and end-to-end tests required. |
+| #15–#16 shared Settings | FAIL | Settings saves display preferences only in browser; shared series exists separately. Shared branding/integration configuration outstanding. |
+| #17 workflow/folders | FAIL | Missing production RPCs; Code.gs still builds output via current naming helpers; folder hierarchy/selected destination acceptance outstanding. Proof and prefix decisions requested from user. |
+| Backup/restore | FAIL | Manifest explicitly reports external URL-only assets as partial. `restoreBackupJSON` requires full review; transactional history/document/assets restore remains unverified. |
+| CSV identity | FAIL | CaseCsvTools exposes export/template but import remains paused; round-trip acceptance outstanding. |
+| API security | PENDING | Middleware verifies signed session or Basic auth; production missing auth config fails closed. Database POST checks same origin and server service role. Rate limits, request bounds, all route coverage and URL/asset validation still require audit. |
+| Final cleanup | PENDING | Preserve files until dependency and requirement audit completes. AGENT.md/progress/older ADR status statements are visibly stale and must be reconciled at the end. |
+
+Baseline verification: `npm test` passed all 46 existing tests on host Node v24.22.0. These tests do not establish production RPC availability, authenticated browser persistence, selected-folder generation or complete restore. Fresh `npm ci` is being checked separately; build/lint/security checks remain pending.
+
+Fresh `npm ci` completed: 349 packages installed, 356 audited, zero reported vulnerabilities. Node 22 CI parity remains pending. Local commit attempt stopped because this checkout has no configured author identity; no global identity configuration changed.
 
 This ADR is the *current consolidated work queue* until a subsequent reviewed ADR/release supersedes it. Earlier `AGENT.md`, `AGENT_PROGRESS.md`, PR descriptions and ADRs are **historical evidence**, not automatically current instructions or evidence that work remains undone. Preserve their factual provenance, but never copy unchecked old checkboxes into new tasks. Current source + migrations + live read-only observation + verified tests take precedence. Any conflict must be logged with evidence and resolved before implementing. Do not edit production, migrate data, delete files, merge or deploy during this planning stage.
 
