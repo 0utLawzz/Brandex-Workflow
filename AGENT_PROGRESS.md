@@ -521,3 +521,12 @@ Before the live correction below, no production database, Supabase project, Apps
 - GitHub Actions run `45080110719` passed on code commit `a70bd930e0cd73df6407aa9495a60dd9536fa714`: dependency audit, Apps Script syntax, ESLint, all tests including the new workflow transition suite, Next.js production build, and required-document checks. The later commit is documentation-only.
 - Vercel preview status is not equivalent to CI: the latest READY branch preview is commit `cfed658f23dc913ccf74b9fe8c0725e685d99671`, before the final Edit Case UI additions. Later preview builds were canceled/blocked by the Vercel build-rate limit. The current PR head does not have a verified preview URL.
 - PR #9 remains draft/open. Authenticated UI QA and merge are still pending; do not merge or deploy to production based only on the successful CI run.
+
+### 2026-11-23 verification-gate continuation
+
+- Read-only live schema comparison confirmed production `public.trademark_records` has 481 rows and does not contain `dispatched_image`, `dispatched_doc_name`, or `dispatched_doc_type`; dispatch proof remains represented through `trademark_documents`.
+- Updated `mapRecordToRow`, single updates, and bulk workflow payloads so unsupported proof columns are never sent to `trademark_records`; proof references continue through `trademark_documents`.
+- Added `buildCaseEditUpdates` and wired Edit Case to submit only changed editable fields, preventing unrelated lifecycle/proof defaults from being rewritten. Added regression tests for narrow payloads and proof retention.
+- Added a conditional current-status predicate to single workflow updates so a concurrent status change fails closed instead of being overwritten.
+- Local verification after changes: `npm test` passed 43 tests; `npm run lint` passed with two pre-existing React hook warnings; `npm run build` passed. No Supabase writes, Drive operations, Apps Script deployment, production deployment, or merge performed.
+- The connected disposable Supabase project remains non-equivalent (10 minimal `trademark_records` rows and only `selection_menu`); migration/integration verification and authenticated UI QA remain blocked until a controlled production-equivalent fixture and legitimate authenticated browser session are available.

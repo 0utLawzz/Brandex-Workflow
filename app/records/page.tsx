@@ -10,6 +10,7 @@ import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import { validateWorkflowTransition } from '@/lib/case-workflow';
+import { buildCaseEditUpdates } from '@/lib/case-edit-payload';
 import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
@@ -177,6 +178,7 @@ export default function RecordsPage() {
 
   // Edit Single Record Modal
   const [editingRecord, setEditingRecord] = useState<RecordItem | null>(null);
+  const [originalEditingRecord, setOriginalEditingRecord] = useState<RecordItem | null>(null);
   const [savingRecord, setSavingRecord] = useState(false);
   const [editingDocuments, setEditingDocuments] = useState<DocumentAttachment[]>([]);
   const [loadingEditingDocuments, setLoadingEditingDocuments] = useState(false);
@@ -624,10 +626,16 @@ export default function RecordsPage() {
     if (cnicDigits && !/^\d{13}$/.test(cnicDigits)) { setErrorMsg('CNIC must contain exactly 13 digits (for example, 35201-1234567-1).'); return; }
     setSavingRecord(true);
     try {
-      await supabaseDB.updateRecord(editingRecord.id, editingRecord);
+      const updates = originalEditingRecord
+        ? buildCaseEditUpdates(editingRecord, originalEditingRecord)
+        : editingRecord;
+      if (Object.keys(updates).length > 0) {
+        await supabaseDB.updateRecord(editingRecord.id, updates);
+      }
       await supabaseDB.addHistory(editingRecord.id, 'RECORD UPDATED', 'Case metadata edited directly in CMS');
       setBulkNotice(`✓ Updated details for case ${editingRecord.folder}`);
       setEditingRecord(null);
+      setOriginalEditingRecord(null);
       await loadAllRecords();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update record');
@@ -1292,7 +1300,7 @@ export default function RecordsPage() {
                             {/* Edit Case details */}
                             <button
                               type="button"
-                              onClick={() => setEditingRecord({ ...r })}
+                              onClick={() => { setEditingRecord({ ...r }); setOriginalEditingRecord({ ...r }); }}
                               className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-white rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer"
                               title="Edit Case Details"
                             >
@@ -1740,7 +1748,7 @@ export default function RecordsPage() {
               </h3>
               <button
                 type="button"
-                onClick={() => setEditingRecord(null)}
+                onClick={() => { setEditingRecord(null); setOriginalEditingRecord(null); }}
                 className="p-1 border border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded cursor-pointer"
               >
                 <X className="w-4 h-4" />

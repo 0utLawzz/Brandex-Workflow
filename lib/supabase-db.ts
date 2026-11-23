@@ -132,9 +132,8 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.img !== undefined) row.logo_url = record.img;
   if (record.dispatchedDate !== undefined) row.dispatched_date = record.dispatchedDate;
   if (record.dispatchedNote !== undefined) row.dispatched_note = record.dispatchedNote;
-  if (record.dispatchedImage !== undefined) row.dispatched_image = record.dispatchedImage;
-  if (record.dispatchedDocName !== undefined) row.dispatched_doc_name = record.dispatchedDocName;
-  if (record.dispatchedDocType !== undefined) row.dispatched_doc_type = record.dispatchedDocType;
+  // Dispatch proof is stored as a row in trademark_documents. These columns are
+  // absent from the live production schema and must never be sent to trademark_records.
   if (record.deliveredDate !== undefined) row.delivered_date = record.deliveredDate;
   if (record.receiverName !== undefined) row.receiver_name = record.receiverName;
   if (record.receiptImage !== undefined) row.receipt_image = record.receiptImage;
@@ -386,12 +385,14 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const row = mapRecordToRow(updates);
+      let expectedStatus: string | undefined;
       if (updates.status !== undefined) {
         const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
           client.from('trademark_records').select('status').eq('id', id).maybeSingle()
         );
         if (statusReadError) throw new Error(`Could not verify the current workflow status: ${statusReadError.message}`);
         if (!currentStatusRow) throw new Error('Case was not found while validating its workflow transition.');
+        expectedStatus = String(currentStatusRow.status || '');
         const transition = validateWorkflowTransition(currentStatusRow.status, updates.status, updates);
         if (!transition.valid) throw new Error(transition.error || 'This workflow transition is not allowed.');
       }
@@ -412,12 +413,11 @@ class SupabaseDBService {
         if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
       }
 
-      let result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
-      if (result.error && result.error.message.includes('dispatched_image')) {
-        delete row.dispatched_image;
-        delete row.dispatched_doc_name;
-        delete row.dispatched_doc_type;
-        result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
+      let updateQuery = client.from('trademark_records').update(row).eq('id', id);
+      if (expectedStatus !== undefined) updateQuery = updateQuery.eq('status', expectedStatus);
+      const result = await withSupabaseTimeout(updateQuery.select().maybeSingle());
+      if (updates.status !== undefined && !result.data && !result.error) {
+        throw new Error('Workflow transition was not applied because the case changed concurrently. Reload the case and try again.');
       }
       if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
       if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
@@ -489,7 +489,6 @@ class SupabaseDBService {
           ...(meta?.dispatchedDate ? { dispatched_date: meta.dispatchedDate } : {}),
           ...(meta?.dispatchedNote ? { dispatched_note: meta.dispatchedNote } : {}),
           ...(meta?.trackingId ? { tracking_id: meta.trackingId } : {}),
-          ...(meta?.dispatchedImage ? { dispatched_image: meta.dispatchedImage } : {}),
           ...(meta?.deliveredDate ? { delivered_date: meta.deliveredDate } : {}),
           ...(meta?.receiverName ? { receiver_name: meta.receiverName } : {}),
           ...(meta?.receiptImage ? { receipt_image: meta.receiptImage } : {})
