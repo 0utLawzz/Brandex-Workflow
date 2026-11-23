@@ -541,3 +541,9 @@ Before the live correction below, no production database, Supabase project, Apps
 - Tightened both RPCs to `SECURITY INVOKER`; execute is revoked from public/anon/authenticated and granted only to `service_role`, avoiding a public `SECURITY DEFINER` endpoint.
 - Disposable project `clviaughxebohniopzyg` was brought to production-shaped additive schema without rewriting its existing 10 records or 6 series rows. The migration and RPCs were applied there, then verified inside rollback transactions: approve → dispatch proof → deliver/history, rejected dispatch blocking, mixed-selection rollback, and atomic metadata edit + proof + history all passed. Final counts remain `trademark_records=10`, `case_series=6`, `trademark_history=0`, `trademark_documents=0`.
 - Supabase advisors after the check reported no health lints; the only security warning was the pre-existing `public.rls_auto_enable()` function, and the only performance findings before the check were addressed with record-id indexes on history/documents. No production project was written.
+
+### Vercel Preview environment synchronization
+
+- Inspected project `brandex-workflow` environment targets without decrypting or exposing secrets. Production-scoped values already had Preview counterparts for `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_APPS_SCRIPT_URL`, `NEXT_SUPABASE_ANON_KEY`, `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and `APPS_SCRIPT_RECORDS_TOKEN`.
+- Added the missing Preview-scoped `NEXT_PUBLIC_APPS_SCRIPT_URL` using the Production config value. No Production value was changed, and no secret value was written to the repository or chat.
+- A fresh Preview deployment is being triggered by this documentation-only branch commit so the exact-head preview loads the synchronized Preview environment.
