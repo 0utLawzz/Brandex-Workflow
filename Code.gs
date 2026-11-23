@@ -63,6 +63,9 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "Authentication required" });
     }
 
+    if (body.action === "validateDriveFolder") {
+      return jsonResponse(validateDriveFolder(body.folderId));
+    }
     if (body.action === "exportBackupAsset") {
       return jsonResponse(exportBackupAsset(body.fileId));
     }
@@ -88,6 +91,15 @@ function doPost(e) {
 function isAuthorizedBackendRequest(body) {
   var expectedToken = PropertiesService.getScriptProperties().getProperty("RECORDS_ACCESS_TOKEN");
   return Boolean(expectedToken && body && body.accessToken && body.accessToken === expectedToken);
+}
+
+function validateDriveFolder(folderId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(folderId || ''))) throw new Error('Invalid Drive folder ID');
+  var folder = DriveApp.getFolderById(folderId);
+  if (folder.isTrashed()) throw new Error('Selected folder is in trash');
+  var permission = folder.getAccess(Session.getEffectiveUser().getEmail());
+  if (permission !== DriveApp.Permission.EDIT && permission !== DriveApp.Permission.OWNER) throw new Error('The generation account needs editor access to the selected folder');
+  return { ok: true, folderId: folder.getId(), name: folder.getName(), url: folder.getUrl() };
 }
 
 function exportBackupAsset(fileId) {

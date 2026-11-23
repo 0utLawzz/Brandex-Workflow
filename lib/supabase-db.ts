@@ -166,6 +166,7 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
 // Helper to map DB row to ClientProfile
 export function mapRowToClient(row: any): ClientProfile {
   return {
+    drive_folder_id: row.drive_folder_id || '',
     phone: row.phone || '',
     email: row.email || '',
     id: Number(row.id),

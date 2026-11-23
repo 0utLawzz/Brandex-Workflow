@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
+import DriveFolderPicker from '@/app/components/DriveFolderPicker';
 import { ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
@@ -462,6 +463,7 @@ export default function ClientsPage() {
             </div>
 
             <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Google Drive destination</p><DriveFolderPicker clientId={editingClient.id} onSaved={folderId => { setEditingClient(current => current ? { ...current, drive_folder_id: folderId } : null); void loadClients(); }} />{editingClient.drive_folder_id && <a href={`https://drive.google.com/drive/folders/${encodeURIComponent(editingClient.drive_folder_id)}`} target="_blank" rel="noopener noreferrer" className="mt-2 block text-xs underline">Open saved folder</a>}</div>
               <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Prefix</label>

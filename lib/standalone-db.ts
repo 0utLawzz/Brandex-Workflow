@@ -52,6 +52,7 @@ export interface RecordItem {
 }
 
 export interface ClientProfile {
+  drive_folder_id?: string;
   phone?: string;
   email?: string;
   id: number;
