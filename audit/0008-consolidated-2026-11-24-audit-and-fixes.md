@@ -51,6 +51,14 @@ Baseline verification: `npm test` passed all 46 existing tests on host Node v24.
 
 Fresh `npm ci` completed: 349 packages installed, 356 audited, zero reported vulnerabilities. Node 22 CI parity remains pending. Local commit attempt stopped because this checkout has no configured author identity; no global identity configuration changed.
 
+### Implementation checkpoint
+
+- Baseline production build completed successfully. Lint: zero errors/two existing hook dependency warnings. Typecheck after initial workspace edits passed.
+- Home now renders the existing Records workspace directly, retaining `/records` compatibility. Brand link targets Home. Added compact semantic breadcrumbs for the four workspace routes and Settings. Heading is `Case Record`; new/default display preference is 50 rows, preserving saved user choices.
+- Removed elapsed-time progress increments and the stale timer reference; a submission failure no longer forces progress to 100. Actual existing operation milestones remain; full generation/persistence/notification acceptance is still PENDING.
+- Restore source confirmed destructive omission risk: `restoreBackupJSON` strips case IDs, imports records before clients, and omits child history/document rows. Full preflight/transactional identity mapping remains required.
+- These changes are CODE FOUND, runtime acceptance PENDING. No production migration or deployment performed. Local commits use explicit Codex identity without changing global Git configuration.
+
 This ADR is the *current consolidated work queue* until a subsequent reviewed ADR/release supersedes it. Earlier `AGENT.md`, `AGENT_PROGRESS.md`, PR descriptions and ADRs are **historical evidence**, not automatically current instructions or evidence that work remains undone. Preserve their factual provenance, but never copy unchecked old checkboxes into new tasks. Current source + migrations + live read-only observation + verified tests take precedence. Any conflict must be logged with evidence and resolved before implementing. Do not edit production, migrate data, delete files, merge or deploy during this planning stage.
 
 **Interpretation of status:** CODE FOUND ≠ runtime verified; READY ≠ working; SCREEN VISIBLE ≠ saved/persisted. Label each task VERIFIED / CODE FOUND / PARTIAL / NOT FOUND / NOT TESTED. Do not count the same issue twice.

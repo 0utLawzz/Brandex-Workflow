@@ -31,9 +31,9 @@ export default function Navbar() {
     `flex items-center gap-2 rounded px-3 py-2 text-xs font-semibold tracking-wide transition sm:px-3.5 ${(href === '/' ? pathname === '/' : pathname === href) ? 'bg-[#C94A00] text-white' : 'text-[#FAF6EE]/75 hover:bg-white/10 hover:text-white'}`;
 
   return (
-    <nav className="navbar sticky top-0 z-[1000] border-b-[3px] border-[#C94A00] bg-[#0C0C0C] shadow-[0_4px_0_rgba(0,0,0,.12)]">
+    <><nav className="navbar sticky top-0 z-[1000] border-b-[3px] border-[#C94A00] bg-[#0C0C0C] shadow-[0_4px_0_rgba(0,0,0,.12)]">
       <div className="mx-auto flex min-h-[60px] w-full max-w-[1500px] items-center justify-between gap-3 px-3 sm:px-5">
-        <Link href="/records" className="flex shrink-0 items-center gap-2.5 text-inherit no-underline" aria-label="Brandex Home">
+        <Link href="/" className="flex shrink-0 items-center gap-2.5 text-inherit no-underline" aria-label="Brandex Home">
           <Image src="/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png" alt="Brandex" width={40} height={40} className="h-9 w-9 rounded-xl border-2 border-[#C94A00] bg-[#FAF6EE] object-contain p-0.5" />
           <span className="font-['Bebas_Neue'] text-xl tracking-[2px] text-[#FAF6EE] sm:text-2xl">BRANDEX</span>
         </Link>
@@ -48,5 +48,11 @@ export default function Navbar() {
       </div>
       {mobileMenuOpen && <div className="grid grid-cols-2 gap-1 border-t border-white/15 bg-[#171717] p-2 md:hidden">{NAV_ITEMS.map(item => { const Icon = item.icon; return <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)} className={navLinkClass(item.href)}><Icon className="h-4 w-4" />{item.label}</Link>; })}</div>}
     </nav>
+    <nav aria-label="Breadcrumb" className="mx-auto w-full max-w-[1500px] px-4 pt-3 text-xs text-[#666] sm:px-6">
+      <ol className="flex items-center gap-2">
+        <li>{pathname === '/' ? <span aria-current="page">Home</span> : <Link href="/" className="underline underline-offset-2">Home</Link>}</li>
+        {pathname !== '/' && <><li aria-hidden="true">/</li><li aria-current="page">{pathname === '/settings' ? 'Settings' : NAV_ITEMS.find(item => item.href === pathname)?.label || 'Workspace'}</li></>}
+      </ol>
+    </nav></>
   );
 }

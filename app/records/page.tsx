@@ -701,7 +701,7 @@ export default function RecordsPage() {
               </span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1.5px] leading-tight">
-              Case Records &amp; Workflow Timeline
+              Case Record
             </h1>
           </div>
 

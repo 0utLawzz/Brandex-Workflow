@@ -4,7 +4,7 @@ export interface WorkspacePreferences {
 }
 
 export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
-  pageSize: 25,
+  pageSize: 50,
   showLawFirmWidget: true,
 };
 

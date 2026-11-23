@@ -79,7 +79,6 @@ export default function TrademarkApplicationPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
-  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
@@ -482,10 +481,6 @@ export default function TrademarkApplicationPage() {
       : 'Saving the case in Supabase, then generating its documents in Google Drive...');
     setStatusLinks(null);
 
-    progressTimerRef.current = setInterval(() => {
-      setProgressPercent(prev => (prev < 88 ? prev + 4 : prev));
-    }, 1300);
-
     try {
       if (selectedFile) {
         setProgressPercent(18);
@@ -586,7 +581,6 @@ export default function TrademarkApplicationPage() {
         } catch {}
 
         if (res.ok && data && data.ok === true) {
-          clearInterval(progressTimerRef.current as NodeJS.Timeout);
           setProgressPercent(100);
           setProgressLabel('Completed');
 
@@ -652,8 +646,7 @@ export default function TrademarkApplicationPage() {
           : 'Case is only in this browser.');
       }
     } catch (err: any) {
-      clearInterval(progressTimerRef.current as NodeJS.Timeout);
-      setProgressPercent(100);
+      setProgressLabel('Failed — review the error and retry');
 
       const errText = String(err?.message || err || '');
       setStatusType('error');
