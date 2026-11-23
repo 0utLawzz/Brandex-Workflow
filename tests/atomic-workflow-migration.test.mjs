@@ -13,6 +13,8 @@ test('workflow migration makes status, proof reference, and history atomic', () 
   assert.match(sql, /IF changed_count <> required_count THEN/);
   assert.match(sql, /REVOKE ALL ON FUNCTION/);
   assert.match(sql, /GRANT EXECUTE ON FUNCTION .* TO service_role/);
+  assert.equal((sql.match(/SECURITY INVOKER/g) || []).length, 2);
+  assert.doesNotMatch(sql, /SECURITY DEFINER/);
   assert.match(sql, /p_audit_note TEXT/);
   assert.doesNotMatch(sql, /SET dispatched_image\s*=/i);
   assert.doesNotMatch(sql, /SET dispatched_doc_name\s*=/i);

@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION public.apply_case_workflow_transition(
 )
 RETURNS VOID
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public
 AS $$
 DECLARE
@@ -85,7 +85,7 @@ CREATE OR REPLACE FUNCTION public.apply_case_metadata_update(
 )
 RETURNS VOID
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public
 AS $$
 DECLARE

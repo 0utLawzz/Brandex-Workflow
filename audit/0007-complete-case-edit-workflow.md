@@ -94,3 +94,4 @@ Staff need a complete, reliable case editor and guarded workflow actions. In par
 - Added `20261123130000_atomic_case_workflow.sql` with a service-role-only transactional RPC for guarded status changes, proof-reference insertion, and history insertion. It uses the existing production-compatible columns and rolls back when any selected case is missing or ineligible.
 - Single and bulk transition callers now use the RPC; transition history is no longer a separate UI/API write. The migration remains unapplied pending a production-equivalent disposable target.
 - Edit Case now uses the migration's metadata RPC so the changed-field update, optional proof reference, and `RECORD UPDATED` history row commit together.
+- Both RPCs are `SECURITY INVOKER` and executable only by `service_role`; no public `SECURITY DEFINER` endpoint is introduced.

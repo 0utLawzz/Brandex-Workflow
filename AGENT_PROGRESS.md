@@ -538,3 +538,4 @@ Before the live correction below, no production database, Supabase project, Apps
 - Added a migration contract test. Local verification now passes 44 tests, lint has only the two pre-existing hook warnings, and the production build passes.
 - The migration has not been applied to production or the incomplete disposable project. Applying it requires a production-equivalent disposable target and a controlled migration run.
 - Added `apply_case_metadata_update` to the same migration and routed Edit Case through it, so a metadata update plus its `RECORD UPDATED` history row (and optional proof reference) is also atomic.
+- Tightened both RPCs to `SECURITY INVOKER`; execute is revoked from public/anon/authenticated and granted only to `service_role`, avoiding a public `SECURITY DEFINER` endpoint.
