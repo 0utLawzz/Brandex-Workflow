@@ -9,6 +9,7 @@ import DataBackupModal from '@/app/components/DataBackupModal';
 import ClientCsvTools from '@/app/components/ClientCsvTools';
 import CaseCsvTools from '@/app/components/CaseCsvTools';
 import SeriesManagement from '@/app/components/SeriesManagement';
+import SharedBrandSettings from '@/app/components/SharedBrandSettings';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -86,6 +87,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <SharedBrandSettings />
         <SeriesManagement />
 
         <ClientCsvTools />

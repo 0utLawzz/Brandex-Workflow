@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { DEFAULT_BRAND, validateSharedSettings } from '@/lib/shared-settings';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -16,6 +17,14 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [brand, setBrand] = useState(DEFAULT_BRAND);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch('/api/settings', { cache: 'no-store', signal: controller.signal }).then(async response => { if (response.ok) setBrand(validateSharedSettings(await response.json())); }).catch(() => { /* Default branding remains visible if shared settings cannot load. */ });
+    const update = (event: Event) => { try { setBrand(validateSharedSettings((event as CustomEvent).detail)); } catch { /* Reject malformed update events. */ } };
+    window.addEventListener('brandex-brand-updated', update);
+    return () => { controller.abort(); window.removeEventListener('brandex-brand-updated', update); };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -34,8 +43,8 @@ export default function Navbar() {
     <><nav className="navbar sticky top-0 z-[1000] border-b-[3px] border-[#C94A00] bg-[#0C0C0C] shadow-[0_4px_0_rgba(0,0,0,.12)]">
       <div className="mx-auto flex min-h-[60px] w-full max-w-[1500px] items-center justify-between gap-3 px-3 sm:px-5">
         <Link href="/" className="flex shrink-0 items-center gap-2.5 text-inherit no-underline" aria-label="Brandex Home">
-          <Image src="/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png" alt="Brandex" width={40} height={40} className="h-9 w-9 rounded-xl border-2 border-[#C94A00] bg-[#FAF6EE] object-contain p-0.5" />
-          <span className="font-['Bebas_Neue'] text-xl tracking-[2px] text-[#FAF6EE] sm:text-2xl">BRANDEX</span>
+          <Image src={brand.logo_url || '/assets/aistudio/ChatGPT_Image_Nov_8__2026__10_03_54_PM_067fea60.png'} alt={brand.display_name} unoptimized width={40} height={40} className="h-9 w-9 rounded-xl border-2 border-[#C94A00] bg-[#FAF6EE] object-contain p-0.5" />
+          <span className="max-w-48 truncate text-[#FAF6EE]" title={brand.display_name}><span className="block truncate font-['Bebas_Neue'] text-xl tracking-[2px] sm:text-2xl">{brand.display_name}</span>{brand.tagline && <span className="hidden truncate text-[10px] sm:block">{brand.tagline}</span>}</span>
         </Link>
         <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 md:flex">
           {NAV_ITEMS.map(item => { const Icon = item.icon; return <Link key={item.href} href={item.href} className={navLinkClass(item.href)}><Icon className="h-3.5 w-3.5" />{item.label}</Link>; })}
