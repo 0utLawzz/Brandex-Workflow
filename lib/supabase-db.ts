@@ -4,8 +4,18 @@ import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFrom
 import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
 import { validateWorkflowTransition } from './case-workflow';
+import { readAllRows } from './read-all-rows';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
+
+async function readTable(client: ReturnType<typeof getSupabaseClient>, table: string): Promise<{ data: any[]; error: { message: string } | null }> {
+  const data = await readAllRows<any>(before => {
+    let query = client.from(table).select('*', { count: 'exact' }).order('id', { ascending: false }).limit(500);
+    if (before !== null) query = query.lt('id', before);
+    return withSupabaseTimeout(query);
+  });
+  return { data, error: null };
+}
 
 async function requestDatabase<T>(operation: string, payload: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch('/api/database', {
@@ -263,10 +273,7 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await withSupabaseTimeout(client
-        .from('trademark_records')
-        .select('*')
-        .order('id', { ascending: false }));
+      const { data, error } = await readTable(client, 'trademark_records');
 
       if (error) {
         console.error('[SupabaseDB] Supabase records query failed:', error.message);
@@ -674,10 +681,7 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await withSupabaseTimeout(client
-        .from('clients')
-        .select('*')
-        .order('id', { ascending: false }));
+      const { data, error } = await readTable(client, 'clients');
 
       if (error) {
         return { clients: [], source: 'supabase', error: error.message };
@@ -709,8 +713,8 @@ class SupabaseDBService {
     if (isConfigured) {
       const client = getSupabaseClient();
       const [historyResult, documentsResult] = await Promise.all([
-        withSupabaseTimeout(client.from('trademark_history').select('*')),
-        withSupabaseTimeout(client.from('trademark_documents').select('*'))
+        readTable(client, 'trademark_history'),
+        readTable(client, 'trademark_documents')
       ]);
       if (historyResult.error || documentsResult.error) {
         throw new Error(`Backup stopped because history or document data could not be read: ${historyResult.error?.message || documentsResult.error?.message}`);
