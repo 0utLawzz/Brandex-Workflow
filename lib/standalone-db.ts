@@ -3,6 +3,7 @@
 import Papa from 'papaparse';
 import { createBackupPackage, validateBackupPackage } from './backup-package.ts';
 import { validateClientContact } from './client-contact.ts';
+import { CSV_ENCODING_HEADER, CSV_TEXT_ENCODING, encodeCsvText, decodeCsvText, csvRowIsEncoded } from './csv-text.ts';
 
 // =========================================================================
 // BRANDEX LAW ASSOCIATES — CSV AND BACKUP UTILITIES
@@ -356,8 +357,8 @@ class StandaloneDB {
     ]);
 
     return Papa.unparse({
-      fields: headers,
-      data
+      fields: [...headers, CSV_ENCODING_HEADER],
+      data: data.map(row => [...row.map(encodeCsvText), CSV_TEXT_ENCODING])
     });
   }
 
@@ -430,9 +431,10 @@ class StandaloneDB {
         const row = rows[i];
         if (!row || row.length === 0) continue;
 
+        const encoded = csvRowIsEncoded(row[headerRow.indexOf(CSV_ENCODING_HEADER.toLowerCase())]);
         const val = (idx: number) => {
           if (idx >= 0 && idx < row.length && row[idx] !== undefined && row[idx] !== null) {
-            return String(row[idx]).trim();
+            return decodeCsvText(row[idx], encoded).trim();
           }
           return '';
         };
@@ -531,8 +533,8 @@ class StandaloneDB {
     ]);
 
     return Papa.unparse({
-      fields: headers,
-      data
+      fields: [...headers, CSV_ENCODING_HEADER],
+      data: data.map(row => [...row.map(encodeCsvText), CSV_TEXT_ENCODING])
     });
   }
 
@@ -590,7 +592,8 @@ class StandaloneDB {
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.length === 0) continue;
-        const val = (idx: number) => (idx >= 0 && idx < row.length && row[idx] !== undefined && row[idx] !== null) ? String(row[idx]).trim() : '';
+        const encoded = csvRowIsEncoded(row[headerRow.indexOf(CSV_ENCODING_HEADER.toLowerCase())]);
+        const val = (idx: number) => (idx >= 0 && idx < row.length && row[idx] !== undefined && row[idx] !== null) ? decodeCsvText(row[idx], encoded).trim() : '';
 
         const name = val(colName);
         if (!name) continue;
