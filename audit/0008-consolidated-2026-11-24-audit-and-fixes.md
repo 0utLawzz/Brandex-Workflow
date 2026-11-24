@@ -167,6 +167,8 @@ Test migration chain checkpoint: completed the remaining reviewed additive migra
 
 Hosted rollback discovery and fix: running the client-assignment fixture in a rollback-only block on the test project exposed a real legacy difference: cases can have NULL workflow status there, while history.status is NOT NULL. The first function version failed on that combination and the fixture statement rolled back. Added a reviewed replacement that records PENDING in history for NULL/empty case status without changing the case's stored status. PGlite 20/20 and native PostgreSQL 17 (20 migrations/3 fixtures) PASS. Applied the replacement only to the test project; the same hosted rollback fixture then PASSed. Postflight remains 10 cases, 0 clients, 0 history, 0 recovery runs; anon EXECUTE still denied. This fix has not been applied to production.
 
+Hosted database fixture checkpoint: ran the existing identity-safe case CSV import and recovery restore/ID-remapping fixtures in exception-wrapped rollback-only blocks on the designated test project. Both PASSed against its PostgreSQL 17 schema. Postflight stayed 10 cases, 0 clients, 0 history, 0 documents and 0 recovery runs. These checks demonstrate hosted database behavior without keeping fixture rows; they do not prove PostgREST joins, browser authentication, Drive file bytes or Preview isolation.
+
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
 | PR | Historical scope and merged output | Unclosed or independently testable condition |
