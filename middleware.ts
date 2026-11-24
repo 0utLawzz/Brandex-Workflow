@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthSession } from '@/lib/auth-session';
+import { allowUnauthenticatedLocalDemo } from '@/lib/access-configuration';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -31,9 +32,8 @@ export async function middleware(request: NextRequest) {
     const username = process.env.APP_ACCESS_USER;
     const password = process.env.APP_ACCESS_PASSWORD;
 
-    // Keep local development usable without deployment credentials.
     if (!username || !password) {
-        if (process.env.NODE_ENV !== 'production') return authenticatedResponse();
+        if (allowUnauthenticatedLocalDemo(process.env)) return authenticatedResponse();
         return new NextResponse('Application access is not configured.', {
             status: 503,
             headers: { 'Cache-Control': 'no-store' },

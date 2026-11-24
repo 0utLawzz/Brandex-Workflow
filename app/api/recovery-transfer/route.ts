@@ -5,6 +5,7 @@ import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 import { assertRecoveryTarget } from '@/lib/recovery-policy';
 import { RECOVERY_CHUNK_BYTES, MAX_RECOVERY_BYTES, assembleRecovery, decodeRecoveryChunk, encodeRecoveryChunk, recoveryDigest, validateTransferManifest } from '@/lib/recovery-transfer';
 import type { TransferManifest } from '@/lib/recovery-transfer';
+import { previewWriteError } from '@/lib/preview-isolation';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -14,6 +15,8 @@ const reply = (result: unknown) => Response.json({ ok: true, result }, { headers
 export async function POST(request: Request) {
   if (!hasSameOrigin(request)) return Response.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403, headers });
   if (!getSupabaseCredentials().isConfigured) return Response.json({ ok: false, error: 'Database access is not configured.' }, { status: 503, headers });
+  const isolationError = previewWriteError(process.env, getSupabaseCredentials().url);
+  if (isolationError) return Response.json({ ok: false, error: isolationError }, { status: 503, headers });
   try {
     const value = await readBoundedJson(request, 750 * 1024);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new RequestPayloadError('Invalid transfer request.', 400);
@@ -48,11 +51,11 @@ export async function POST(request: Request) {
     }
     if (typeof body.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.id)) throw new RequestPayloadError('Invalid transfer ID.', 400);
     if (body.operation === 'release') {
-      const { error } = await client.from('recovery_transfers').delete().eq('id', body.id);
+      const { error } = await client.from('recovery_transfers').delete().eq('id', body.id).eq('purpose', 'recovery');
       if (error) throw new Error('Transfer cleanup failed; expiry will prevent further access.');
       return reply(true);
     }
-    const { data: meta, error: readError } = await client.from('recovery_transfers').select('*').eq('id', body.id).gt('expires_at', new Date().toISOString()).single();
+    const { data: meta, error: readError } = await client.from('recovery_transfers').select('*').eq('id', body.id).eq('purpose', 'recovery').gt('expires_at', new Date().toISOString()).single();
     if (readError || !meta) throw new RequestPayloadError('Transfer unavailable or expired. Start again with the original file.', 410);
     const manifest = validateTransferManifest({ id: meta.id, byteLength: meta.byte_length, chunkCount: meta.chunk_count, sha256: meta.sha256 });
     if (body.operation === 'put' && meta.direction === 'upload') {

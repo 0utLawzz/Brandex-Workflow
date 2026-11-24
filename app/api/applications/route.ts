@@ -3,11 +3,15 @@ import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { supabaseDB } from '@/lib/supabase-db';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
+import { getSupabaseCredentials } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
     if (!hasSameOrigin(request)) return Response.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
+    const isolationError = previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return Response.json({ ok: false, error: isolationError }, { status: 503 });
 
     let payload: Record<string, unknown>;
 

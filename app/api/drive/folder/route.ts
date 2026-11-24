@@ -1,11 +1,14 @@
 import { hasSameOrigin } from '@/lib/request-origin';
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
 
 export async function POST(request: Request) {
   try {
     if (!hasSameOrigin(request)) return Response.json({ error: 'Cross-site request rejected.' }, { status: 403 });
+    const isolationError = previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return Response.json({ error: isolationError }, { status: 503 });
     const value = await readBoundedJson(request, 8192);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return Response.json({ error: 'Invalid folder request.' }, { status: 400 });
     const { clientId, recordId, folderId, oauthToken } = value as Record<string, any>;

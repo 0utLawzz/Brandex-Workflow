@@ -15,6 +15,7 @@ import { validateClientContact } from './client-contact';
 import { planAssetRestore, remapAssetUrls } from './restore-assets';
 import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfer-client';
 import { safeAssetHref } from './asset-url';
+import { requestWithTransfer } from './api-request-client';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -28,12 +29,7 @@ async function readTable(client: ReturnType<typeof getSupabaseClient>, table: st
 }
 
 async function requestDatabase<T>(operation: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch('/api/database', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    cache: 'no-store',
-    body: JSON.stringify({ operation, ...payload }),
-  });
+  const response = await requestWithTransfer('/api/database', { operation, ...payload });
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.ok !== true) {
     throw new Error(result?.error || `Supabase request failed (${response.status}).`);

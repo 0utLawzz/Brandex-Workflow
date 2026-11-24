@@ -4,6 +4,7 @@ import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,9 @@ export async function POST(request: Request) {
 
   try {
     let result: unknown;
+    const readOnlyOperations = new Set(['checkConnection','getRecords','getClients','getSeries','getHistory','getDocumentReferences']);
+    const isolationError = readOnlyOperations.has(body.operation) ? null : previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return invalidPayload(isolationError, 503);
     switch (body.operation) {
       case 'checkConnection':
         result = await supabaseDB.checkConnection();

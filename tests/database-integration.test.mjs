@@ -2,6 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
+import { createHash } from 'node:crypto';
 
 let db;
 before(async () => {
@@ -10,8 +11,10 @@ before(async () => {
   await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;');
   await db.exec(await readFile(new URL('../supabase_schema.sql', import.meta.url), 'utf8'));
   const directory = new URL('../supabase/migrations/', import.meta.url);
-  for (const name of (await readdir(directory)).filter(name => name.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(name, directory), 'utf8'));
-  await db.exec('GRANT ALL ON public.clients,public.trademark_records,public.trademark_history,public.trademark_documents TO service_role; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;');
+  for (const name of (await readdir(directory)).filter(name => name.endsWith('.sql')).sort()) {
+    try { await db.exec(await readFile(new URL(name, directory), 'utf8')); }
+    catch (error) { throw new Error(`Migration ${name}: ${error.message}${error.position ? ` at character ${error.position}` : ''}`); }
+  }
 }, { timeout: 30000 });
 after(async () => { await db?.close(); }, { timeout: 10000 });
 
@@ -282,4 +285,53 @@ test('recovery remaps an explicit proof relationship into a populated target', a
     await db.exec('SET CONSTRAINTS fk_case_dispatch_document IMMEDIATE');
     assert.equal((await db.query('SELECT public.restore_recovery_snapshot($1::jsonb) AS report',[JSON.stringify(source)])).rows[0].report.alreadyRestored,true);
   } finally { await db.exec('ROLLBACK'); }
+});
+
+test('normal API staging claims execution once, freezes input and captures the original response atomically', async () => {
+  await db.exec('BEGIN; SET LOCAL ROLE service_role');
+  const id='d0b9b2e4-2cad-49f2-b519-2be2fbc042c7';
+  const input='{"operation":"getRecords"}';
+  const hash=value=>createHash('sha256').update(value).digest('hex');
+  const encoded=value=>Buffer.from(value).toString('base64');
+  const rejectSafely=async(sql,params,pattern)=>{
+    await db.exec('SAVEPOINT app_transfer_failure');
+    await assert.rejects(db.query(sql,params),pattern);
+    await db.exec('ROLLBACK TO SAVEPOINT app_transfer_failure');
+  };
+  try {
+    await db.query('SELECT public.start_application_request($1,$2,$3,$4)',[id,'database',encoded(input),hash(input)]);
+    const started=(await db.query('SELECT purpose,claimed_at FROM public.recovery_transfers WHERE id=$1',[id])).rows[0];
+    assert.equal(started.purpose,'database'); assert.ok(started.claimed_at);
+    await rejectSafely('SELECT public.claim_application_transfer($1)',[id],/execution already started/);
+    await rejectSafely('SELECT public.put_recovery_chunk($1,0,$2)',[id,encoded(input)],/chunks are immutable/);
+    const output='{"ok":true,"result":{"id":1}}';
+    await db.query('SELECT public.complete_application_transfer($1,$2,$3,$4,$5,$6)',[id,Buffer.byteLength(output),1,hash(output),201,encoded(output)]);
+    const captured=(await db.query('SELECT t.*,c.content FROM public.recovery_transfers t JOIN public.recovery_transfer_chunks c ON c.transfer_id=t.id WHERE t.id=$1',[id])).rows[0];
+    assert.equal(captured.purpose,'api-result'); assert.equal(captured.direction,'download'); assert.equal(captured.claimed_at,null);
+    assert.equal(captured.response_status,201); assert.equal(Buffer.from(captured.content,'base64').toString(),output);
+    await rejectSafely('SELECT public.claim_application_transfer($1)',[id],/unavailable/);
+    await rejectSafely('SELECT public.start_application_request($1,$2,$3,$4)',['16a539df-425a-4570-9385-26c7ec7df939','database',encoded(input),'0'.repeat(64)],/Invalid inline request/);
+    for(const role of ['anon','authenticated']) {
+      const access=(await db.query("SELECT has_function_privilege($1,'public.start_application_request(uuid,text,text,text)','EXECUTE') AS allowed",[role])).rows[0];
+      assert.equal(access.allowed,false);
+    }
+  } finally {await db.exec('ROLLBACK');}
+});
+
+test('API transport cannot claim recovery packages and rejects unknown targets and oversized input', async()=>{
+  await db.exec('BEGIN; SET LOCAL ROLE service_role');
+  const id='ba576a94-82a6-4c92-8384-d0ebd11d279b';
+  const rejectSafely=async(sql,params,pattern)=>{
+    await db.exec('SAVEPOINT app_scope_failure');
+    await assert.rejects(db.query(sql,params),pattern);
+    await db.exec('ROLLBACK TO SAVEPOINT app_scope_failure');
+  };
+  try {
+    await db.query('SELECT public.begin_recovery_transfer($1,$2,$3,$4,$5)',[id,'upload',4,1,'a'.repeat(64)]);
+    await db.query('SELECT public.put_recovery_chunk($1,0,$2)',[id,'dGVzdA==']);
+    await rejectSafely('SELECT public.claim_application_transfer($1)',[id],/unavailable/);
+    await rejectSafely('SELECT public.begin_application_transfer($1,$2,$3,$4,$5)',['805ce528-0460-4acc-b3de-c3adf47f4e17','restore',4,1,'a'.repeat(64)],/invalid target/);
+    await rejectSafely('SELECT public.begin_application_transfer($1,$2,$3,$4,$5)',['805ce528-0460-4acc-b3de-c3adf47f4e17','database',12582913,25,'a'.repeat(64)],/exceeds its limit/);
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.recovery_transfers')).rows[0].n,1);
+  } finally {await db.exec('ROLLBACK');}
 });

@@ -1,7 +1,8 @@
 import { hasSameOrigin } from '@/lib/request-origin';
-import { getSupabaseClient } from '@/lib/supabase';
+import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { validateSharedSettings } from '@/lib/shared-settings';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
 
 const headers = { 'Cache-Control': 'no-store' };
 export async function GET() {
@@ -11,6 +12,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     if (!hasSameOrigin(request)) return Response.json({ error: 'Cross-site request rejected.' }, { status: 403, headers });
+    const isolationError = previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return Response.json({ error: isolationError }, { status: 503, headers });
     const settings = validateSharedSettings(await readBoundedJson(request, 8192));
     const { revision, ...values } = settings;
     const { data, error } = await getSupabaseClient().from('workspace_settings').update({ ...values, revision: revision + 1, updated_at: new Date().toISOString() }).eq('id', true).eq('revision', revision).select('display_name,brand_prefix,tagline,logo_url,revision').maybeSingle();

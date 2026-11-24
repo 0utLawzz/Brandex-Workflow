@@ -12,6 +12,7 @@ import { supabaseDB, type CaseSeries } from '@/lib/supabase-db';
 import { buildGenerationRetryDraft, buildGenerationRetryUpdates, findGenerationRetryRecord } from '@/lib/generation-retry';
 import type { RecordItem } from '@/lib/standalone-db';
 import { caseLogoSource } from '@/lib/asset-url';
+import { requestWithTransfer } from '@/lib/api-request-client';
 import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
@@ -180,9 +181,8 @@ export default function TrademarkApplicationPage() {
       const retryId = Number(new URLSearchParams(window.location.search).get('retryId'));
       if (Number.isSafeInteger(retryId) && retryId > 0) {
         try {
-          const response = await fetch('/api/records', { cache: 'no-store' });
-          const result = await response.json();
-          const existing = response.ok && result?.ok && result.source === 'supabase' && Array.isArray(result.records)
+          const result = await supabaseDB.getRecords();
+          const existing = !result.error && result.source === 'supabase' && Array.isArray(result.records)
             ? findGenerationRetryRecord(result.records, retryId)
             : null;
           if (!existing) {
@@ -597,10 +597,15 @@ export default function TrademarkApplicationPage() {
 
       let data: any = null;
       try {
-        const res = await fetch('/api/applications', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-          headers: { 'Content-Type': 'application/json' },
+        const res = await requestWithTransfer('/api/applications', payload, progress => {
+          if (progress.phase === 'upload') {
+            setProgressPercent(60 + Math.round(progress.completed / progress.total * 10));
+            setProgressLabel(`Sending case files (${progress.completed}/${progress.total})`);
+          } else if (progress.phase === 'execute') {
+            setProgressPercent(75); setProgressLabel('Checking saved case and generating documents');
+          } else {
+            setProgressPercent(85); setProgressLabel('Receiving the checked response');
+          }
         });
 
         setProgressPercent(85);
