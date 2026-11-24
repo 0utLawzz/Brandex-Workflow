@@ -20,7 +20,7 @@ Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #1
 | Test atomic RPC presence | PASS | `clviaughxebohniopzyg`: both `apply_case_metadata_update` and `apply_case_workflow_transition`; SECURITY INVOKER; EXECUTE ACL only postgres/service_role. Actual behavior retest pending. |
 | Table RLS | PASS | Both projects: clients, trademark_records, trademark_history, trademark_documents, case_series have RLS enabled; no public policies. This does not alone prove application authorization. |
 | Security advisors | PENDING | Production advisor returned five informational RLS-without-policy notices, observed 2026-11-23. No policy changes justified until server authorization audit completes. |
-| Clean install/build | PASS | Separate clean checkout: npm ci/build on Node 22.23.5 at 8cc90ea; build at 911d16d also PASS. Exact final-head verification remains required after changes. |
+| Clean install/build | PASS | Separate clean checkout: fresh npm ci and Node-22 production build at 7f584cc PASS, zero dependency vulnerabilities. Exact final-head verification remains required after changes. |
 | Findings #01–#17 runtime acceptance | PENDING | Source review started; no new runtime acceptance or production writes performed. |
 
 Next: complete remaining implementation and security/data checks, then isolated hosted acceptance, dependency-checked final cleanup and one review PR. Preserve production restrictions and this single evidence log.
@@ -150,6 +150,8 @@ Edit-field checkpoint: Issue Date supplied without the legacy Date alias now map
 Native database checkpoint: a separate disposable localhost PostgreSQL **17.12** instance applied `supabase_schema.sql` and all 18 tracked migrations in order. Both SQL fixtures (`case-csv-import.sql`, `recovery-restore.sql`) completed within rollback transactions, and recovery function EXECUTE privileges were denied to anon and allowed to service_role. A reusable repository script now refuses remote, unnamed, populated or non-17 databases, and the CI workflow runs it against a fresh PostgreSQL-17 service. The same script passed locally in a separate disposable instance; actual GitHub CI execution, PostgREST relationship cache, concurrent write behavior and hosted test schema remain PENDING. `pg` is pinned as a development dependency; dependency audit reports zero vulnerabilities.
 
 Record-actions checkpoint: supporting proof/receipt links now sit with the case identity, leaving exactly six case actions in the existing 3-column grid. Regeneration remains reachable by saved case ID in every workflow stage; it retains the current status and creates new document versions on changed content. Typecheck/lint/diff PASS. Authenticated visual and regeneration acceptance remain PENDING.
+
+Edit-control checkpoint: choosing Unassigned now writes a null client relationship while retaining the case's existing reference identity. The legal-stage editor displays unknown/empty legacy values as PENDING rather than implying an application was filed. Typecheck/lint/diff PASS. The preceding head `7f584cc` passed clean npm ci and production build on Node 22 with zero audit vulnerabilities; current-head build/browser acceptance remain PENDING.
 
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 

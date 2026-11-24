@@ -7,6 +7,7 @@ export const WORKFLOW_STATUSES = [
 ];
 
 export const CASE_STAGE_OPTIONS = [
+  "PENDING",
   "APPLICATION FILED",
   "EXAMINATION / REPLY",
   "PUBLISHED / DEMAND NOTE",

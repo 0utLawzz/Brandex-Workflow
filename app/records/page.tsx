@@ -1811,7 +1811,7 @@ export default function RecordsPage() {
             </div>
 
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
-              <div className="grid gap-3 sm:grid-cols-3"><label>Category<input value={editingRecord.category || ''} onChange={event => setEditingRecord({ ...editingRecord, category: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Serial number<input value={editingRecord.serialNo || ''} onChange={event => setEditingRecord({ ...editingRecord, serialNo: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Client profile<select value={editingRecord.clientId || ''} onChange={event => { const selected = savedClients.find(client => client.id === Number(event.target.value)); if (selected) setEditingRecord({ ...editingRecord, clientId: selected.id, clientCode: selected.client_code }); }} className="mt-1 w-full rounded border-2 p-2"><option value="">Unassigned / legacy</option>{savedClients.map(client => <option key={client.id} value={client.id}>{client.client_code} · {client.client_name}</option>)}</select></label></div>
+              <div className="grid gap-3 sm:grid-cols-3"><label>Category<input value={editingRecord.category || ''} onChange={event => setEditingRecord({ ...editingRecord, category: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Serial number<input value={editingRecord.serialNo || ''} onChange={event => setEditingRecord({ ...editingRecord, serialNo: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Client profile<select value={editingRecord.clientId || ''} onChange={event => { if (!event.target.value) { setEditingRecord({ ...editingRecord, clientId: null }); return; } const selected = savedClients.find(client => client.id === Number(event.target.value)); if (selected) setEditingRecord({ ...editingRecord, clientId: selected.id, clientCode: selected.client_code }); }} className="mt-1 w-full rounded border-2 p-2"><option value="">Unassigned / legacy</option>{savedClients.map(client => <option key={client.id} value={client.id}>{client.client_code} · {client.client_name}</option>)}</select></label></div>
               <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Case Drive destination</p><DriveFolderPicker recordId={editingRecord.id} onSaved={() => { setBulkNotice('Case destination saved. Future generation will use this folder.'); }} /></div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -1881,7 +1881,7 @@ export default function RecordsPage() {
 
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Legal Case Stage</label>
-                <select value={editingRecord.filingProcess || 'APPLICATION FILED'}
+                <select value={editingRecord.filingProcess || 'PENDING'}
                   onChange={e => setEditingRecord({ ...editingRecord, filingProcess: e.target.value })}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold">
                   {!CASE_STAGE_OPTIONS.includes(editingRecord.filingProcess || '') && editingRecord.filingProcess && <option value={editingRecord.filingProcess}>{editingRecord.filingProcess} (Legacy)</option>}
