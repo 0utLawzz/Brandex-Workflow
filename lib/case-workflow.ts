@@ -32,7 +32,6 @@ export function validateWorkflowTransition(
     if (current !== 'APPROVED') return { valid: false, error: 'A case must be APPROVED before it can be dispatched.' };
     if (!String(metadata.dispatchedDate || '').trim()) return { valid: false, error: 'Dispatch date is required.' };
     if (!String(metadata.trackingId || metadata.dispatchedNote || '').trim()) return { valid: false, error: 'Enter a courier tracking ID or dispatch note.' };
-    if (!String(metadata.dispatchedImage || '').trim()) return { valid: false, error: 'Attach proof of sending before confirming dispatch.' };
     return { valid: true };
   }
 

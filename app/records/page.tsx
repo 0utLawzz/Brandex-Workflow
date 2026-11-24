@@ -1430,7 +1430,7 @@ export default function RecordsPage() {
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-['DM_Mono',monospace] text-[0.7rem] font-bold flex items-center gap-1.5 text-[#0C0C0C]">
                     <Receipt className="w-3.5 h-3.5 text-[#0284c7]" />
-                    Proof of Sending (Courier Receipt / Waybill / Slip)
+                    Proof of Sending (Optional)
                   </label>
                   {dispatchModal.dispatchedImage && (
                     <button
@@ -1484,7 +1484,7 @@ export default function RecordsPage() {
                     <div className="py-2">
                       <Upload className="w-5 h-5 mx-auto mb-1 text-[#0284c7]" />
                       <p className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0C0C0C]">
-                        Click to upload Courier Booking Receipt or Airway Bill
+                        Optionally upload a courier receipt, waybill, or slip
                       </p>
                       <p className="font-['Space_Grotesk'] text-[0.65rem] text-[#666] mt-0.5">
                         Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 8 MB)
@@ -1506,7 +1506,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDispatch}
-                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim()) || !dispatchModal.dispatchedImage}
+                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim())}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Save Dispatch

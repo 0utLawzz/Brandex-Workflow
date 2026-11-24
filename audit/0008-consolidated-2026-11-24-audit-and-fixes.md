@@ -216,7 +216,7 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 - #02 and #17 share Drive routing, but distinct responsibilities: choosing destination versus actual folder hierarchy/file placement.
 - #05, #06, #07, #08 are presentation changes, not permission for database identity rewrites.
 - Drive folder and output names use the client prefix + client code + case number, while the visible case reference continues to use series + client code + case number. This keeps both rules independent; existing folders are reused when unambiguous and never renamed.
-- Original `AGENT.md` said dispatch proof optional; #9 code/ADR 0007 requires it. This implementation preserves the current required-proof behavior; release policy conflict remains explicitly unresolved pending product decision.
+- The earlier ADR entry below initially followed PR #9's required-proof implementation. On 2026-11-25 the user resolved the product policy: dispatch proof is optional. The additive migration and UI now implement that decision; supplied proof remains validated and linked to the case.
 - Recovered #09–#17 are summaries; keep their provenance and do not imply verbatim precision.
 
 ## Technical audit gates before one-go implementation
@@ -243,8 +243,8 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 
 ## Work-control log
 
-- **2026-11-24:** User approved *future controlled implementation*, but specifically requests **complete audit + merged plan ADR first**; no fixes/code deletion or production changes now.
-- The planning branch is `audit-baseline-2026-11-24`. This ADR is a proposed consolidated baseline, not a production release or final audit sign-off.
+- **2026-11-25:** User authorized the consolidated audit and implementation in one go on `audit/consolidated-implementation-2026-11-24`. Push review checkpoints in small batches for backup. Do not merge the final PR, apply production migrations, or deploy without separate explicit confirmation.
+- This ADR is the evidence and task log for the review branch, not a production release or final audit sign-off.
 - **Pending audit evidence:** PR line-by-line patches, full app UI click testing, complete current source-to-schema field mapping, actual Drive Picker/OAuth connectivity, production RPC recheck before migration, security review and clean-clone install.
 
 ### 2026-11-24 dispatch proof placement checkpoint
@@ -261,8 +261,14 @@ Evidence: Apps Script syntax check PASS; Apps Script version/folder tests 7/7 PA
 
 ### 2026-11-25 local acceptance checkpoint
 
-At branch head `026b19a`, `npm test` PASS (122/122), `npm run lint` PASS, `npx tsc --noEmit` PASS, full `npm audit` PASS (0 vulnerabilities), and `npm run build` PASS. The reviewed branch is pushed and its remote head matches local. CI status is PENDING because the GitHub account connector is not connected in this session; the successful Git transport push is not CI evidence. Current live Supabase/Vercel connectors are unavailable; `supabase link` also cannot run without a Supabase access token. No hosted migration, production data write, Apps Script deployment, merge or Vercel deployment occurred.
+At branch head `2f79405`, `npm test` PASS (122/122), `npm run lint` PASS, `npx tsc --noEmit` PASS, full `npm audit` PASS (0 vulnerabilities), and `npm run build` PASS. A fresh clone also passed install, tests, lint, typecheck, audit and build. The reviewed branch is pushed and its remote head matches local. CI status is PENDING because the GitHub account connector is not connected in this session; the successful Git transport push is not CI evidence. Current live Supabase/Vercel connectors are unavailable; `supabase link` also cannot run without a Supabase access token. No hosted migration, production data write, Apps Script deployment, merge or Vercel deployment occurred.
 
 ### 2026-11-24 Records density checkpoint
 
 **PASS — source and local validation.** The Records workspace now presents a single compact, data-backed workflow summary and the existing monthly filing-date chart. The four large legacy statistic cards and optional consultant portfolio widget are no longer rendered; consultant selection remains available through the collapsible Filters panel. The Settings screen no longer exposes a preference for the removed widget. TypeScript, focused lint, monthly-analytics tests, and workspace-preferences tests PASS. Browser visual verification is PENDING because no controllable browser session is available in this chat; no hosted deployment has changed.
+
+### 2026-11-25 dispatch proof policy checkpoint
+
+**PASS — local implementation.** Per user's explicit decision, dispatch requires approval, date, and tracking detail or a dispatch note; proof is optional. The form enables dispatch without an attachment. When proof is supplied, existing type/size validation, Drive upload to the selected case folder, and same-case document linkage remain active. New additive migration `20261125090000_optional_dispatch_proof.sql` preserves the guarded atomic workflow transition, history write, and only inserts a proof document when a non-empty proof is supplied. Integration coverage checks dispatch with no proof, retained history, empty document pointer, and rejection when dispatch detail is missing.
+
+Evidence: `npm test` PASS (123/123), lint PASS, TypeScript PASS, `git diff --check` PASS, build PASS; PostgreSQL 17 applies 22 migrations and passes its 3 rollback fixtures plus recovery ACL check. Migration has only been exercised in local disposable verification; applying it to hosted test or production remains PENDING. Protected Preview UI and Drive upload checks remain PENDING.

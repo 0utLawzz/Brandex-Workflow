@@ -17,11 +17,17 @@ test('rejected cases cannot be dispatched', () => {
   assert.match(result.error || '', /Rejected cases cannot be dispatched/);
 });
 
-test('dispatch requires approval, date, tracking detail and proof', () => {
+test('dispatch requires approval, date and tracking detail while proof remains optional', () => {
   assert.equal(validateWorkflowTransition('IN REVIEW', 'DISPATCHED').valid, false);
   assert.equal(validateWorkflowTransition('APPROVED', 'DISPATCHED', {
     dispatchedDate: '2026-11-23', trackingId: 'TCS-123', dispatchedImage: 'data:image/png;base64,AA',
   }).valid, true);
+  assert.equal(validateWorkflowTransition('APPROVED', 'DISPATCHED', {
+    dispatchedDate: '2026-11-23', dispatchedNote: 'Sent by courier',
+  }).valid, true);
+  assert.equal(validateWorkflowTransition('APPROVED', 'DISPATCHED', {
+    dispatchedDate: '2026-11-23',
+  }).valid, false);
 });
 
 test('delivery requires dispatch, date, receiver and receipt', () => {

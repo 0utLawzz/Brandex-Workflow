@@ -291,6 +291,21 @@ test('dispatch stores an explicit same-case proof pointer and metadata replaceme
   } finally { await db.exec('ROLLBACK'); }
 });
 
+test('dispatch without proof records the workflow transition and leaves the proof pointer empty', async () => {
+  await db.exec('BEGIN');
+  try {
+    const id=(await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,status) VALUES('NO PROOF','NOPROOF','974','003','APPROVED') RETURNING id")).rows[0].id;
+    await db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'DISPATCHED','Sent without receipt',$2::jsonb)",[id,JSON.stringify({dispatchedDate:'2026-11-24',trackingId:'TRACK-NO-PROOF'})]);
+    const row=(await db.query('SELECT r.status,r.dispatch_document_id,h.status AS history_status,h.notes FROM public.trademark_records r JOIN public.trademark_history h ON h.record_id=r.id WHERE r.id=$1',[id])).rows[0];
+    assert.equal(row.status,'DISPATCHED');
+    assert.equal(row.dispatch_document_id,null);
+    assert.equal(row.history_status,'DISPATCHED');
+    assert.equal(row.notes,'Sent without receipt');
+    const incomplete=(await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,status) VALUES('INCOMPLETE','NOPROOF','974','004','APPROVED') RETURNING id")).rows[0].id;
+    await assert.rejects(db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'DISPATCHED','Retry',$2::jsonb)",[incomplete,JSON.stringify({dispatchedDate:'2026-11-24'})]),/Dispatch date and tracking\/note are required/);
+  } finally { await db.exec('ROLLBACK'); }
+});
+
 test('bulk dispatch writes each case to its own Drive proof reference atomically', async () => {
   await db.exec('BEGIN');
   try {
