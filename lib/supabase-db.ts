@@ -756,7 +756,7 @@ class SupabaseDBService {
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('restore_recovery_snapshot', { p_snapshot: snapshot }));
     if (error) throw new Error(`Atomic restore failed: ${error.message}. No partial database restore was committed; retry the same file to check an uncertain response.`);
     if (!data || !data.caseIdMap || !data.clientIdMap || ['records', 'clients', 'history', 'documents'].some(key => !Number.isSafeInteger(data[key]))) throw new Error('Restore response is incomplete. Retry the same file to retrieve the stored report.');
-    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
+    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, originalIdsPreserved: data.originalIdsPreserved === true, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {

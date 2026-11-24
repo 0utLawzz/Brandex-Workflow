@@ -26,8 +26,24 @@ test('CSV import is atomic and relates cases, proof documents and history', asyn
 });
 test('recovery remaps parents and children, detects retry and rolls back late failures', async () => {
   await db.exec('BEGIN');
-  try { await db.exec(await readFile(new URL('./sql/recovery-restore.sql', import.meta.url), 'utf8')); }
+  try {
+    await db.exec(await readFile(new URL('./sql/recovery-restore.sql', import.meta.url), 'utf8'));
+    assert.equal((await db.query('SELECT id FROM public.trademark_records WHERE id=920001')).rows.length,1);
+    const next = (await db.query("SELECT nextval('public.trademark_records_id_seq')::bigint AS id")).rows[0].id;
+    assert.ok(Number(next)>920001);
+  }
   finally { await db.exec('ROLLBACK'); }
+});
+
+test('recovery into a populated target remaps colliding source IDs and keeps existing rows', async () => {
+  await db.exec('BEGIN');
+  try {
+    await db.exec("INSERT INTO public.clients(id,client_code,name) VALUES(1,'980','EXISTING')");
+    const result = await db.query("SELECT public.restore_recovery_snapshot('{\"clients\":[{\"id\":1,\"client_code\":\"981\",\"name\":\"RESTORED\"}],\"records\":[],\"history\":[],\"documents\":[]}') AS report");
+    assert.equal(result.rows[0].report.originalIdsPreserved,false);
+    assert.notEqual(result.rows[0].report.clientIdMap['1'],1);
+    assert.equal((await db.query('SELECT name FROM public.clients WHERE id=1')).rows[0].name,'EXISTING');
+  } finally { await db.exec('ROLLBACK'); }
 });
 test('shared settings reject stale revisions and privileged functions deny anonymous calls', async () => {
   await db.exec('BEGIN');

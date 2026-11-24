@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.recovery_runs (
 ALTER TABLE public.recovery_runs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.recovery_runs FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON public.recovery_runs TO service_role;
+GRANT USAGE,SELECT,UPDATE ON SEQUENCE public.clients_id_seq,public.trademark_records_id_seq,public.trademark_history_id_seq,public.trademark_documents_id_seq TO service_role;
 
 CREATE OR REPLACE FUNCTION public.restore_recovery_snapshot(p_snapshot JSONB)
 RETURNS JSONB
@@ -31,6 +32,9 @@ DECLARE
   unsupported TEXT;
   seen JSONB;
   inserted_count INTEGER;
+  preserve_ids BOOLEAN;
+  sequence_name TEXT;
+  highest_id BIGINT;
 BEGIN
   IF p_snapshot IS NULL OR jsonb_typeof(p_snapshot) <> 'object' THEN RAISE EXCEPTION 'Invalid recovery snapshot'; END IF;
   -- Serialize restores and ordinary writes while identities are checked and inserted.
@@ -38,6 +42,8 @@ BEGIN
     public.trademark_documents IN SHARE ROW EXCLUSIVE MODE;
   SELECT r.report INTO prior FROM public.recovery_runs r WHERE r.package_hash = v_package_hash;
   IF prior IS NOT NULL THEN RETURN prior || jsonb_build_object('alreadyRestored', true); END IF;
+  preserve_ids := NOT EXISTS(SELECT 1 FROM public.clients) AND NOT EXISTS(SELECT 1 FROM public.trademark_records)
+    AND NOT EXISTS(SELECT 1 FROM public.trademark_history) AND NOT EXISTS(SELECT 1 FROM public.trademark_documents);
   FOREACH collection IN ARRAY ARRAY['clients', 'records', 'history', 'documents'] LOOP
     IF jsonb_typeof(p_snapshot->collection) IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'Missing recovery collection: %', collection; END IF;
     target_table := CASE collection WHEN 'clients' THEN 'clients' WHEN 'records' THEN 'trademark_records'
@@ -49,6 +55,7 @@ BEGIN
       IF source_id IS NULL OR source_id <= 0 OR seen ? source_id::text THEN RAISE EXCEPTION 'Invalid or duplicate % ID', collection; END IF;
       seen := seen || jsonb_build_object(source_id::text, true);
       payload := item - 'id';
+      IF preserve_ids THEN payload := payload || jsonb_build_object('id',source_id); END IF;
       IF collection = 'clients' THEN
         IF COALESCE(payload->>'client_code','') !~ '^[0-9]{1,3}$' THEN RAISE EXCEPTION 'Missing client identity'; END IF;
         IF EXISTS (SELECT 1 FROM public.clients c WHERE lpad(c.client_code,3,'0') = lpad(payload->>'client_code',3,'0')) THEN
@@ -82,9 +89,14 @@ BEGIN
       ELSIF collection = 'records' THEN case_map := case_map || jsonb_build_object(source_id::text, destination_id); END IF;
       inserted_count := inserted_count + 1;
     END LOOP;
+    IF preserve_ids AND inserted_count > 0 THEN
+      sequence_name := pg_get_serial_sequence('public.' || target_table,'id');
+      EXECUTE format('SELECT max(id) FROM public.%I',target_table) INTO highest_id;
+      PERFORM setval(sequence_name::regclass,greatest(highest_id,COALESCE(pg_sequence_last_value(sequence_name::regclass),1)),true);
+    END IF;
     result := result || jsonb_build_object(collection, inserted_count);
   END LOOP;
-  result := result || jsonb_build_object('clientIdMap', client_map, 'caseIdMap', case_map, 'alreadyRestored', false, 'packageHash', v_package_hash);
+  result := result || jsonb_build_object('clientIdMap', client_map, 'caseIdMap', case_map, 'originalIdsPreserved',preserve_ids,'alreadyRestored', false, 'packageHash', v_package_hash);
   INSERT INTO public.recovery_runs(package_hash, report) VALUES (v_package_hash, result);
   RETURN result;
 END;

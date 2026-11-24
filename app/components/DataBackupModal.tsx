@@ -8,6 +8,7 @@ import { preflightRestore } from '@/lib/restore-preflight';
 import type { RestorePreflight } from '@/lib/restore-preflight';
 import { planAssetRestore } from '@/lib/restore-assets';
 import { buildBackupAssetManifest } from '@/lib/backup-package';
+import type { RecoveryReport } from '@/lib/recovery-policy';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const [preflight, setPreflight] = useState<RestorePreflight | null>(null);
   const [checking, setChecking] = useState(false);
   const [allowMissingAssets, setAllowMissingAssets] = useState(false);
+  const [restoreReport, setRestoreReport] = useState<RecoveryReport | null>(null);
 
   if (!isOpen) return null;
 
@@ -49,6 +51,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const importBackup = async (content: string) => {
     setChecking(true);
     setPreflight(null);
+    setRestoreReport(null);
     setImportText('');
     setAllowMissingAssets(false);
     try {
@@ -76,7 +79,8 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     setChecking(true);
     try {
       const report = await supabaseDB.restoreBackupJSON(importText, { confirmed: true, allowMissingAssets });
-      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references. ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Referenced embedded files retained.'} Series/settings recovery is separate.`, type: report.missingAssets ? 'warning' : 'success' });
+      setRestoreReport(report);
+      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references; ${report.restoredAssets} verified files copied. ${report.originalIdsPreserved ? 'Original IDs preserved.' : 'IDs remapped; download the report.'} ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Available embedded/copy bytes retained.'} Series/settings recovery is separate.`, type: report.missingAssets ? 'warning' : 'success' });
       onDataChanged?.();
     } catch (error) {
       setStatusMsg({ text: error instanceof Error ? error.message : 'Restore failed.', type: 'error' });
@@ -143,6 +147,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         )}
 
         {/* Export Backup */}
+        {restoreReport && <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(restoreReport, null, 2)], { type: 'application/json' })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'brandex-restore-report.json'; anchor.click(); URL.revokeObjectURL(url); }} className="mb-4 rounded border-2 bg-white px-3 py-2 text-sm font-bold">Download restore report &amp; ID maps</button>}
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">1. Download Backup File</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
