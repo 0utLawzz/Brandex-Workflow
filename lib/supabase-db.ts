@@ -17,6 +17,7 @@ import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfe
 import { safeAssetHref } from './asset-url';
 import { requestWithTransfer } from './api-request-client';
 import { issueDateForSave } from './issue-date';
+import { assertProofReference } from './proof-policy';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -354,6 +355,8 @@ class SupabaseDBService {
     if (updates.status === undefined) return this.updateRecordWithHistory(id, updates, 'Case metadata updated');
     const allowed = new Set(['status','notes','dispatchedDate','dispatchedNote','trackingId','dispatchedImage','dispatchedDocName','dispatchedDocType','deliveredDate','receiverName','receiptImage']);
     if (Object.keys(updates).some(key => !allowed.has(key))) throw new Error('Save case metadata separately from a workflow transition.');
+    if (updates.dispatchedImage) assertProofReference(updates.dispatchedImage);
+    if (updates.receiptImage) assertProofReference(updates.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
@@ -411,6 +414,8 @@ class SupabaseDBService {
 
   public async updateRecordWithHistory(id: number, updates: Partial<RecordItem>, auditNote: string): Promise<RecordItem | null> {
     if (typeof window !== 'undefined') return requestDatabase('updateRecordWithHistory', { id, updates, auditNote });
+    if (updates.dispatchedImage) assertProofReference(updates.dispatchedImage);
+    if (updates.receiptImage) assertProofReference(updates.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Case was not updated.');
     if (updates.status !== undefined) throw new Error('Workflow status changes must use the guarded transition operation.');
@@ -471,6 +476,8 @@ class SupabaseDBService {
       await requestDatabase('bulkUpdateStatus', { ids, newStatus, auditNote, meta });
       return;
     }
+    if (meta?.dispatchedImage) assertProofReference(meta.dispatchedImage);
+    if (meta?.receiptImage) assertProofReference(meta.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();

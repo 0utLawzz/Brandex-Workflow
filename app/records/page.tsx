@@ -9,6 +9,7 @@ import DriveFolderPicker from '@/app/components/DriveFolderPicker';
 import MonthlyCaseChart from '@/app/components/MonthlyCaseChart';
 import CaseLogo from '@/app/components/CaseLogo';
 import { safeAssetHref } from '@/lib/asset-url';
+import { validProofFile, DISPATCH_PROOF_TYPES, DELIVERY_RECEIPT_TYPES } from '@/lib/proof-policy';
 import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
@@ -595,7 +596,7 @@ export default function RecordsPage() {
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > MAX_INLINE_ASSET_BYTES) { setErrorMsg('Delivery receipt must be an image no larger than 8 MB.'); e.target.value = ''; return; }
+    if (!validProofFile(file, true)) { setErrorMsg('Delivery receipt must be a PNG or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
@@ -609,10 +610,7 @@ export default function RecordsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_INLINE_ASSET_BYTES) {
-      alert('Proof file size exceeds 8 MB limit.');
-      return;
-    }
+    if (!validProofFile(file)) { setErrorMsg('Dispatch proof must be a PDF, PNG, or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -621,7 +619,7 @@ export default function RecordsPage() {
         ...prev,
         dispatchedImage: result,
         dispatchedDocName: file.name,
-        dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+        dispatchedDocType: file.type
       }));
     };
     reader.readAsDataURL(file);
@@ -723,7 +721,7 @@ export default function RecordsPage() {
       <input
         type="file"
         ref={receiptImgInputRef}
-        accept="image/*"
+        accept={DELIVERY_RECEIPT_TYPES.join(',')}
         onChange={handleReceiptImgUpload}
         className="hidden"
       />
@@ -732,7 +730,7 @@ export default function RecordsPage() {
       <input
         type="file"
         ref={dispatchDocInputRef}
-        accept="image/*,application/pdf"
+        accept={DISPATCH_PROOF_TYPES.join(',')}
         onChange={handleDispatchFileUpload}
         className="hidden"
       />
@@ -2038,19 +2036,19 @@ export default function RecordsPage() {
                     <span>Upload Dispatch Receipt / Slip</span>
                     <input
                       type="file"
-                      accept="image/*,application/pdf"
+                      accept={DISPATCH_PROOF_TYPES.join(',')}
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > MAX_INLINE_ASSET_BYTES || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 8 MB.'); e.target.value = ''; return; }
+                        if (!validProofFile(file)) { setErrorMsg('Dispatch proof must be a PDF, PNG, or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           setEditingRecord(prev => prev ? ({
                             ...prev,
                             dispatchedImage: ev.target?.result as string,
                             dispatchedDocName: file.name,
-                            dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+                            dispatchedDocType: file.type
                           }) : null);
                         };
                         reader.readAsDataURL(file);
