@@ -27,7 +27,7 @@ Next: complete remaining implementation and security/data checks, then isolated 
 
 ### Current acceptance map
 
-Local PASS describes source/build/automated evidence only. Hosted acceptance stays PENDING until the isolated authenticated preview, PostgreSQL 17 and test Drive flows are exercised.
+Local PASS describes source/build/automated evidence only. Hosted acceptance stays PENDING until the isolated authenticated preview and test Drive flows are exercised. Local PostgreSQL 17 migration/fixture checks have passed; hosted schema/cache behavior remains unverified.
 
 | Requirement | Local | Hosted/runtime | Evidence / remaining gate |
 |---|---|---|---|
@@ -146,6 +146,8 @@ Bounded application transport checkpoint: normal database/application POSTs now 
 Exact transport commit `d2539bc` built successfully in the separate clean Node-22 checkout. Local standalone-server HTTP checks returned 401 without credentials, 503 for a credentialed preview request targeting the known production database, and 403 for a cross-origin write. This proves those rejection paths through Next middleware/routes, but not successful chunked execution through a real PostgREST service. XLS/XLSX supporting attachments now share the form/API MIME and size policy; the generated Apps Script allowlist remains synchronized with it. A VM Drive fixture verifies original bytes, unchanged retry reuse, changed retry versioning and unsupported-type rejection (11/11 focused Apps Script tests PASS). Real Excel-file acceptance, backup/restore of those files and isolated Drive execution remain PENDING.
 
 Edit-field checkpoint: Issue Date supplied without the legacy Date alias now maps to the saved issue_date field; contradictory nonempty aliases fail before a database call. Targeted regression and typecheck PASS. Current-head whole-suite/build/hosted edit acceptance remain PENDING; no production changes.
+
+Native database checkpoint: a separate disposable localhost PostgreSQL **17.12** instance applied `supabase_schema.sql` and all 18 tracked migrations in order. Both SQL fixtures (`case-csv-import.sql`, `recovery-restore.sql`) completed within rollback transactions, and recovery function EXECUTE privileges were denied to anon and allowed to service_role. This verifies native PostgreSQL-17 syntax and those fixture paths without touching hosted projects. The temporary harness lives outside the repository; CI integration, PostgREST relationship cache, concurrent write behavior and the hosted test schema remain PENDING.
 
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
