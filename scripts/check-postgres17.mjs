@@ -22,7 +22,8 @@ try {
     try { await client.query(await readFile(new URL(name, folder), 'utf8')); }
     catch (error) { throw new Error(`Migration ${name}: ${error.message}`, { cause: error }); }
   }
-  for (const name of ['case-csv-import.sql', 'recovery-restore.sql']) {
+  const fixtures = ['case-csv-import.sql', 'recovery-restore.sql', 'client-assignment.sql'];
+  for (const name of fixtures) {
     await client.query('BEGIN');
     try { await client.query(await readFile(new URL(`../tests/sql/${name}`, import.meta.url), 'utf8')); }
     catch (error) { throw new Error(`Fixture ${name}: ${error.message}`, { cause: error }); }
@@ -30,5 +31,5 @@ try {
   }
   const acl = (await client.query("SELECT has_function_privilege('anon','public.restore_recovery_snapshot(jsonb)','EXECUTE') AS anon_restore, has_function_privilege('service_role','public.restore_recovery_snapshot(jsonb)','EXECUTE') AS service_restore")).rows[0];
   if (acl.anon_restore || !acl.service_restore) throw new Error('Recovery role grants are incorrect.');
-  console.log(`PostgreSQL 17: clean schema, ${migrations.length} migrations, 2 rollback fixtures, and recovery ACL passed.`);
+  console.log(`PostgreSQL 17: clean schema, ${migrations.length} migrations, ${fixtures.length} rollback fixtures, and recovery ACL passed.`);
 } finally { await client.end(); }
