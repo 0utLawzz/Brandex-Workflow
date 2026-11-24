@@ -145,6 +145,8 @@ Bounded application transport checkpoint: normal database/application POSTs now 
 
 Exact transport commit `d2539bc` built successfully in the separate clean Node-22 checkout. Local standalone-server HTTP checks returned 401 without credentials, 503 for a credentialed preview request targeting the known production database, and 403 for a cross-origin write. This proves those rejection paths through Next middleware/routes, but not successful chunked execution through a real PostgREST service. XLS/XLSX supporting attachments now share the form/API MIME and size policy; the generated Apps Script allowlist remains synchronized with it. A VM Drive fixture verifies original bytes, unchanged retry reuse, changed retry versioning and unsupported-type rejection (11/11 focused Apps Script tests PASS). Real Excel-file acceptance, backup/restore of those files and isolated Drive execution remain PENDING.
 
+Edit-field checkpoint: Issue Date supplied without the legacy Date alias now maps to the saved issue_date field; contradictory nonempty aliases fail before a database call. Targeted regression and typecheck PASS. Current-head whole-suite/build/hosted edit acceptance remain PENDING; no production changes.
+
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
 | PR | Historical scope and merged output | Unclosed or independently testable condition |

@@ -16,6 +16,7 @@ import { planAssetRestore, remapAssetUrls } from './restore-assets';
 import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfer-client';
 import { safeAssetHref } from './asset-url';
 import { requestWithTransfer } from './api-request-client';
+import { issueDateForSave } from './issue-date';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -133,7 +134,8 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.fatherName !== undefined) row.father_name = record.fatherName;
   if (record.cnic !== undefined) row.cnic = record.cnic;
   if (record.address !== undefined) row.address = record.address;
-  if (record.date !== undefined) row.issue_date = record.date;
+  const savedIssueDate = issueDateForSave(record.date, record.issueDate);
+  if (savedIssueDate !== undefined) row.issue_date = savedIssueDate;
   if (record.year !== undefined) row.usage_year = record.year;
   if (record.conName !== undefined) row.consultant_name = record.conName;
   if (record.lawFirm !== undefined && !row.consultant_name) row.consultant_name = record.lawFirm;
