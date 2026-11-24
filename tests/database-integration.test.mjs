@@ -22,6 +22,22 @@ test('clean schema and every migration execute in disposable Postgres', async ()
   const result = await db.query("SELECT count(*)::int AS count FROM information_schema.tables WHERE table_schema='public'");
   assert.ok(result.rows[0].count >= 7);
 });
+test('client assignment updates relationships and audit rows atomically', async () => {
+  await db.exec('BEGIN');
+  try {
+    const client = (await db.query("INSERT INTO public.clients(client_code,name,company_name) VALUES('887','SAVED CLIENT','SAVED BUSINESS') RETURNING id")).rows[0].id;
+    const cases = (await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no) VALUES('ASSIGN ONE','A','886','001'),('ASSIGN TWO','A','886','002') RETURNING id")).rows.map(row => row.id);
+    await db.exec('SAVEPOINT bad_assignment');
+    await assert.rejects(db.query('SELECT public.assign_cases_to_client($1::bigint[],$2::bigint)', [[cases[0],99999999],client]), /no longer exists/);
+    await db.exec('ROLLBACK TO SAVEPOINT bad_assignment');
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM public.trademark_records WHERE client_id=$1',[client])).rows[0].n,0);
+    const result = await db.query('SELECT public.assign_cases_to_client($1::bigint[],$2::bigint) AS changed',[cases,client]);
+    assert.equal(result.rows[0].changed,2);
+    const rows = (await db.query('SELECT client_id,client_code,applicant_name,trading_as FROM public.trademark_records WHERE id=ANY($1::bigint[])',[cases])).rows;
+    assert.ok(rows.every(row=>String(row.client_id)===String(client) && row.client_code==='887' && row.applicant_name==='SAVED CLIENT' && row.trading_as==='SAVED BUSINESS'));
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM public.trademark_history WHERE record_id=ANY($1::bigint[])',[cases])).rows[0].n,2);
+  } finally { await db.exec('ROLLBACK'); }
+});
 test('CSV import is atomic and relates cases, proof documents and history', async () => {
   await db.exec('BEGIN');
   try { await db.exec(await readFile(new URL('./sql/case-csv-import.sql', import.meta.url), 'utf8')); }

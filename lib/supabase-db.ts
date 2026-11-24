@@ -493,23 +493,12 @@ class SupabaseDBService {
     }
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Bulk client assignment was not saved.');
-    if (isConfigured) {
-      const client = getSupabaseClient();
-      const { error } = await withSupabaseTimeout(client
-          .from('trademark_records')
-          .update({
-            client_code: clientProfile.client_code,
-            applicant_name: clientProfile.client_name,
-            trading_as: clientProfile.trading_as,
-            father_name: clientProfile.father_name,
-            cnic: clientProfile.cnic,
-            address: clientProfile.address,
-            consultant_name: clientProfile.consultant_name,
-            updated_at: new Date().toISOString()
-          })
-          .in('id', ids));
-      if (error) throw new Error(`Supabase client reassignment failed: ${error.message}`);
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length || !Number.isSafeInteger(clientProfile?.id) || clientProfile.id < 1) {
+      throw new Error('Choose valid cases and one saved client profile.');
     }
+    const { data: changed, error } = await withSupabaseTimeout(getSupabaseClient().rpc('assign_cases_to_client', { p_ids: ids, p_client_id: clientProfile.id }));
+    if (error) throw new Error(`Atomic client reassignment failed: ${error.message}`);
+    if (changed !== ids.length) throw new Error('Client reassignment count is uncertain. Reload cases before retrying.');
 
   }
 

@@ -124,8 +124,8 @@ export async function POST(request: Request) {
         result = await supabaseDB.bulkUpdateStatus(body.ids.map(Number), body.newStatus, body.auditNote, body.meta);
         break;
       case 'bulkAssignClient':
-        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id))) || !body.clientProfile || typeof body.clientProfile !== 'object') return invalidPayload('A valid case selection and client are required.');
-        result = await supabaseDB.bulkAssignClient(body.ids.map(Number), body.clientProfile);
+        if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500 || !body.ids.every((id: unknown) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) || !body.clientProfile || typeof body.clientProfile !== 'object' || !Number.isSafeInteger(body.clientProfile.id) || body.clientProfile.id < 1) return invalidPayload('A valid case selection and saved client are required.');
+        result = await supabaseDB.bulkAssignClient(body.ids, body.clientProfile);
         break;
       case 'addClient':
         if (!body.client || typeof body.client !== 'object') return invalidPayload('A client profile is required.');

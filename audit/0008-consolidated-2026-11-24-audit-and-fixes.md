@@ -38,7 +38,7 @@ Local PASS describes source/build/automated evidence only. Hosted acceptance sta
 | #05 heading | PASS | PENDING | Case Record source heading and build checked. |
 | #06–#07 layout/filter/sort | PENDING | PENDING | Collapsed right-aligned global filters and header filters/sorts operate before pagination in source; full dataset/UI acceptance pending. |
 | #08 table/analytics | PENDING | PENDING | Default 50, segmented references, private logo previews, separate workflow/legal columns, six 3x2 actions and actual filing-date monthly totals implemented. Responsive layout, charts and real data require final review. |
-| #09 Clients | PENDING | PENDING | Compact searchable/sortable directory, prefix/code, contact editing/CSV and protected linked identities implemented; visual acceptance pending. |
+| #09 Clients | PENDING | PENDING | Compact searchable/sortable directory, prefix/code, contact editing/CSV and protected linked identities implemented. Bulk assignment now updates client links and audit rows atomically; visual/runtime acceptance pending. |
 | #10–#12 form | PENDING | PENDING | Independent series/client identity, stale-number-response cancellation, ID-only retry and separate E-Stamp/filing dates implemented. Copyright conventions and remaining form acceptance need reconciliation. |
 | #13 progress | PENDING | PENDING | Fake timer removed; actual save/generation milestones and Home receipt; opt-in sound/notifications. Animation, reduced-motion and genuine live failures/retries still need acceptance. |
 | #14 canonical mapping | PASS | PENDING | Permanent contract generates Apps Script map; sync and VM mapping tests pass. Actual deployed templates/generated documents untested. |
@@ -152,6 +152,8 @@ Native database checkpoint: a separate disposable localhost PostgreSQL **17.12**
 Record-actions checkpoint: supporting proof/receipt links now sit with the case identity, leaving exactly six case actions in the existing 3-column grid. Regeneration remains reachable by saved case ID in every workflow stage; it retains the current status and creates new document versions on changed content. Typecheck/lint/diff PASS. Authenticated visual and regeneration acceptance remain PENDING.
 
 Edit-control checkpoint: choosing Unassigned now writes a null client relationship while retaining the case's existing reference identity. The legal-stage editor displays unknown/empty legacy values as PENDING rather than implying an application was filed. Typecheck/lint/diff PASS. The preceding head `7f584cc` passed clean npm ci and production build on Node 22 with zero audit vulnerabilities; current-head build/browser acceptance remain PENDING.
+
+Client-assignment checkpoint: bulk assignment previously copied client fields but left client_id pointing at the old profile. The server now accepts only saved IDs and invokes one additive service-only SQL function that locks/validates every selected case, reads the current client profile, updates relationship/code/details, and records history as one transaction. Missing cases and reference conflicts roll back all changes. Disposable DB suite 20/20 PASS including rollback and relationship checks; all 19 migrations apply on native PostgreSQL 17, typecheck/lint/diff PASS. Hosted schema and browser assignment remain PENDING; production untouched.
 
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
