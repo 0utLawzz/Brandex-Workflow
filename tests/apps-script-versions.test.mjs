@@ -84,9 +84,20 @@ test('case Picker destination is used directly while a client destination gets a
   const f=fixture();
   const caseFolder={id:'selected-case'};
   const created={id:'created-case'};
-  const clientFolder={getFoldersByName:()=>({hasNext:()=>false}),createFolder:name=>{assert.equal(name,'A646-001 CASE');return created;}};
-  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','case'),caseFolder);
-  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','client'),created);
+  const clientFolder={getFoldersByName:()=>({hasNext:()=>false}),createFolder:name=>{assert.equal(name,'X-646-001');return created;}};
+  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'X-646-001','A646-001 CASE','case'),caseFolder);
+  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'X-646-001','A646-001 CASE','client'),created);
+});
+test('Drive uses client prefix identity while preserving legacy folders and visible series identity',()=>{
+  const f=fixture();
+  const form={clientPrefix:'x',clientCode:'646',selectionMenu:'A',caseNo:'011',folder:'SOAP',classNo:'35'};
+  assert.equal(f.context.driveCaseIdentity(form),'X-646-011');
+  assert.equal(f.context.driveDocumentName(form,'TM-1'),'X-646-011 SOAP C35 - TM-1');
+  const legacy={name:'A646-011 SOAP TM-1 C35'};
+  const parent={getFoldersByName:name=>{const match=name===legacy.name;let used=false;return {hasNext:()=>match&&!used,next:()=>{used=true;return legacy;}};},createFolder:name=>({name})};
+  assert.equal(f.context.findOrCreateCaseFolder(parent,'X-646-011',legacy.name),legacy);
+  assert.equal(f.context.driveCaseIdentity({...form,selectionMenu:'B'}),'X-646-011');
+  assert.throws(()=>f.context.findOrCreateCaseFolder({getFoldersByName:name=>{let used=false;const found=name==='X-646-011'||name===legacy.name;return {hasNext:()=>found&&!used,next:()=>{used=true;return {name};}};},createFolder:()=>{throw Error('should not create');}},'X-646-011',legacy.name),/Multiple current or legacy/);
 });
 test('dispatch proof is stored in its case Dispatch folder and changed bytes create a version',()=>{
   const f=fixture(); const names=[];

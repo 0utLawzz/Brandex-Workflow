@@ -298,9 +298,34 @@ function getOrCreateClientFolder(parentFolder, rawFolderName) {
   return parentFolder.createFolder(folderName);
 }
 
-function resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, destinationMode) {
+function findOrCreateCaseFolder(parentFolder, caseFolderName, legacyCaseFolderName) {
+  var names = [caseFolderName];
+  if (legacyCaseFolderName && legacyCaseFolderName !== caseFolderName) names.push(legacyCaseFolderName);
+  var matches = [];
+  names.forEach(function(name) {
+    var iterator = parentFolder.getFoldersByName(name);
+    while (iterator.hasNext()) matches.push(iterator.next());
+  });
+  if (matches.length > 1) throw new Error('Multiple current or legacy folders match this case identity. Review the client folder before generating.');
+  return matches.length === 1 ? matches[0] : parentFolder.createFolder(caseFolderName);
+}
+
+function resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, legacyCaseFolderName, destinationMode) {
   // A case-level Picker choice already is the final case folder.
-  return destinationMode === 'case' ? parentFolder : getOrCreateClientFolder(clientFolder, caseFolderName);
+  return destinationMode === 'case' ? parentFolder : findOrCreateCaseFolder(clientFolder, caseFolderName, legacyCaseFolderName);
+}
+
+function driveCaseIdentity(formData) {
+  var prefix = String(formData.clientPrefix || 'A').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 8) || 'A';
+  var clientCode = String(formData.clientCode || '').replace(/\D/g, '').padStart(3, '0');
+  var caseNo = String(formData.caseNo || '').replace(/\D/g, '').padStart(3, '0');
+  return prefix + '-' + clientCode + '-' + caseNo;
+}
+
+function driveDocumentName(formData, documentType) {
+  var appName = String(formData.folder || formData.appName || 'UNTITLED CASE').toUpperCase().replace(/[\\/:*?"<>|]/g, '_').trim();
+  var classNo = String(formData.classNo || '').replace(/\D/g, '');
+  return driveCaseIdentity(formData) + ' ' + appName + (classNo ? ' C' + classNo : '') + ' - ' + documentType;
 }
 
 function resolveCaseFolder(mainFolderId, formData) {
@@ -317,14 +342,15 @@ function resolveCaseFolder(mainFolderId, formData) {
   var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
   var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
     + (clientCity ? " " + clientCity : "") + (clientReference ? " " + clientReference : "");
-  var caseIdentity = caseSeries + clientCode + "-" + caseNo;
-  var caseFolderName = caseIdentity + " " + String(formData.folder || "UNTITLED CASE").toUpperCase()
+  var caseFolderName = driveCaseIdentity(formData);
+  var legacyCaseIdentity = caseSeries + clientCode + "-" + caseNo;
+  var legacyCaseFolderName = legacyCaseIdentity + " " + String(formData.folder || "UNTITLED CASE").toUpperCase()
     + (formData.tm && formData.tm !== "PENDING" ? " " + formData.tm : "")
     + (formData.classNo ? " C" + String(formData.classNo).replace(/\D/g, "") : "");
   var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
   var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
   var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
-  return { folder: resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, selectedDestination ? formData.destinationMode : 'configured-root'), selectedDestination: selectedDestination };
+  return { folder: resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, legacyCaseFolderName, selectedDestination ? formData.destinationMode : 'configured-root'), selectedDestination: selectedDestination };
 }
 
 function saveAdditionalFiles(caseFolder, files, formData) {
@@ -336,9 +362,7 @@ function saveAdditionalFiles(caseFolder, files, formData) {
   // END GENERATED ATTACHMENT TYPES
   var totalBytes = 0;
   var saved = [];
-  var caseKey = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"]
-    .map(function(value) { return String(value).replace(/[^A-Za-z0-9_-]/g, "_"); })
-    .join("-");
+  var caseKey = driveCaseIdentity(formData);
 
   files.forEach(function(item) {
     if (!item || !allowedTypes[item.mimeType] || typeof item.name !== "string" || typeof item.dataUrl !== "string") {
@@ -467,11 +491,11 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
 
   var tm1Doc = null, tm48Doc = null;
   if (tm1TemplateId) {
-    tm1Doc = generateWordDocReturn(tm1TemplateId, documentsFolder, rowData.folder + " - TM-1",
+    tm1Doc = generateWordDocReturn(tm1TemplateId, documentsFolder, driveDocumentName(rowData, 'TM-1'),
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
   }
   if (tm48TemplateId) {
-    tm48Doc = generateWordDocReturn(tm48TemplateId, documentsFolder, rowData.folder + " - TM-48",
+    tm48Doc = generateWordDocReturn(tm48TemplateId, documentsFolder, driveDocumentName(rowData, 'TM-48'),
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 
@@ -592,10 +616,10 @@ function generateDocuments(rowData, folder, tm1TemplateId, tm48TemplateId, image
   var mergeData = buildCanonicalMergeData(rowData);
 
   if (tm1TemplateId) {
-    generateWordDoc(tm1TemplateId, folder, rowData.folder + " - TM-1", mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
+    generateWordDoc(tm1TemplateId, folder, driveDocumentName(rowData, 'TM-1'), mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
   }
   if (tm48TemplateId) {
-    generateWordDoc(tm48TemplateId, folder, rowData.folder + " - TM-48", mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
+    generateWordDoc(tm48TemplateId, folder, driveDocumentName(rowData, 'TM-48'), mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 }
 

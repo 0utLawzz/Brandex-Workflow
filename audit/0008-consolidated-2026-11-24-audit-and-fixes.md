@@ -215,7 +215,8 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 - #01 already visually confirmed by user; only persistence and related workflows remain unverified. #03/#08 and #06/#07 are unified UI acceptance sets, not duplicate development tickets.
 - #02 and #17 share Drive routing, but distinct responsibilities: choosing destination versus actual folder hierarchy/file placement.
 - #05, #06, #07, #08 are presentation changes, not permission for database identity rewrites.
-- Original `AGENT.md` said dispatch proof optional; #9 code/ADR 0007 requires it. Treat as *requirement conflict requiring explicit decision* before modifying workflow policy, not an automatic bug.
+- Drive folder and output names use the client prefix + client code + case number, while the visible case reference continues to use series + client code + case number. This keeps both rules independent; existing folders are reused when unambiguous and never renamed.
+- Original `AGENT.md` said dispatch proof optional; #9 code/ADR 0007 requires it. This implementation preserves the current required-proof behavior; release policy conflict remains explicitly unresolved pending product decision.
 - Recovered #09–#17 are summaries; keep their provenance and do not imply verbatim precision.
 
 ## Technical audit gates before one-go implementation
@@ -251,6 +252,12 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 **PASS — local implementation verification.** Dispatch proof upload now resolves the server-saved case/client destination, validates PDF/PNG/JPEG bytes and filename, and stores the file in that case's `Dispatch` folder with version preservation. The route preflights the selected cases before any Drive write; individual dispatch requires one APPROVED case and bulk dispatch permits 1–10 distinct APPROVED cases. The database operation preserves the established atomic workflow guard, creates history and proof pointers in one transaction, then assigns the matching Drive URL/name/type to each case's own document reference. Editing a newly uploaded proof uses the same Drive route.
 
 Evidence: Apps Script VM tests 6/6 PASS; PGlite integration tests 21/21 PASS, including two cases with distinct proof references and missing-map rollback; native PostgreSQL 17 clean schema applied all 21 tracked migrations with 3 rollback fixtures PASS; TypeScript and focused lint PASS. Migration `20261124082000_case_dispatch_proof_map.sql` remains un-applied outside disposable local verification. Test-Supabase migration, actual test-Drive upload, authenticated Preview flow, and production preflight/authorization remain PENDING. Production data, schema and deployment remain unchanged.
+
+### 2026-11-25 Drive naming resolution
+
+**PASS — local source contract.** Drive case folders and generated TM-1/TM-48 filenames now use the client prefix + client code + case number (`X-646-011`), with applicant mark and numeric class in the generated document name. The user-facing case reference remains series + client code + case number, e.g. `A-646-011`. Case-level Picker selections still use the selected folder directly; client-level selections create a case subfolder. When using configured/client folders, the resolver reuses either the new exact identity folder or one unambiguous legacy folder and errors if both/duplicates make the destination ambiguous. No Drive folder is renamed or deleted.
+
+Evidence: Apps Script syntax check PASS; Apps Script version/folder tests 7/7 PASS including current naming, series separation, legacy reuse, and ambiguous-match rejection. Apps Script deployment and real test-Drive folder execution remain PENDING.
 
 ### 2026-11-24 Records density checkpoint
 
