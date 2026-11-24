@@ -10,7 +10,12 @@ SET search_path = public
 AS $$
 DECLARE
   updated_id BIGINT;
+  unsupported TEXT;
 BEGIN
+  IF jsonb_typeof(p_updates) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'Metadata updates must be an object'; END IF;
+  SELECT string_agg(key,', ') INTO unsupported FROM jsonb_object_keys(p_updates) key WHERE key <> ALL(ARRAY[
+    'client_id','serial_no','category','selection_menu','client_code','case_no','mark_name','trademark_no','class_no','class_desc','app_type','applicant_name','father_name','cnic','issue_date','expiry_date','trading_as','address','usage_year','consultant_name','consultant_addr','logo_url','filing_process','tracking_id','dispatched_date','dispatched_note','delivered_date','receiver_name','receipt_image','notes','dispatchedImage','dispatchedDocName','dispatchedDocType']);
+  IF unsupported IS NOT NULL THEN RAISE EXCEPTION 'Unsupported metadata fields: %',unsupported; END IF;
   UPDATE public.trademark_records AS r
   SET client_id = CASE WHEN p_updates ? 'client_id' THEN (p_updates->>'client_id')::bigint ELSE r.client_id END,
       serial_no = CASE WHEN p_updates ? 'serial_no' THEN p_updates->>'serial_no' ELSE r.serial_no END,

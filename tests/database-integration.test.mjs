@@ -111,3 +111,28 @@ test('client imports roll back duplicates and identity guards protect linked cas
     await rejectSafely(`INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,client_id) VALUES('WRONG','GUARD','987','002',${Number(client)})`,/same client/);
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('workflow retry is idempotent and unknown metadata cannot silently disappear', async () => {
+  await db.exec('BEGIN');
+  try {
+    const id = (await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,status) VALUES('RETRY','RETRY','979','001','IN REVIEW') RETURNING id")).rows[0].id;
+    await db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'APPROVED','First','{}')",[id]);
+    await db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'APPROVED','Retry','{}')",[id]);
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.trademark_history WHERE record_id=$1',[id])).rows[0].n,1);
+    await db.exec('SAVEPOINT invalid_metadata');
+    await assert.rejects(db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)',[id,JSON.stringify({ typo_field:'lost',mark_name:'UNSAFE' }),'bad']),/Unsupported metadata/);
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_metadata');
+    assert.equal((await db.query('SELECT mark_name FROM public.trademark_records WHERE id=$1',[id])).rows[0].mark_name,'RETRY');
+  } finally { await db.exec('ROLLBACK'); }
+});
+
+test('recovery retry detects records removed after a previous restore', async () => {
+  await db.exec('BEGIN');
+  const source = JSON.stringify({ clients: [], records: [{ id:11, mark_name:'RECOVERY',selection_menu:'REC',client_code:'978',case_no:'001' }], history:[], documents:[] });
+  try {
+    await db.query('SELECT public.restore_recovery_snapshot($1::jsonb)',[source]);
+    await db.exec('DELETE FROM public.trademark_records WHERE id=11; SAVEPOINT removed_row');
+    await assert.rejects(db.query('SELECT public.restore_recovery_snapshot($1::jsonb)',[source]),/restored rows are missing/);
+    await db.exec('ROLLBACK TO SAVEPOINT removed_row');
+  } finally { await db.exec('ROLLBACK'); }
+});

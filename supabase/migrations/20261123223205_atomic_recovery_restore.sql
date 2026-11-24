@@ -41,7 +41,13 @@ BEGIN
   LOCK TABLE public.clients, public.trademark_records, public.trademark_history,
     public.trademark_documents IN SHARE ROW EXCLUSIVE MODE;
   SELECT r.report INTO prior FROM public.recovery_runs r WHERE r.package_hash = v_package_hash;
-  IF prior IS NOT NULL THEN RETURN prior || jsonb_build_object('alreadyRestored', true); END IF;
+  IF prior IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM jsonb_each_text(prior->'caseIdMap') m WHERE NOT EXISTS (SELECT 1 FROM public.trademark_records r WHERE r.id=m.value::bigint))
+      OR EXISTS (SELECT 1 FROM jsonb_each_text(prior->'clientIdMap') m WHERE NOT EXISTS (SELECT 1 FROM public.clients c WHERE c.id=m.value::bigint)) THEN
+      RAISE EXCEPTION 'Previously restored rows are missing. Review recovery state before retrying';
+    END IF;
+    RETURN prior || jsonb_build_object('alreadyRestored', true);
+  END IF;
   preserve_ids := NOT EXISTS(SELECT 1 FROM public.clients) AND NOT EXISTS(SELECT 1 FROM public.trademark_records)
     AND NOT EXISTS(SELECT 1 FROM public.trademark_history) AND NOT EXISTS(SELECT 1 FROM public.trademark_documents);
   FOREACH collection IN ARRAY ARRAY['clients', 'records', 'history', 'documents'] LOOP
