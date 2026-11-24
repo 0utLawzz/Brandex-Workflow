@@ -3,11 +3,11 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload, RefreshCw, X, ShieldCheck, Database, Check } from 'lucide-react';
 import { standaloneDB } from '@/lib/standalone-db';
-import { supabaseDB } from '@/lib/supabase-db';
+import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { preflightRestore } from '@/lib/restore-preflight';
 import type { RestorePreflight } from '@/lib/restore-preflight';
 import { planAssetRestore } from '@/lib/restore-assets';
-import { buildBackupAssetManifest } from '@/lib/backup-package';
+import { buildBackupAssetManifest, createBackupPackage } from '@/lib/backup-package';
 import type { RecoveryReport } from '@/lib/recovery-policy';
 import { MAX_RECOVERY_BYTES } from '@/lib/recovery-transfer';
 
@@ -63,10 +63,13 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     setAllowMissingAssets(false);
     try {
       const destination = await supabaseDB.getBackupSnapshot();
-      const report = preflightRestore(content, destination);
+      const source = JSON.parse(content);
+      const raw = source.databaseSnapshot;
+      if (source.schemaVersion !== 3 || source.version !== '3.0-brandex' || !raw || ['records','clients','history','documents'].some(key => !Array.isArray(raw[key]))) throw new Error('A version 3 backup with the original database snapshot is required. Legacy backups need reviewed conversion.');
+      const actualSource = { ...createBackupPackage({ records: raw.records.map(mapRowToRecord), clients: raw.clients, history: raw.history, documents: raw.documents }), ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) };
+      const report = preflightRestore(JSON.stringify(actualSource), destination);
       if (report.valid) {
-        const source = JSON.parse(content);
-        const assets = await planAssetRestore(buildBackupAssetManifest({ records: source.records || [], clients: source.clients || [], history: source.history || [], documents: source.documents || [] }), source.assetCopies || []);
+        const assets = await planAssetRestore(buildBackupAssetManifest(actualSource), source.assetCopies || []);
         report.counts.missingAssets = assets.missing;
         report.warnings = report.warnings.filter(warning => !warning.includes('file recovery is incomplete'));
         if (assets.missing) report.warnings.push(`${assets.missing} referenced files have no verified byte copy; recovery will be partial.`);
@@ -87,7 +90,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     try {
       const report = await supabaseDB.restoreBackupJSON(importText, { confirmed: true, allowMissingAssets });
       setRestoreReport(report);
-      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references; ${report.restoredAssets} verified files copied. ${report.originalIdsPreserved ? 'Original IDs preserved.' : 'IDs remapped; download the report.'} ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Available embedded/copy bytes retained.'} Series/settings recovery is separate.`, type: report.missingAssets ? 'warning' : 'success' });
+      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references; ${report.restoredAssets} verified files copied. ${report.originalIdsPreserved ? 'Original IDs preserved.' : 'IDs remapped; download the report.'} ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Available embedded/copy bytes retained.'} ${report.configurationIncluded ? `${report.series} series and shared branding verified/restored.` : 'Series or shared branding was absent from this backup; configuration recovery is incomplete.'}`, type: report.missingAssets ? 'warning' : 'success' });
       onDataChanged?.();
     } catch (error) {
       setStatusMsg({ text: error instanceof Error ? error.message : 'Restore failed.', type: 'error' });

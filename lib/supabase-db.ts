@@ -668,7 +668,7 @@ class SupabaseDBService {
     if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('get_recovery_snapshot'));
     if (error) throw new Error(`Consistent backup snapshot unavailable: ${error.message}. Verify the reviewed recovery migration before retrying.`);
-    if (!data || ['records', 'clients', 'history', 'documents', 'series'].some(key => !Array.isArray(data[key]))) throw new Error('Backup snapshot returned incomplete collections.');
+    if (!data || ['records', 'clients', 'history', 'documents', 'series', 'workspaceSettings'].some(key => !Array.isArray(data[key]))) throw new Error('Backup snapshot returned incomplete collections. Verify the workspace recovery migration.');
     const exported = JSON.parse(standaloneDB.exportBackupJSON({
       records: data.records.map(mapRowToRecord),
       clients: data.clients.map(mapRowToClient),
@@ -677,6 +677,8 @@ class SupabaseDBService {
     }));
     // Preserve original database values alongside the portable application map.
     exported.databaseSnapshot = data;
+    exported.series = data.series;
+    exported.workspaceSettings = data.workspaceSettings;
     exported.capturedAt = data.capturedAt;
     if (includeAssets) {
       exported.assetCopies = await copyBackupAssets(exported.assets, async fileId => {
@@ -741,6 +743,7 @@ class SupabaseDBService {
     if (packageData.schemaVersion !== 3 || !raw || ['records', 'clients', 'history', 'documents'].some(key => !Array.isArray(raw[key]))) throw new Error('A version 3 backup with the original database snapshot is required. Legacy backups need reviewed conversion.');
     // Inspect the actual rows that the RPC will receive, not a potentially different portable view.
     const actualPackage = createBackupPackage({ records: raw.records.map(mapRowToRecord), clients: raw.clients.map(mapRowToClient), history: raw.history, documents: raw.documents });
+    Object.assign(actualPackage, { ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) });
     const destination = await this.getBackupSnapshot();
     const preflight = preflightRestore(JSON.stringify(actualPackage), destination);
     if (!preflight.valid) throw new Error(`Restore preflight failed: ${preflight.errors.join(' ')}`);
@@ -755,11 +758,11 @@ class SupabaseDBService {
       if (!response.ok || restored.ok !== true || restored.sha256 !== asset.sha256 || typeof restored.url !== 'string' || !restored.url.startsWith('https://drive.google.com/')) throw new Error(`Recovery file copy failed. ${replacements.size} previously copied files remain in the approved recovery folder; retrying reuses verified copies.`);
       replacements.set(asset.sourceUrl, { url: restored.url, mimeType: asset.mimeType });
     }
-    const snapshot = remapAssetUrls({ clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents }, replacements);
+    const snapshot = remapAssetUrls({ clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents, ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) }, replacements);
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('restore_recovery_snapshot', { p_snapshot: snapshot }));
     if (error) throw new Error(`Atomic restore failed: ${error.message}. No partial database restore was committed; retry the same file to check an uncertain response.`);
     if (!data || !data.caseIdMap || !data.clientIdMap || ['records', 'clients', 'history', 'documents'].some(key => !Number.isSafeInteger(data[key]))) throw new Error('Restore response is incomplete. Retry the same file to retrieve the stored report.');
-    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, originalIdsPreserved: data.originalIdsPreserved === true, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
+    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, series: data.series || 0, workspaceSettings: data.workspaceSettings || 0, configurationIncluded: data.configurationIncluded === true, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, originalIdsPreserved: data.originalIdsPreserved === true, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {

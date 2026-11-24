@@ -1,5 +1,5 @@
 export type RecoveryOptions = { confirmed: boolean; allowMissingAssets: boolean };
-export type RecoveryReport = { count: number; clients: number; history: number; documents: number; missingAssets: number; restoredAssets: number; originalIdsPreserved: boolean; alreadyRestored: boolean; caseIdMap: Record<string, number>; clientIdMap: Record<string, number>; packageHash: string; projectRef: string };
+export type RecoveryReport = { count: number; clients: number; history: number; documents: number; series: number; workspaceSettings: number; configurationIncluded: boolean; missingAssets: number; restoredAssets: number; originalIdsPreserved: boolean; alreadyRestored: boolean; caseIdMap: Record<string, number>; clientIdMap: Record<string, number>; packageHash: string; projectRef: string };
 
 export function assertRecoveryTarget(url: string, enabled: string | undefined, approvedRef: string | undefined, confirmed: boolean): string {
   if (!confirmed) throw new Error('Review the preflight and explicitly confirm restore.');

@@ -181,3 +181,37 @@ test('recovery staging enforces expiry, chunk identity, byte counts and service-
     }
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('workspace and series recover with case rows atomically and never overwrite conflicting configuration', async () => {
+  await db.exec('BEGIN; SET LOCAL ROLE service_role');
+  const source = {
+    clients:[{id:501,client_code:'976',name:'CONFIG'}],
+    records:[{id:502,client_id:501,client_code:'976',case_no:'001',selection_menu:'RECSET',mark_name:'CONFIG CASE'}],
+    history:[],documents:[],
+    series:[{id:1001,series_code:'RECSET',is_active:true,sort_order:50}],
+    workspaceSettings:[{id:true,display_name:'RECOVERED',brand_prefix:'RC',tagline:'Recovered configuration',logo_url:'https://example.com/logo.png',revision:5}]
+  };
+  const restore = object => db.query('SELECT public.restore_recovery_snapshot($1::jsonb) AS report',[JSON.stringify(object)]);
+  const rejectSafely = async (object, pattern) => {
+    await db.exec('SAVEPOINT configuration_failure');
+    await assert.rejects(restore(object),pattern);
+    await db.exec('ROLLBACK TO SAVEPOINT configuration_failure');
+  };
+  try {
+    const baseline = (await db.query('SELECT public.get_recovery_snapshot() AS snapshot')).rows[0].snapshot;
+    assert.equal(baseline.workspaceSettings[0].display_name,'BRANDEX');
+    await rejectSafely({...source,documents:[{id:503,record_id:999,file_url:'https://example.com/file'}]},/Unresolved child/);
+    assert.equal((await db.query("SELECT count(*)::int n FROM public.case_series WHERE series_code='RECSET'")).rows[0].n,0);
+    assert.equal((await db.query('SELECT display_name FROM public.workspace_settings')).rows[0].display_name,'BRANDEX');
+    const report = (await restore(source)).rows[0].report;
+    assert.equal(report.configurationIncluded,true); assert.equal(report.series,1); assert.equal(report.workspaceSettings,1);
+    assert.equal((await restore(source)).rows[0].report.alreadyRestored,true);
+    const saved = (await db.query('SELECT public.get_recovery_snapshot() AS snapshot')).rows[0].snapshot;
+    assert.equal(saved.workspaceSettings[0].display_name,'RECOVERED');
+    assert.ok(saved.series.some(row=>row.series_code==='RECSET'));
+    await rejectSafely({...source,workspaceSettings:[{...source.workspaceSettings[0],display_name:'OVERWRITE'}]},/branding conflicts/);
+    await rejectSafely({...source,series:[{...source.series[0],sort_order:51}]},/Series configuration conflicts/);
+    assert.equal((await db.query('SELECT display_name FROM public.workspace_settings')).rows[0].display_name,'RECOVERED');
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.trademark_records')).rows[0].n,1);
+  } finally { await db.exec('ROLLBACK'); }
+});

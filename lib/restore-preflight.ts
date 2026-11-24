@@ -1,4 +1,5 @@
 import { buildBackupAssetManifest, validateBackupPackage } from './backup-package.ts';
+import { validateSharedSettings } from './shared-settings.ts';
 
 type Row = Record<string, any>;
 export type RestorePreflight = {
@@ -65,6 +66,29 @@ export function preflightRestore(sourceJson: string, destinationJson: string): R
   if (report.counts.missingAssets) report.warnings.push(`${report.counts.missingAssets} files contain references only; file recovery is incomplete.`);
   if (report.counts.idCollisions) report.warnings.push('Destination IDs overlap; execution must remap parent and child IDs without overwriting.');
   if (report.counts.existingReferences) report.warnings.push('Existing case references require duplicate detection and content comparison before execution.');
+  if (data.series !== undefined) {
+    const seen = new Set<string>();
+    for (const series of data.series) {
+      const code = series?.series_code;
+      if (typeof code !== 'string' || !/^[A-Z][A-Z0-9]{0,7}$/.test(code) || seen.has(code) || typeof series.is_active !== 'boolean' || !Number.isInteger(series.sort_order) || series.sort_order < 0 || series.sort_order > 10000) {
+        report.errors.push('Series collection contains invalid or duplicate configuration.'); continue;
+      }
+      seen.add(code);
+      const existing = (destination.data.series || []).find((row: Row) => row.series_code === code);
+      if (existing && (existing.is_active !== series.is_active || existing.sort_order !== series.sort_order)) report.errors.push(`Series ${code} conflicts with the destination registry; reconcile before recovery.`);
+    }
+  } else report.warnings.push('Series configuration is absent from this backup and will remain unchanged.');
+  if (data.workspaceSettings !== undefined) {
+    try {
+      if (data.workspaceSettings.length !== 1 || destination.data.workspaceSettings?.length !== 1) throw new Error('A single source and destination settings row is required.');
+      const source = validateSharedSettings(data.workspaceSettings[0]);
+      const target = validateSharedSettings(destination.data.workspaceSettings[0]);
+      const same = ['display_name','brand_prefix','tagline','logo_url'].every(key => source[key as keyof typeof source] === target[key as keyof typeof target]);
+      const emptyTarget = ['records','clients','history','documents'].every(key => destination.data![key]?.length === 0);
+      const initialTarget = target.revision === 1 && target.display_name === 'BRANDEX' && target.brand_prefix === 'BRANDEX' && !target.tagline && !target.logo_url;
+      if (!same && !(emptyTarget && initialTarget)) throw new Error('Workspace branding conflicts; reconcile destination settings before recovery.');
+    } catch (error) { report.errors.push(error instanceof Error ? error.message : 'Invalid workspace settings.'); }
+  } else report.warnings.push('Shared branding is absent from this backup and will remain unchanged.');
   report.valid = report.errors.length === 0;
   return report;
 }

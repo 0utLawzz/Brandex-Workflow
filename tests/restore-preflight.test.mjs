@@ -33,3 +33,17 @@ test('restore preflight does not trust claimed asset completeness', () => {
   assert.equal(report.counts.missingAssets, 1);
   assert.ok(report.warnings.some(warning => /file recovery is incomplete/.test(warning)));
 });
+
+test('configuration dry run allows initial branding only on empty targets and rejects registry conflicts', () => {
+  const defaults = {display_name:'BRANDEX',brand_prefix:'BRANDEX',tagline:'',logo_url:'',revision:1};
+  const source = {...fixture(),series:[{series_code:'N',is_active:true,sort_order:3}],workspaceSettings:[{...defaults,display_name:'RESTORED'}]};
+  const destination = {...JSON.parse(empty),series:[{series_code:'N',is_active:true,sort_order:3}],workspaceSettings:[defaults]};
+  const check = () => preflightRestore(JSON.stringify(source),JSON.stringify(destination));
+  assert.equal(check().valid,true);
+  destination.workspaceSettings[0] = {...defaults,display_name:'EXISTING',revision:2};
+  assert.ok(check().errors.some(error=>/branding conflicts/.test(error)));
+  destination.workspaceSettings[0] = source.workspaceSettings[0];
+  assert.equal(check().valid,true);
+  destination.series[0].sort_order=4;
+  assert.ok(check().errors.some(error=>/Series N conflicts/.test(error)));
+});
