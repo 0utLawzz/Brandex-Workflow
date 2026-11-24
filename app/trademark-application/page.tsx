@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { readWorkspacePreferences } from '@/lib/workspace-preferences';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
@@ -12,6 +14,7 @@ import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPaki
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
 export default function TrademarkApplicationPage() {
+  const router = useRouter();
   const [selectedCategory, setSelectedCategory] = useState('INITIAL');
   const [selectionMenu, setSelectionMenu] = useState('A');
   const [seriesOptions, setSeriesOptions] = useState<CaseSeries[]>([]);
@@ -46,7 +49,7 @@ export default function TrademarkApplicationPage() {
   const [expiryDate, setExpiryDate] = useState('');
   const [appTrade, setAppTrade] = useState('');
   const [appAdd, setAppAdd] = useState('');
-  const [year, setYear] = useState('2023');
+  const [year, setYear] = useState('');
   const [noImg, setNoImg] = useState('[TEXT HERE]');
 
   const [status, setStatus] = useState('IN REVIEW');
@@ -359,14 +362,15 @@ export default function TrademarkApplicationPage() {
     try {
       const AudioCtxRef = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!audioCtxRef.current) audioCtxRef.current = new AudioCtxRef();
-      if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      if (audioCtxRef.current.state === 'suspended') void audioCtxRef.current.resume().catch(() => {});
     } catch { }
   };
 
   const notifyResult = (success: boolean, message: string) => {
     try {
-      primeAudio();
-      const ctx = audioCtxRef.current;
+      const preferences = readWorkspacePreferences();
+      if (preferences.enableSounds) primeAudio();
+      const ctx = preferences.enableSounds ? audioCtxRef.current : null;
       if (ctx) {
         const gain = ctx.createGain();
         gain.connect(ctx.destination);
@@ -383,7 +387,7 @@ export default function TrademarkApplicationPage() {
           osc.stop(startAt + 0.11);
         });
       }
-      if ('Notification' in window && Notification.permission === 'granted') {
+      if (preferences.enableNotifications && 'Notification' in window && Notification.permission === 'granted') {
         new Notification(success ? 'Documents Generated' : 'Document Error', { body: message });
       }
     } catch { }
@@ -408,6 +412,8 @@ export default function TrademarkApplicationPage() {
 
   const submitApplication = async (retryGeneration: boolean) => {
     if (submitting) return;
+    if (readWorkspacePreferences().enableSounds) primeAudio();
+    const startedAt = performance.now();
     const selectedSeries = seriesOptions.find(item => item.series_code === selectionMenu);
     const seriesAllowed = !!selectedSeries && !seriesLoadError &&
       (selectedSeries.is_active || (retryGeneration && generationPending));
@@ -605,6 +611,8 @@ export default function TrademarkApplicationPage() {
           });
           notifyResult(true, `${payload.folder} — saved case and generated documents.`);
           setGenerationPending(false);
+          try { sessionStorage.setItem('brandex_generation_receipt', JSON.stringify({ id: insertedRecordId, completedAt: Date.now(), seconds: Math.round((performance.now() - startedAt) / 1000) })); } catch { /* Navigation and saved case remain available when browser storage is blocked. */ }
+          router.push('/');
           return;
         } else {
           const errMsg = data?.error || `Google Apps Script returned status ${res.status}`;
@@ -625,7 +633,7 @@ export default function TrademarkApplicationPage() {
             `Note on Document Generation: ${errMsg}.` +
             (isBackendAuth ? '\nCheck the Apps Script property and Vercel backend token are identical.' : '')
           );
-          notifyResult(recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript), recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
+          notifyResult(false, recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
             ? 'Case saved in database. Apps Script doc generation pending.'
             : 'Case is only in this browser. Apps Script doc generation pending.');
         }
@@ -641,9 +649,9 @@ export default function TrademarkApplicationPage() {
           `${savedStatus}\n` +
           `Apps Script doc generation note: ${scriptErr.message || 'Service unavailable'}.`
         );
-        notifyResult(recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript), recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
-          ? 'Case saved in database.'
-          : 'Case is only in this browser.');
+        notifyResult(false, recordSavedToSupabase || (retryGeneration && lastSavedToAppsScript)
+          ? 'Case saved; document generation failed. Retry is available.'
+          : 'Case was not confirmed saved. Review the error before retrying.');
       }
     } catch (err: any) {
       setProgressLabel('Failed — review the error and retry');
@@ -971,7 +979,7 @@ export default function TrademarkApplicationPage() {
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">CNIC No</label>
                   <input
                     type="text"
-                    placeholder="37405-123457-9 Format"
+                    placeholder="37405-1234567-9"
                     value={appCnic}
                     onChange={handleCnicInput}
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px]"
@@ -1195,7 +1203,7 @@ export default function TrademarkApplicationPage() {
               <span>{progressLabel}</span>
               <span>{progressPercent}%</span>
             </div>
-            <div className="w-full h-4 bg-[#E8DFC7] border-2 border-[#0C0C0C] overflow-hidden rounded-[2px]">
+            <div role="progressbar" aria-label={progressLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} className="w-full h-4 bg-[#E8DFC7] border-2 border-[#0C0C0C] overflow-hidden rounded-[2px]">
               <div
                 className="h-full bg-[#0D9970] transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}

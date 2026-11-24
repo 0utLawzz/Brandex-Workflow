@@ -14,7 +14,7 @@ test('canonical merge tags are unique and generated Apps Script maps every API f
   for (const field of CASE_MERGE_FIELDS) assert.equal(merge[`{{${field.tag}}}`], record[field.record]);
   assert.equal((code.match(/var mergeData = buildCanonicalMergeData\(rowData\)/g) || []).length, 2);
 });
-test('CNIC issue date cannot silently become the generated document date', () => {
+test('application issue date cannot silently become the generated document date', () => {
   const api = recordToMergeApi({ date: '2026-11-24', fatherName: 'PERSON', cnic: '123' });
   assert.equal(api.issueDate, '2026-11-24'); assert.equal(api.appSo, 'PERSON'); assert.equal(api.appCnic, '123');
   assert.equal(api.date, undefined);

@@ -204,6 +204,16 @@ export default function RecordsPage() {
   const [newDocumentUrl, setNewDocumentUrl] = useState('');
 
   // File input refs
+  useEffect(() => {
+    try {
+      const value = sessionStorage.getItem('brandex_generation_receipt');
+      sessionStorage.removeItem('brandex_generation_receipt');
+      if (!value) return;
+      const receipt = JSON.parse(value);
+      if (Number.isSafeInteger(receipt.id) && receipt.id > 0 && Number.isFinite(receipt.completedAt) && Date.now() - receipt.completedAt >= 0 && Date.now() - receipt.completedAt < 300000) setBulkNotice(`Documents generated and references saved for case #${receipt.id}${Number.isFinite(receipt.seconds) ? ` in ${receipt.seconds} seconds` : ''}.`);
+    } catch { /* A missing browser receipt must not prevent loading real records. */ }
+  }, []);
+
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 

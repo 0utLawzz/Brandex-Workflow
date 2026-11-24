@@ -16,7 +16,7 @@ export const CASE_MERGE_FIELDS = [
   {"tag":"CON_NAME","api":"conName","record":"conName","storage":"consultant_name"},
   {"tag":"CON_ADD","api":"conAdd","record":"conAddr","storage":"consultant_addr"},
   {"tag":"GOODS_SERVICES","api":"goodsServices","record":"goodsServices","storage":"derived from numeric class"},
-  {"tag":"DATE","api":"date","record":"generationDate","storage":"generation timestamp; not CNIC issue_date"},
+  {"tag":"DATE","api":"date","record":"generationDate","storage":"generation timestamp; not application issue_date"},
   {"tag":"FOLDER","api":"folder","record":"folder","storage":"mark_name"},
   {"tag":"CLIENT_ID","api":"clientId","record":"clientId","storage":"client_id"},
   {"tag":"CLIENT_CODE","api":"clientCode","record":"clientCode","storage":"client_code"},

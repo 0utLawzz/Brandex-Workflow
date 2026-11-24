@@ -1,11 +1,15 @@
 export interface WorkspacePreferences {
   pageSize: 10 | 25 | 50 | 100;
   showLawFirmWidget: boolean;
+  enableSounds: boolean;
+  enableNotifications: boolean;
 }
 
 export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   pageSize: 50,
   showLawFirmWidget: true,
+  enableSounds: false,
+  enableNotifications: false,
 };
 
 const STORAGE_KEY = 'brandex_workspace_preferences_v1';
@@ -20,6 +24,8 @@ export function readWorkspacePreferences(): WorkspacePreferences {
       : DEFAULT_WORKSPACE_PREFERENCES.pageSize;
     return {
       pageSize,
+      enableSounds: parsed.enableSounds === true,
+      enableNotifications: parsed.enableNotifications === true,
       showLawFirmWidget: typeof parsed.showLawFirmWidget === 'boolean'
         ? parsed.showLawFirmWidget
         : DEFAULT_WORKSPACE_PREFERENCES.showLawFirmWidget,
