@@ -37,7 +37,7 @@ Local PASS describes source/build/automated evidence only. Hosted acceptance sta
 | #04 breadcrumbs | PASS | PENDING | Shared semantic path trail included in workspace pages; visual/accessibility acceptance pending. |
 | #05 heading | PASS | PENDING | Case Record source heading and build checked. |
 | #06–#07 layout/filter/sort | PENDING | PENDING | Collapsed right-aligned global filters and header filters/sorts operate before pagination in source; full dataset/UI acceptance pending. |
-| #08 table/analytics | PENDING | PENDING | Default 50, segmented references, private logo previews, separate workflow/legal columns, 3-column actions and actual filing-date monthly totals implemented. Conditional actions/responsive layout require final review. |
+| #08 table/analytics | PENDING | PENDING | Default 50, segmented references, private logo previews, separate workflow/legal columns, six 3x2 actions and actual filing-date monthly totals implemented. Responsive layout, charts and real data require final review. |
 | #09 Clients | PENDING | PENDING | Compact searchable/sortable directory, prefix/code, contact editing/CSV and protected linked identities implemented; visual acceptance pending. |
 | #10–#12 form | PENDING | PENDING | Independent series/client identity, stale-number-response cancellation, ID-only retry and separate E-Stamp/filing dates implemented. Copyright conventions and remaining form acceptance need reconciliation. |
 | #13 progress | PENDING | PENDING | Fake timer removed; actual save/generation milestones and Home receipt; opt-in sound/notifications. Animation, reduced-motion and genuine live failures/retries still need acceptance. |
@@ -148,6 +148,8 @@ Exact transport commit `d2539bc` built successfully in the separate clean Node-2
 Edit-field checkpoint: Issue Date supplied without the legacy Date alias now maps to the saved issue_date field; contradictory nonempty aliases fail before a database call. Targeted regression and typecheck PASS. Current-head whole-suite/build/hosted edit acceptance remain PENDING; no production changes.
 
 Native database checkpoint: a separate disposable localhost PostgreSQL **17.12** instance applied `supabase_schema.sql` and all 18 tracked migrations in order. Both SQL fixtures (`case-csv-import.sql`, `recovery-restore.sql`) completed within rollback transactions, and recovery function EXECUTE privileges were denied to anon and allowed to service_role. A reusable repository script now refuses remote, unnamed, populated or non-17 databases, and the CI workflow runs it against a fresh PostgreSQL-17 service. The same script passed locally in a separate disposable instance; actual GitHub CI execution, PostgREST relationship cache, concurrent write behavior and hosted test schema remain PENDING. `pg` is pinned as a development dependency; dependency audit reports zero vulnerabilities.
+
+Record-actions checkpoint: supporting proof/receipt links now sit with the case identity, leaving exactly six case actions in the existing 3-column grid. Regeneration remains reachable by saved case ID in every workflow stage; it retains the current status and creates new document versions on changed content. Typecheck/lint/diff PASS. Authenticated visual and regeneration acceptance remain PENDING.
 
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 

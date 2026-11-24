@@ -1277,6 +1277,10 @@ export default function RecordsPage() {
                               TM #{r.tm}
                             </div>
                           )}
+                          {(r.dispatchedImage || r.receiptImage) && <div className="mt-1 flex gap-1" aria-label="Case evidence">
+                            {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label={`View dispatch proof for ${r.folder}`}><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
+                            {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label={`View delivery receipt for ${r.folder}`}><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
+                          </div>}
                         </td>
 
                         {/* Col 6: Class (1-45) Just Numbers */}
@@ -1309,9 +1313,6 @@ export default function RecordsPage() {
                         {/* Col 12: Actions */}
                         <td className="p-2.5 text-center whitespace-nowrap">
                           <div className="grid grid-cols-3 items-center justify-items-center gap-1">
-                            {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1.5 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label="View dispatch proof"><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
-                            {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1.5 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label="View delivery receipt"><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
-                            {((r.status || 'PENDING').toUpperCase().includes('PENDING') || (r.status || '').toUpperCase().includes('REVIEW')) && (
                               <Link
                                 href={`/trademark-application?retryId=${encodeURIComponent(String(r.id))}&retryFolder=${encodeURIComponent(r.folder || '')}&retryTm=${encodeURIComponent(r.tm || '')}`}
                                 className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#d1fae5] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer inline-flex"
@@ -1320,7 +1321,6 @@ export default function RecordsPage() {
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-[#0D9970]" />
                               </Link>
-                            )}
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"
