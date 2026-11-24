@@ -5,11 +5,23 @@ import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 import { previewWriteError } from '@/lib/preview-isolation';
+import { uploadDispatchProof } from '@/lib/dispatch-upload';
 
 export const dynamic = 'force-dynamic';
 
 function invalidPayload(message: string, status = 400) {
   return Response.json({ ok: false, error: message }, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
+async function assertDispatchableCases(ids: number[]) {
+  if (ids.length < 1 || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isSafeInteger(id) || id < 1)) {
+    throw new Error('Choose 1 to 10 distinct valid cases for dispatch.');
+  }
+  const { data, error } = await getSupabaseClient().from('trademark_records').select('id,status').in('id', ids);
+  if (error) throw new Error(`Could not validate the selected cases: ${error.message}`);
+  if ((data || []).length !== ids.length || (data || []).some(row => String(row.status || '').trim().toUpperCase() !== 'APPROVED')) {
+    throw new Error('Every selected case must be APPROVED before its proof can be saved.');
+  }
 }
 
 export async function POST(request: Request) {
@@ -109,10 +121,17 @@ export async function POST(request: Request) {
         break;
       case 'updateRecord':
         if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object') return invalidPayload('A valid case ID and updates are required.');
+        if (body.updates.status === 'DISPATCHED' && typeof body.updates.dispatchedImage === 'string' && body.updates.dispatchedImage.startsWith('data:')) {
+          await assertDispatchableCases([Number(body.id)]);
+          body.updates = { ...body.updates, ...await uploadDispatchProof(Number(body.id), body.updates, resolveGenerationDestination, proxyAppsScript) };
+        }
         result = await supabaseDB.updateRecord(Number(body.id), body.updates);
         break;
       case 'updateRecordWithHistory':
         if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object' || typeof body.auditNote !== 'string') return invalidPayload('A valid case ID, updates, and audit note are required.');
+        if (typeof body.updates.dispatchedImage === 'string' && body.updates.dispatchedImage.startsWith('data:')) {
+          body.updates = { ...body.updates, ...await uploadDispatchProof(Number(body.id), body.updates, resolveGenerationDestination, proxyAppsScript) };
+        }
         result = await supabaseDB.updateRecordWithHistory(Number(body.id), body.updates, body.auditNote);
         break;
       case 'deleteRecord':
@@ -120,8 +139,14 @@ export async function POST(request: Request) {
         result = await supabaseDB.deleteRecord(Number(body.id));
         break;
       case 'bulkUpdateStatus':
-        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id))) || typeof body.newStatus !== 'string') return invalidPayload('A valid case selection and workflow status are required.');
-        result = await supabaseDB.bulkUpdateStatus(body.ids.map(Number), body.newStatus, body.auditNote, body.meta);
+        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id)) && Number(id) > 0) || typeof body.newStatus !== 'string') return invalidPayload('A valid case selection and workflow status are required.');
+        if (body.newStatus === 'DISPATCHED' && typeof body.meta?.dispatchedImage === 'string' && body.meta.dispatchedImage.startsWith('data:')) {
+          const ids = body.ids.map(Number);
+          await assertDispatchableCases(ids);
+          const proofByCase: Record<string, { dispatchedImage: string; dispatchedDocName: string; dispatchedDocType: string }> = {};
+          for (const id of ids) proofByCase[String(id)] = await uploadDispatchProof(id, body.meta, resolveGenerationDestination, proxyAppsScript);
+          result = await supabaseDB.bulkUpdateStatus(ids, body.newStatus, body.auditNote, { ...body.meta, ...proofByCase[String(ids[0])], proofByCase });
+        } else result = await supabaseDB.bulkUpdateStatus(body.ids.map(Number), body.newStatus, body.auditNote, body.meta);
         break;
       case 'bulkAssignClient':
         if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500 || !body.ids.every((id: unknown) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) || !body.clientProfile || typeof body.clientProfile !== 'object' || !Number.isSafeInteger(body.clientProfile.id) || body.clientProfile.id < 1) return invalidPayload('A valid case selection and saved client are required.');

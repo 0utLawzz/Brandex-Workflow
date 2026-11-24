@@ -291,6 +291,35 @@ test('dispatch stores an explicit same-case proof pointer and metadata replaceme
   } finally { await db.exec('ROLLBACK'); }
 });
 
+test('bulk dispatch writes each case to its own Drive proof reference atomically', async () => {
+  await db.exec('BEGIN');
+  try {
+    const ids=[];
+    for (const caseNo of ['011','012']) {
+      ids.push((await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,status) VALUES($1,'MAP','973',$2,'APPROVED') RETURNING id",[`MAP ${caseNo}`,caseNo])).rows[0].id);
+    }
+    const metadata={
+      dispatchedDate:'2026-11-24', trackingId:'MAP-TRACK',
+      proofByCase:{
+        [ids[0]]:{dispatchedImage:'https://drive.google.com/file/d/first/view',dispatchedDocName:'first.pdf',dispatchedDocType:'application/pdf'},
+        [ids[1]]:{dispatchedImage:'https://drive.google.com/file/d/second/view',dispatchedDocName:'second.png',dispatchedDocType:'image/png'},
+      },
+    };
+    await db.query('SELECT public.apply_case_dispatch_with_proofs($1::bigint[],$2,$3::jsonb)',[ids,'Mapped dispatch',JSON.stringify(metadata)]);
+    const proofRows=(await db.query('SELECT r.id,r.status,d.file_url,d.file_name,d.file_type FROM public.trademark_records r JOIN public.trademark_documents d ON (d.id,d.record_id)=(r.dispatch_document_id,r.id) WHERE r.id=ANY($1::bigint[]) ORDER BY r.id',[ids])).rows;
+    assert.equal(proofRows.length,2);
+    assert.equal(proofRows[0].status,'DISPATCHED'); assert.equal(proofRows[1].status,'DISPATCHED');
+    for (const row of proofRows) {
+      assert.equal(row.file_url,metadata.proofByCase[row.id].dispatchedImage);
+      assert.equal(row.file_name,metadata.proofByCase[row.id].dispatchedDocName);
+      assert.equal(row.file_type,metadata.proofByCase[row.id].dispatchedDocType);
+    }
+    await db.exec('SAVEPOINT missing_case_proof');
+    await assert.rejects(db.query('SELECT public.apply_case_dispatch_with_proofs($1::bigint[],$2,$3::jsonb)',[ids,'Retry',JSON.stringify({ ...metadata, proofByCase:{[ids[0]]:metadata.proofByCase[ids[0]]} })]),/individual Drive proofs/);
+    await db.exec('ROLLBACK TO SAVEPOINT missing_case_proof');
+  } finally { await db.exec('ROLLBACK'); }
+});
+
 test('recovery remaps an explicit proof relationship into a populated target', async () => {
   await db.exec('BEGIN');
   try {

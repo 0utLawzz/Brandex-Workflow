@@ -88,3 +88,24 @@ test('case Picker destination is used directly while a client destination gets a
   assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','case'),caseFolder);
   assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','client'),created);
 });
+test('dispatch proof is stored in its case Dispatch folder and changed bytes create a version',()=>{
+  const f=fixture(); const names=[];
+  const makeFolder=name=>{
+    const children=[];
+    return { name,getUrl:()=>`https://drive.google.com/drive/folders/${name}`,getFoldersByName:target=>{
+      const matches=children.filter(child=>child.name===target);let index=0;return {hasNext:()=>index<matches.length,next:()=>matches[index++]};
+    },createFolder:target=>{names.push(target);const child=makeFolder(target);children.push(child);return child;},
+    getFilesByName:target=>{const matches=f.files.filter(file=>file.name===target);let index=0;return {hasNext:()=>index<matches.length,next:()=>matches[index++]};},
+    createFile:blob=>f.makeFile(blob.getName(),blob.getContentType(),blob.getBytes())};
+  };
+  const root=makeFolder('root');
+  f.context.DriveApp.getFolderById=()=>root;
+  f.context.LockService={getScriptLock:()=>({waitLock:()=>{},releaseLock:()=>{}})};
+  const input=content=>({clientCode:'646',selectionMenu:'A',caseNo:'001',folder:'EXAMPLE',name:'Proof.pdf',mimeType:'application/pdf',dataUrl:`data:application/pdf;base64,${Buffer.from(content).toString('base64')}`});
+  const first=f.context.saveDispatchProof(input('%PDF-1'));
+  assert.equal(first.mimeType,'application/pdf'); assert.ok(names.includes('Dispatch'));
+  assert.equal(f.context.saveDispatchProof(input('%PDF-1')).fileId,first.fileId);
+  const changed=f.context.saveDispatchProof(input('%PDF-2'));
+  assert.notEqual(changed.fileId,first.fileId); assert.equal(changed.name,'Proof (2).pdf');
+  assert.equal(f.files[0].bytes.toString(),'%PDF-1');
+});

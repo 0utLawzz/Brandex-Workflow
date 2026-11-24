@@ -75,6 +75,9 @@ function doPost(e) {
     if (body.action === "getImageThumbnail") {
       return jsonResponse(getImageThumbnail(body.fileId));
     }
+    if (body.action === "saveDispatchProof") {
+      return jsonResponse(saveDispatchProof(body));
+    }
     if (body.action === "generateFromForm") {
       var result = processFormSubmission(body);
       return jsonResponse({
@@ -300,6 +303,30 @@ function resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, des
   return destinationMode === 'case' ? parentFolder : getOrCreateClientFolder(clientFolder, caseFolderName);
 }
 
+function resolveCaseFolder(mainFolderId, formData) {
+  var selectedDestination = Boolean(formData.driveFolderId);
+  if (selectedDestination) validateDriveFolder(formData.driveFolderId);
+  var parentFolder = DriveApp.getFolderById(selectedDestination ? formData.driveFolderId : mainFolderId);
+  if (!formData.clientCode && !formData.caseNo) return { folder: getOrCreateClientFolder(parentFolder, formData.folder), selectedDestination: selectedDestination };
+  var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
+  var clientPrefix = String(formData.clientPrefix || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+  var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+  var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
+  var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientCity = String(formData.clientCity || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
+    + (clientCity ? " " + clientCity : "") + (clientReference ? " " + clientReference : "");
+  var caseIdentity = caseSeries + clientCode + "-" + caseNo;
+  var caseFolderName = caseIdentity + " " + String(formData.folder || "UNTITLED CASE").toUpperCase()
+    + (formData.tm && formData.tm !== "PENDING" ? " " + formData.tm : "")
+    + (formData.classNo ? " C" + String(formData.classNo).replace(/\D/g, "") : "");
+  var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
+  var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
+  var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
+  return { folder: resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, selectedDestination ? formData.destinationMode : 'configured-root'), selectedDestination: selectedDestination };
+}
+
 function saveAdditionalFiles(caseFolder, files, formData) {
   if (!files) return [];
   if (!Array.isArray(files) || files.length > 10) throw new Error("Attach no more than 10 files");
@@ -332,6 +359,23 @@ function saveAdditionalFiles(caseFolder, files, formData) {
   });
 
   return saved;
+}
+
+function saveDispatchProof(input) {
+  var allowed = { 'application/pdf': true, 'image/png': true, 'image/jpeg': true };
+  if (!allowed[input.mimeType] || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 240) throw new Error('Invalid dispatch proof name or type');
+  var match = String(input.dataUrl || '').match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match || match[1] !== input.mimeType || match[2].length > 12 * 1024 * 1024) throw new Error('Invalid dispatch proof bytes');
+  var bytes = Utilities.base64Decode(match[2]);
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error('Dispatch proof exceeds 8 MB');
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    var caseFolder = resolveCaseFolder(MAIN_FOLDER_ID, input).folder;
+    var folder = getOrCreateClientFolder(caseFolder, 'Dispatch');
+    var name = String(input.name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim();
+    var file = saveVersionedBlob(folder, name, Utilities.newBlob(bytes, input.mimeType, name));
+    return { ok: true, fileId: file.getId(), url: file.getUrl(), name: file.getName(), mimeType: file.getMimeType(), size: bytes.length, folderUrl: folder.getUrl() };
+  } finally { lock.releaseLock(); }
 }
 
 function processFormSubmission(data) {
@@ -378,32 +422,9 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
   }
 
-  var selectedDestination = Boolean(formData.driveFolderId);
-  if (selectedDestination) validateDriveFolder(formData.driveFolderId);
-  var parentFolder = DriveApp.getFolderById(selectedDestination ? formData.driveFolderId : mainFolderId);
-  var newFolder;
-  if (formData && (formData.clientCode || formData.caseNo)) {
-    var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
-    var clientPrefix = String(formData.clientPrefix || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
-    var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
-    var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
-    var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientCity = String(formData.clientCity || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
-      + (clientCity ? " " + clientCity : "")
-      + (clientReference ? " " + clientReference : "");
-    var caseIdentity = caseSeries + clientCode + "-" + caseNo;
-    var caseFolderName = caseIdentity + " " + String(rowData.folder || "UNTITLED CASE").toUpperCase()
-      + (rowData.tm && rowData.tm !== "PENDING" ? " " + rowData.tm : "")
-      + (rowData.classNo ? " C" + String(rowData.classNo).replace(/\D/g, "") : "");
-    var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
-    var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
-    var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
-    newFolder = resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, selectedDestination ? formData.destinationMode : 'configured-root');
-  } else {
-    newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
-  }
+  var resolved = resolveCaseFolder(mainFolderId, formData);
+  var selectedDestination = resolved.selectedDestination;
+  var newFolder = resolved.folder;
 
   var logoFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Logo') : newFolder;
   var documentsFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Documents') : newFolder;

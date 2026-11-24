@@ -470,6 +470,7 @@ class SupabaseDBService {
       deliveredDate?: string;
       receiverName?: string;
       receiptImage?: string;
+      proofByCase?: Record<string, { dispatchedImage: string; dispatchedDocName: string; dispatchedDocType: string }>;
     }
   ): Promise<void> {
     if (typeof window !== 'undefined') {
@@ -481,12 +482,9 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const { error } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
-        p_ids: ids,
-        p_new_status: newStatus,
-        p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`,
-        p_meta: meta || {},
-      }));
+      const { error } = await withSupabaseTimeout(meta?.proofByCase
+        ? client.rpc('apply_case_dispatch_with_proofs', { p_ids: ids, p_audit_note: auditNote || 'Cases dispatched with individual Drive proofs', p_meta: meta })
+        : client.rpc('apply_case_workflow_transition', { p_ids: ids, p_new_status: newStatus, p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`, p_meta: meta || {} }));
       if (error) throw new Error(`Atomic bulk workflow transition failed: ${error.message}`);
     }
 
