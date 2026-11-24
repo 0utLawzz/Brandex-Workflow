@@ -64,11 +64,12 @@ export async function POST(request: Request) {
           const generated = await response.json().catch(() => null);
           if (!response.ok || generated?.ok !== true) { results.push({ id, ok: false, error: generated?.error || `Document generation failed (${response.status}).` }); continue; }
           const updates: Record<string, unknown> = { serialNo: generated.serialNo };
+          if (typeof generated.imageId === 'string' && generated.imageId) updates.img = generated.imageId;
           try {
             await supabaseDB.updateRecord(id, updates as any);
             const documentReferences = [
-              ...(generated.tm1Url ? [{ name: `${record.folder} - TM-1`, type: 'application/vnd.google-apps.document', url: generated.tm1Url }] : []),
-              ...(generated.tm48Url ? [{ name: `${record.folder} - TM-48`, type: 'application/vnd.google-apps.document', url: generated.tm48Url }] : []),
+              ...(generated.tm1Url ? [{ name: generated.tm1Name || `${record.folder} - TM-1`, type: 'application/vnd.google-apps.document', url: generated.tm1Url }] : []),
+              ...(generated.tm48Url ? [{ name: generated.tm48Name || `${record.folder} - TM-48`, type: 'application/vnd.google-apps.document', url: generated.tm48Url }] : []),
             ].map(document => ({ record_id: id, file_name: document.name, file_type: document.type, file_url: document.url }));
             documentReferences.push(...(generated.attachments || []).map((attachment: any) => ({ record_id: id, file_name: attachment.name, file_size: attachment.size, file_type: attachment.mimeType, file_url: attachment.url })));
             await supabaseDB.saveDocumentReferences(documentReferences);

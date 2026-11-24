@@ -84,6 +84,8 @@ function doPost(e) {
         folderUrl: result.folderUrl,
         tm1Url: result.tm1Url,
         tm48Url: result.tm48Url,
+        tm1Name: result.tm1Name || '',
+        tm48Name: result.tm48Name || '',
         attachments: result.attachments || [],
         imageWarning: result.imageWarning || ""
       });
@@ -125,11 +127,17 @@ function restoreBackupAsset(input) {
 
 function validateDriveFolder(folderId) {
   if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(folderId || ''))) throw new Error('Invalid Drive folder ID');
-  var folder = DriveApp.getFolderById(folderId);
-  if (folder.isTrashed()) throw new Error('Selected folder is in trash');
-  var permission = folder.getAccess(Session.getEffectiveUser().getEmail());
-  if (permission !== DriveApp.Permission.EDIT && permission !== DriveApp.Permission.OWNER) throw new Error('The generation account needs editor access to the selected folder');
-  return { ok: true, folderId: folder.getId(), name: folder.getName(), url: folder.getUrl() };
+  // Capabilities reflect inherited/group/shared-drive permissions of the execution identity.
+  var response = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(folderId)
+    + '?fields=id,name,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true', {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+  var folder = JSON.parse(response.getContentText());
+  if (response.getResponseCode() !== 200 || folder.id !== folderId || folder.trashed
+    || folder.mimeType !== 'application/vnd.google-apps.folder' || !folder.capabilities || folder.capabilities.canAddChildren !== true) {
+    throw new Error('The generation account needs permission to add files to the selected folder');
+  }
+  return { ok: true, folderId: folder.id, name: folder.name, url: 'https://drive.google.com/drive/folders/' + folder.id };
 }
 
 function getImageThumbnail(fileId) {
@@ -280,7 +288,9 @@ function getOrCreateClientFolder(parentFolder, rawFolderName) {
 
   var existing = parentFolder.getFoldersByName(folderName);
   if (existing.hasNext()) {
-    return existing.next();
+    var folder = existing.next();
+    if (existing.hasNext()) throw new Error('Multiple folders share the name "' + folderName + '". Select an unambiguous destination.');
+    return folder;
   }
   return parentFolder.createFolder(folderName);
 }
@@ -310,10 +320,7 @@ function saveAdditionalFiles(caseFolder, files, formData) {
 
     var safeOriginalName = item.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "attachment";
     var storedName = caseKey + "_" + safeOriginalName;
-    var existing = caseFolder.getFilesByName(storedName);
-    var file = existing.hasNext()
-      ? existing.next()
-      : caseFolder.createFile(Utilities.newBlob(bytes, item.mimeType, storedName));
+    var file = saveVersionedBlob(caseFolder, storedName, Utilities.newBlob(bytes, item.mimeType, storedName));
     saved.push({ name: item.name, mimeType: item.mimeType, size: bytes.length, fileId: file.getId(), url: file.getUrl() });
   });
 
@@ -336,6 +343,8 @@ function processFormSubmission(data) {
       folderUrl: processResult.folderUrl,
       tm1Url: processResult.tm1Url,
       tm48Url: processResult.tm48Url,
+      tm1Name: processResult.tm1Name || '',
+      tm48Name: processResult.tm48Name || '',
       attachments: processResult.attachments || [],
       imageWarning: processResult.imageWarning
     };
@@ -407,23 +416,24 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
         else if (formData.imageMime.indexOf("webp") !== -1) ext = "webp";
       }
       var safeName = (rowData.folder || "trademark").toString().replace(/[\\/:*?"<>|]/g, "_").trim();
-      var imageFileName = safeName + "_logo." + ext;
+      var imageFileName = String(formData.imageName || safeName + '_logo.' + ext).replace(/[\\/:*?"<>|]/g, '_').trim();
 
       var blob = Utilities.newBlob(bytes, formData.imageMime || "image/jpeg", imageFileName);
-      var existingLogo = logoFolder.getFilesByName(imageFileName);
-      var file = existingLogo.hasNext() ? existingLogo.next() : logoFolder.createFile(blob);
+      var file = saveVersionedBlob(logoFolder, imageFileName, blob);
       imageId = file.getId();
       tmImageBlob = blob;
 
       Logger.log("Image saved in folder: " + newFolder.getName() + " | File: " + imageFileName);
     } catch (imgErr) {
-      imageWarning = "Image upload warning: " + imgErr;
-      Logger.log("Image upload warning: " + imgErr);
+      throw new Error('Logo could not be saved. Original files were preserved. ' + imgErr);
     }
   } else if (rowData.img) {
-    imageId = rowData.img;
-    tmImageBlob = getImageFromDriveId(rowData.img);
+    imageId = normalizedDriveFileId(rowData.img);
+    tmImageBlob = getImageFromDriveId(imageId);
+    if (!tmImageBlob) throw new Error('The saved logo could not be read. Reattach it or explicitly remove it before generation.');
   }
+
+  if (imageId) rowData.img = 'https://drive.google.com/file/d/' + imageId + '/view';
 
   var mergeData = buildCanonicalMergeData(rowData);
 
@@ -443,34 +453,75 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     folderUrl: newFolder.getUrl(),
     tm1Url: tm1Doc ? tm1Doc.getUrl() : null,
     tm48Url: tm48Doc ? tm48Doc.getUrl() : null,
+    tm1Name: tm1Doc ? tm1Doc.getName() : '',
+    tm48Name: tm48Doc ? tm48Doc.getName() : '',
     attachments: attachments,
     imageId: imageId || rowData.img || '',
     imageWarning: imageWarning
   };
 }
 
+function sha256Bytes(bytes) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes).map(function(b) {
+    return ('0' + ((b + 256) % 256).toString(16)).slice(-2);
+  }).join('');
+}
+
+function singleNamedFile(folder, name) {
+  var matches = folder.getFilesByName(name);
+  if (!matches.hasNext()) return null;
+  var file = matches.next();
+  if (matches.hasNext()) throw new Error('Multiple files share the name "' + name + '". Review the folder before retrying.');
+  return file;
+}
+
+function versionedFileName(name, version) {
+  if (version === 1) return name;
+  var dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) + ' (' + version + ')' + name.slice(dot) : name + ' (' + version + ')';
+}
+
+function saveVersionedBlob(folder, name, blob) {
+  var hash = sha256Bytes(blob.getBytes());
+  for (var version = 1; version <= 1000; version++) {
+    var candidate = versionedFileName(name, version);
+    var file = singleNamedFile(folder, candidate);
+    if (file) {
+      if (file.getMimeType() === blob.getContentType() && file.getSize() <= 8 * 1024 * 1024 && sha256Bytes(file.getBlob().getBytes()) === hash) return file;
+    } else return folder.createFile(blob.setName(candidate));
+  }
+  throw new Error('Too many file versions. Review the case folder.');
+}
+
 function generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
-  var existing = folder.getFilesByName(docName);
-  var doc = existing.hasNext()
-    ? existing.next()
-    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
+  var template = DriveApp.getFileById(templateId);
+  var fields = {};
+  // Saving generated references changes bookkeeping time without changing application content.
+  Object.keys(mergeData).sort().forEach(function(key) { if (key !== '{{UPDATED_AT}}') fields[key] = mergeData[key]; });
+  var signature = sha256Bytes(Utilities.newBlob(JSON.stringify({
+    generatorVersion: 1,
+    template: templateId, templateUpdatedAt: template.getLastUpdated().toISOString(),
+    fields: fields, image: imageBlob ? sha256Bytes(imageBlob.getBytes()) : '',
+    placeholder: imagePlaceholder, fallback: fallbackText || ''
+  }), 'application/json').getBytes());
+  var marker = 'BRANDEX_GENERATED_V1:' + signature;
+  var doc = null;
+  for (var version = 1; version <= 1000; version++) {
+    var candidate = versionedFileName(docName, version);
+    var existing = singleNamedFile(folder, candidate);
+    if (existing) {
+      if (existing.getDescription() === marker) return existing;
+    } else { doc = template.makeCopy(candidate, folder); break; }
+  }
+  if (!doc) throw new Error('Too many document versions. Review the case folder.');
   var document = DocumentApp.openById(doc.getId());
   var body = document.getBody();
-
-  for (var key in mergeData) {
-    body.replaceText(escapeRegex(key), (mergeData[key] || "").toString());
-  }
-
+  for (var key in mergeData) body.replaceText(escapeRegex(key), (mergeData[key] || '').toString());
   if (imageBlob) {
-    var inserted = replaceTextWithImage(body, imagePlaceholder, imageBlob);
-    if (!inserted) {
-      body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[IMAGE FAILED]");
-    }
-  } else {
-    body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[NO IMAGE PROVIDED]");
-  }
-
+    if (!replaceTextWithImage(body, imagePlaceholder, imageBlob)) body.replaceText(escapeRegex(imagePlaceholder), fallbackText || '[IMAGE FAILED]');
+  } else body.replaceText(escapeRegex(imagePlaceholder), fallbackText || '[NO IMAGE PROVIDED]');
   document.saveAndClose();
+  doc.setDescription(marker);
   return doc;
 }
 
@@ -486,15 +537,19 @@ function validateRequiredData(rowData) {
   }
 }
 
+function normalizedDriveFileId(value) {
+  var text = String(value || '').trim();
+  if (/^[A-Za-z0-9_-]{10,200}$/.test(text)) return text;
+  if (!/^https:\/\/(drive|docs)\.google\.com\//.test(text)) return '';
+  var match = text.match(/\/d\/([A-Za-z0-9_-]{10,200})(?:[/?#]|$)/) || text.match(/[?&]id=([A-Za-z0-9_-]{10,200})(?:[&#]|$)/);
+  return match ? match[1] : '';
+}
+
 function getImageFromDriveId(imageId) {
   try {
     if (!imageId || imageId.toString().trim() === "") return null;
-    var cleanId = imageId.toString().trim();
-    if (cleanId.indexOf("drive.google.com") !== -1) {
-      var match = cleanId.match(/[-\w]{25,}/);
-      if (match) cleanId = match[0];
-      else return null;
-    }
+    var cleanId = normalizedDriveFileId(imageId);
+    if (!cleanId) return null;
     var file = DriveApp.getFileById(cleanId);
     var mimeType = file.getMimeType();
     if (!mimeType.startsWith("image/")) return null;
@@ -517,27 +572,7 @@ function generateDocuments(rowData, folder, tm1TemplateId, tm48TemplateId, image
 }
 
 function generateWordDoc(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
-  var existing = folder.getFilesByName(docName);
-  var doc = existing.hasNext()
-    ? existing.next()
-    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
-  var document = DocumentApp.openById(doc.getId());
-  var body = document.getBody();
-
-  for (var key in mergeData) {
-    body.replaceText(escapeRegex(key), (mergeData[key] || "").toString());
-  }
-
-  if (imageBlob) {
-    var imageInserted = replaceTextWithImage(body, imagePlaceholder, imageBlob);
-    if (!imageInserted) {
-      body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[IMAGE FAILED]");
-    }
-  } else {
-    body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[NO IMAGE PROVIDED]");
-  }
-
-  document.saveAndClose();
+  return generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel);
 }
 
 function replaceTextWithImage(body, placeholder, imageBlob) {
@@ -551,12 +586,15 @@ function replaceTextWithImage(body, placeholder, imageBlob) {
 
     parent.removeChild(textElement);
     var image = parent.insertInlineImage(childIndex, imageBlob);
-    image.setWidth(200);
-    image.setHeight(200);
+    var width = image.getWidth(), height = image.getHeight();
+    if (!(width > 0 && height > 0)) throw new Error('Logo dimensions are invalid');
+    var scale = Math.min(1, 200 / width, 200 / height);
+    image.setWidth(Math.max(1, Math.round(width * scale)));
+    image.setHeight(Math.max(1, Math.round(height * scale)));
     return true;
   } catch (error) {
     Logger.log("replaceTextWithImage error: " + error.toString());
-    return false;
+    throw new Error('Logo could not be inserted into the generated document. ' + error);
   }
 }
 

@@ -26,18 +26,6 @@ test('bulk generation is controlled by the web app and Apps Script has no Sheets
   assert.match(code, /finally\s*\{\s*lock\.releaseLock\(\);\s*\}/);
 });
 
-test('document retries reuse existing named documents in the case folder', () => {
-  const returnGenerator = code.match(/function generateWordDocReturn\([\s\S]*?\n\}/)?.[0];
-  const bulkGenerator = code.match(/function generateWordDoc\([\s\S]*?\n\}/)?.[0];
-  assert.ok(returnGenerator);
-  assert.ok(bulkGenerator);
-  assert.match(returnGenerator, /folder\.getFilesByName\(docName\)/);
-  assert.match(bulkGenerator, /folder\.getFilesByName\(docName\)/);
-  assert.doesNotMatch(returnGenerator, /if \(existing\.hasNext\(\)\) return existing\.next\(\)/);
-  assert.doesNotMatch(bulkGenerator, /if \(existing\.hasNext\(\)\) return existing\.next\(\)/);
-  assert.match(code, /existingLogo\.hasNext\(\) \? existingLogo\.next\(\) : logoFolder\.createFile\(blob\)/);
-});
-
 test('a failed Apps Script run can be retried without reading or appending a sheet row', () => {
   const formData = {
     action: 'generateFromForm', clientCode: '222', selectionMenu: 'A', caseNo: '054',

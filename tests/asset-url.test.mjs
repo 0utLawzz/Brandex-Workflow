@@ -43,3 +43,38 @@ test('Apps Script thumbnails retain original files and reject non-raster or over
   mime='image/png'; size=1024*1024+1;
   assert.throws(()=>context.getImageThumbnail('1234567890'),/No supported thumbnail/);
 });
+
+test('folder validation checks execution-account capabilities without relying on direct-user permissions', async () => {
+  const code=await readFile(new URL('../Code.gs',import.meta.url),'utf8');
+  const id='1234567890ABCDEFGHIJKLMNO';
+  let status=200;
+  let folder={id,name:'Shared destination',mimeType:'application/vnd.google-apps.folder',trashed:false,capabilities:{canAddChildren:true}};
+  const context=vm.createContext({ScriptApp:{getOAuthToken:()=> 'test-only-execution-token'},UrlFetchApp:{fetch:(url,options)=>{
+    assert.ok(url.startsWith(`https://www.googleapis.com/drive/v3/files/${id}?`));
+    assert.ok(url.includes('supportsAllDrives=true'));
+    assert.equal(options.headers.Authorization,'Bearer test-only-execution-token');
+    return {getResponseCode:()=>status,getContentText:()=>JSON.stringify(folder)};
+  }}});
+  vm.runInContext(code,context);
+  assert.equal(context.validateDriveFolder(id).folderId,id);
+  folder={...folder,capabilities:{canAddChildren:false}};
+  assert.throws(()=>context.validateDriveFolder(id),/needs permission/);
+  folder={...folder,capabilities:{canAddChildren:true},trashed:true};
+  assert.throws(()=>context.validateDriveFolder(id),/needs permission/);
+  folder={...folder,trashed:false}; status=403;
+  assert.throws(()=>context.validateDriveFolder(id),/needs permission/);
+});
+
+test('document logos retain aspect ratio and insertion failures stop generation', async () => {
+  const code=await readFile(new URL('../Code.gs',import.meta.url),'utf8');
+  let width=800,height=200;
+  const image={getWidth:()=>width,getHeight:()=>height,setWidth:value=>{width=value;},setHeight:value=>{height=value;}};
+  const parent={getChildIndex:()=>0,removeChild:()=>{},insertInlineImage:()=>image};
+  const body={findText:()=>({getElement:()=>({getParent:()=>parent})})};
+  const context=vm.createContext({Logger:{log:()=>{}}});
+  vm.runInContext(code,context);
+  assert.equal(context.replaceTextWithImage(body,'{{IMAGE}}',{}),true);
+  assert.equal(width,200); assert.equal(height,50);
+  width=0;
+  assert.throws(()=>context.replaceTextWithImage(body,'{{IMAGE}}',{}),/Logo could not be inserted/);
+});

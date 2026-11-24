@@ -54,6 +54,9 @@ export async function POST(request: Request) {
     }
 
     if (payload.imageBase64 !== undefined) {
+        if (payload.imageName !== undefined && (typeof payload.imageName !== 'string' || !payload.imageName.trim() || payload.imageName.length > 240 || /[\u0000-\u001f]/.test(payload.imageName))) {
+            return Response.json({ ok: false, error: 'Logo file name is invalid or too long.' }, { status: 400 });
+        }
         if (typeof payload.imageBase64 !== 'string' || payload.imageBase64.length > 3 * 1024 * 1024) {
             return Response.json({ ok: false, error: 'Logo image is too large.' }, { status: 413 });
         }
@@ -77,7 +80,7 @@ export async function POST(request: Request) {
                 return Response.json({ ok: false, error: 'Invalid attachment.' }, { status: 400 });
             }
             const attachment = item as Record<string, unknown>;
-            if (typeof attachment.name !== 'string' || typeof attachment.mimeType !== 'string' ||
+            if (typeof attachment.name !== 'string' || !attachment.name.trim() || attachment.name.length > 240 || /[\u0000-\u001f]/.test(attachment.name) || typeof attachment.mimeType !== 'string' ||
                 typeof attachment.dataUrl !== 'string' || !allowedTypes.has(attachment.mimeType)) {
                 return Response.json({ ok: false, error: 'Attachments must be PDF, PNG, or JPEG files.' }, { status: 400 });
             }
@@ -112,8 +115,8 @@ export async function POST(request: Request) {
         if (Object.keys(updates).length) await supabaseDB.updateRecord(recordId, updates as any);
 
         const documents = [
-            generated.tm1Url && { record_id: recordId, file_name: `${payload.folder} - TM-1`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm1Url },
-            generated.tm48Url && { record_id: recordId, file_name: `${payload.folder} - TM-48`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm48Url },
+            generated.tm1Url && { record_id: recordId, file_name: generated.tm1Name || `${payload.folder} - TM-1`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm1Url },
+            generated.tm48Url && { record_id: recordId, file_name: generated.tm48Name || `${payload.folder} - TM-48`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm48Url },
             ...(Array.isArray(generated.attachments) ? generated.attachments.map((attachment: any) => ({
                 record_id: recordId,
                 file_name: attachment.name,

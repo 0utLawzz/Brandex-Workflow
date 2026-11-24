@@ -507,7 +507,7 @@ export default function TrademarkApplicationPage() {
         payload.imageMime = selectedFile.type;
       } else if (retryGeneration && retryImageData && !logoRemoved) {
         payload.imageBase64 = retryImageData;
-        payload.imageName = `${folder.trim()}.png`;
+        payload.imageName = `${folder.trim()}.${retryImageData.startsWith('data:image/jpeg') ? 'jpg' : 'png'}`;
         payload.imageMime = retryImageData.startsWith('data:image/jpeg') ? 'image/jpeg' : 'image/png';
       }
 
@@ -1180,7 +1180,7 @@ export default function TrademarkApplicationPage() {
                 )}
               </div>
 
-              {previewSrc && <button type="button" onClick={() => { setSelectedFile(null); setRetryImageData(''); setPreviewSrc(null); setLogoRemoved(true); }} className="mb-3 text-xs font-bold underline">Remove logo from this case</button>}
+              {previewSrc && <button type="button" onClick={() => { setSelectedFile(null); setRetryImageData(''); setPreviewSrc(null); setLogoRemoved(true); setNoImg('[NO IMAGE PROVIDED]'); }} className="mb-3 text-xs font-bold underline">Remove logo from this case</button>}
 
               {/* Multiple Document Upload */}
               <div className="p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px] mb-4">
