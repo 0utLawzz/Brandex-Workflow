@@ -60,7 +60,7 @@ function formatLocalDateTime(date: Date): string {
 }
 
 export function buildGenerationRetryDraft(record: RecordItem): GenerationRetryDraft {
-  const issueDate = toDateTimeLocalInput(record.issueDate || record.date) || toDateTimeLocalInput(record.createdAt);
+  const issueDate = toDateTimeLocalInput(record.issueDate || record.date);
   return {
     id: Number(record.id),
     serialNo: record.serialNo || '',
@@ -90,4 +90,10 @@ export function buildGenerationRetryDraft(record: RecordItem): GenerationRetryDr
     trackingId: record.trackingId || '',
     imageData: record.img?.startsWith('data:image/') ? record.img : '',
   };
+}
+
+export function findGenerationRetryRecord(records: RecordItem[], id: number): RecordItem | null {
+  if (!Number.isSafeInteger(id) || id < 1) return null;
+  const matches = records.filter(record => Number(record.id) === id);
+  return matches.length === 1 ? matches[0] : null;
 }

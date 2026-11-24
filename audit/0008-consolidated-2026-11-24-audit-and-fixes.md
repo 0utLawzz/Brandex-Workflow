@@ -20,32 +20,36 @@ Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #1
 | Test atomic RPC presence | PASS | `clviaughxebohniopzyg`: both `apply_case_metadata_update` and `apply_case_workflow_transition`; SECURITY INVOKER; EXECUTE ACL only postgres/service_role. Actual behavior retest pending. |
 | Table RLS | PASS | Both projects: clients, trademark_records, trademark_history, trademark_documents, case_series have RLS enabled; no public policies. This does not alone prove application authorization. |
 | Security advisors | PENDING | Production advisor returned five informational RLS-without-policy notices, observed 2026-11-23. No policy changes justified until server authorization audit completes. |
-| Clean install/build | PENDING | Fresh Git clone completed. Host Node v24.22.0/npm 11.19.1; CI uses Node 22. Lockfile/install/build verification pending. |
+| Clean install/build | PASS | Separate clean checkout: npm ci/build on Node 22.23.5 at 8cc90ea; build at 911d16d also PASS. Exact final-head verification remains required after changes. |
 | Findings #01–#17 runtime acceptance | PENDING | Source review started; no new runtime acceptance or production writes performed. |
 
-Next: finish source-to-requirement mapping, verify install/tests, compare database columns/functions/grants and deployment environment isolation; then implement confirmed missing behavior. Preserve one consolidated log here throughout the work.
+Next: complete remaining implementation and security/data checks, then isolated hosted acceptance, dependency-checked final cleanup and one review PR. Preserve production restrictions and this single evidence log.
 
-### Source acceptance map (runtime acceptance remains PENDING)
+### Current acceptance map
 
-| Requirement | Status | Evidence / next gate |
-|---|---|---|
-| #01 full-field persistence | FAIL | Expanded editor exists; metadata RPC called by `lib/supabase-db.ts` is absent from production. Verify every field and attachments against disposable schema. |
-| #02 Picker | FAIL | Client `folder_reference` exists, but no Picker implementation in current application source. Verify Google configuration and server folder validation before integration. |
-| #03 integrated Home | FAIL | `app/page.tsx` only redirects to `/records`; user explicitly requires integrated Home. |
-| #04 breadcrumbs | PENDING | Inspect shared navigation and render every page. |
-| #05 heading | FAIL | `app/records/page.tsx` still renders `Case Records & Workflow Timeline`. |
-| #06–#07 layout/filter/sort | FAIL | Current table headers are static; sorting/filtering in useMemo precedes page slicing (retain dataset scope), but header controls and collapsed filter layout missing. |
-| #08 table/analytics | FAIL | `lib/workspace-preferences.ts` defaults to 25; table lacks separate thumbnail/legal-stage columns. Existing summary needs filing-date audit. |
-| #09 Clients | PENDING | Current directory source/render audit outstanding. |
-| #10–#12 form | PENDING | Shared series exists and is independent in source; verify client selection, all labels, dates and classification against requirements. |
-| #13 progress | FAIL | `app/trademark-application/page.tsx` increments progress by timer every 1300 ms to 88 regardless of operation completion. Replace with actual operation milestones. |
-| #14 canonical mapping | FAIL | `lib/case-fields.ts` covers a subset of persistence fields; Code.gs duplicates merge maps. Full field contract and end-to-end tests required. |
-| #15–#16 shared Settings | FAIL | Settings saves display preferences only in browser; shared series exists separately. Shared branding/integration configuration outstanding. |
-| #17 workflow/folders | FAIL | Missing production RPCs; Code.gs still builds output via current naming helpers; folder hierarchy/selected destination acceptance outstanding. Proof and prefix decisions requested from user. |
-| Backup/restore | FAIL | Manifest explicitly reports external URL-only assets as partial. `restoreBackupJSON` requires full review; transactional history/document/assets restore remains unverified. |
-| CSV identity | FAIL | CaseCsvTools exposes export/template but import remains paused; round-trip acceptance outstanding. |
-| API security | PENDING | Middleware verifies signed session or Basic auth; production missing auth config fails closed. Database POST checks same origin and server service role. Rate limits, request bounds, all route coverage and URL/asset validation still require audit. |
-| Final cleanup | PENDING | Preserve files until dependency and requirement audit completes. AGENT.md/progress/older ADR status statements are visibly stale and must be reconciled at the end. |
+Local PASS describes source/build/automated evidence only. Hosted acceptance stays PENDING until the isolated authenticated preview, PostgreSQL 17 and test Drive flows are exercised.
+
+| Requirement | Local | Hosted/runtime | Evidence / remaining gate |
+|---|---|---|---|
+| #01 full-field persistence | PENDING | PENDING | Additive metadata/create RPCs, changed-field payload, client/category/serial/filing date persistence and rollback tests pass; full editor save/refresh/attachment acceptance remains. Production RPC parity still FAIL in baseline inspection. |
+| #02 Picker | PENDING | PENDING | Folder-only OAuth Picker, independent user/executing-account validation and saved client/case destinations implemented; Google configuration and actual selected-folder generation untested. |
+| #03 integrated Home | PASS | PENDING | Home renders the Records workspace directly; generation stores an actual-success receipt and navigates Home. |
+| #04 breadcrumbs | PASS | PENDING | Shared semantic path trail included in workspace pages; visual/accessibility acceptance pending. |
+| #05 heading | PASS | PENDING | Case Record source heading and build checked. |
+| #06–#07 layout/filter/sort | PENDING | PENDING | Collapsed right-aligned global filters and header filters/sorts operate before pagination in source; full dataset/UI acceptance pending. |
+| #08 table/analytics | PENDING | PENDING | Default 50, segmented references, private logo previews, separate workflow/legal columns, 3-column actions and actual filing-date monthly totals implemented. Conditional actions/responsive layout require final review. |
+| #09 Clients | PENDING | PENDING | Compact searchable/sortable directory, prefix/code, contact editing/CSV and protected linked identities implemented; visual acceptance pending. |
+| #10–#12 form | PENDING | PENDING | Independent series/client identity, stale-number-response cancellation, ID-only retry and separate E-Stamp/filing dates implemented. Copyright conventions and remaining form acceptance need reconciliation. |
+| #13 progress | PENDING | PENDING | Fake timer removed; actual save/generation milestones and Home receipt; opt-in sound/notifications. Animation, reduced-motion and genuine live failures/retries still need acceptance. |
+| #14 canonical mapping | PASS | PENDING | Permanent contract generates Apps Script map; sync and VM mapping tests pass. Actual deployed templates/generated documents untested. |
+| #15–#16 shared Settings | PENDING | PENDING | Revision-checked shared branding and shared series implemented; logo upload, branding propagation and integration state remain. |
+| #17 workflow/folders | PENDING | PENDING | Atomic transitions/retries and distinct database timestamps tested locally; selected folder hierarchy implemented. File naming/dispatch placement, original Excel attachments and unresolved proof/prefix policies remain. |
+| Backup/restore | PASS | PENDING | Consistent raw snapshot, transactional ID maps/history/docs/configuration, checked asset copies, guarded target, content-checked retries and bounded 64-MiB chunk transport pass local tests. Native Google sharing/comments/revisions are not recovered. Hosted files/DB and legacy conversion remain pending. |
+| CSV identity | PENDING | PENDING | Explicit identity/header validation, reviewed blank templates and atomic whole-file case/client imports pass tests. Formula safety, extended full-field round-trip and verified destination mapping remain. |
+| API security | PENDING | PENDING | Signed auth, server-only keys, unified origin check, bounded readers, private raster thumbnails and RPC ACL tests pass. Rate limiting, large normal request/response transport, URL/file validation coverage and final secret review remain. |
+| Final cleanup | PENDING | PENDING | Perform at the end after dependency/reference review; consolidate AGENT.md, stale progress/docs and this checkpoint history. |
+
+Historical baseline observations below retain their original checkpoint context; the matrix above is current.
 
 Baseline verification: `npm test` passed all 46 existing tests on host Node v24.22.0. These tests do not establish production RPC availability, authenticated browser persistence, selected-folder generation or complete restore. Fresh `npm ci` is being checked separately; build/lint/security checks remain pending.
 
@@ -126,6 +130,8 @@ Workspace recovery checkpoint: consistent snapshots now include shared settings 
 Recovery retry integrity checkpoint: additive replacement records destination IDs plus SHA-256 row fingerprints for every restored client/case/history/document row inside the recovery ledger. Cached-success retries compare all four collections under the restore locks; deleted/changed content stops with a review message and is never overwritten. Fingerprinting fixes its timezone to UTC, and internal IDs/hashes are omitted from the public report. Older ledger entries without integrity evidence stop for review. Disposable database suite 15/15 PASS, including changed parent/history, deleted document and cross-timezone retries. Production/test hosted databases unchanged. Read-only git ls-remote confirms current GitHub main still equals 6ec9f6b1d55facf03654bc7c36f2e94b44be90a5. Local merged patches additionally rechecked for PR #1 Drive naming, #3 defaults/navigation, #5 incomplete recovery, #6 paused CSV/Home redirect, #7 reference separators, #8 series validation/migration, #9 edit-field allowlist/workflow guards; this does not substitute for remaining authenticated runtime acceptance.
 
 Logo/security checkpoint: generation persists opaque Drive image IDs, which the table previously rendered as relative URLs and the backup copier rejected. A shared parser now accepts stored IDs without rewriting rows; private case-image GET resolves only the saved logo for an authenticated case and requests a bounded raster thumbnail from Apps Script. No Drive sharing change is made, original image bytes remain untouched, and missing thumbnails show a placeholder. Confirmed Google File.getThumbnail semantics/scopes in [official Apps Script reference](https://developers.google.com/apps-script/reference/drive/file#getThumbnail()). Table/editor previews use this path; document/proof links reject executable/unsupported schemes and credentialed URLs, including server-side document-reference validation. Tests cover opaque-ID byte-copy/remapping, unsafe links, thumbnail/read-only fallback and size/type limits. Full suite 92/92 PASS on Node 22.23.5; typecheck, Apps Script syntax and diff checks PASS; lint zero errors/two existing warnings. New Apps Script action is source-only: live thumbnail/API/authenticated browser/Drive acceptance and current-head build remain PENDING. Production unchanged.
+
+Retry/numbering checkpoint: retry lookup now requires the unique saved numeric case ID and Supabase source; duplicate case names/trademark text never select another row. Missing E-Stamp dates no longer fall back to database creation timestamps. Number calculation is one dependency-aware effect with stale-response cancellation; it checks database errors instead of treating failed reads as an empty dataset, disables the number input while loading and blocks a new save on an unresolved lookup. Removed duplicate mount/event numbering requests and stale hook dependencies. Full suite 93/93 PASS on Node 22.23.5; typecheck PASS; lint now zero errors AND zero warnings. Clean-checkout build at 911d16d PASS. Numbering browser races and new exact-head build remain PENDING. The acceptance matrix above now separates current local evidence from unverified hosted behavior; old checkpoint failures are historical observations.
 
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
