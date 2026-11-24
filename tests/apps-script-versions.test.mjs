@@ -22,7 +22,7 @@ function fixture() {
   const context=vm.createContext({
     DriveApp:{getFileById:id=>id==='template'?template:files.find(file=>file.id===id)},
     DocumentApp:{openById:id=>{opened++;const file=files.find(file=>file.id===id);return {getBody:()=>({replaceText:(pattern,replacement)=>{file.body=file.body.replace(new RegExp(pattern,'g'),()=>replacement);}}),saveAndClose:()=>{if(failSave){failSave=false;throw new Error('temporary save failure');}}};}},
-    Utilities:{newBlob:makeBlob,DigestAlgorithm:{SHA_256:'SHA_256'},computeDigest:(_algorithm,bytes)=>Array.from(createHash('sha256').update(Buffer.from(bytes)).digest())}
+    Utilities:{newBlob:makeBlob,base64Decode:value=>Array.from(Buffer.from(value,'base64')),DigestAlgorithm:{SHA_256:'SHA_256'},computeDigest:(_algorithm,bytes)=>Array.from(createHash('sha256').update(Buffer.from(bytes)).digest())}
   });
   vm.runInContext(code,context);
   return {context,files,folder,makeFile,makeBlob,opened:()=>opened,setStamp:value=>{stamp=value;},failNextSave:()=>{failSave=true;}};
@@ -65,4 +65,18 @@ test('logo/attachment retries compare actual bytes and MIME; replacement retains
   first.bytes=Buffer.from('manually edited');
   assert.notEqual(f.context.saveVersionedBlob(f.folder,'Original Logo.png',f.makeBlob('one','image/png')).id,first.id);
   assert.equal(first.bytes.toString(),'manually edited');
+});
+test('Excel attachments retain original bytes and are versioned on changed retry',()=>{
+  const f=fixture();
+  const xlsx='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const xls='application/vnd.ms-excel';
+  const attachment=(name,mime,content)=>({name,mimeType:mime,dataUrl:`data:${mime};base64,${Buffer.from(content).toString('base64')}`});
+  const form={clientCode:'646',selectionMenu:'A',caseNo:'001'};
+  const first=f.context.saveAdditionalFiles(f.folder,[attachment('Classes.xlsx',xlsx,'PK\u0003\u0004data'),attachment('Legacy.xls',xls,'\u00d0\u00cfdata')],form);
+  assert.equal(first.length,2); assert.equal(first[0].mimeType,xlsx); assert.equal(first[1].mimeType,xls);
+  assert.equal(f.files[0].bytes.toString(),'PK\u0003\u0004data');
+  assert.equal(f.context.saveAdditionalFiles(f.folder,[attachment('Classes.xlsx',xlsx,'PK\u0003\u0004data')],form)[0].fileId,first[0].fileId);
+  const changed=f.context.saveAdditionalFiles(f.folder,[attachment('Classes.xlsx',xlsx,'PK\u0003\u0004changed')],form);
+  assert.notEqual(changed[0].fileId,first[0].fileId); assert.equal(f.files[0].bytes.toString(),'PK\u0003\u0004data');
+  assert.throws(()=>f.context.saveAdditionalFiles(f.folder,[attachment('malware.js','text/javascript','x')],form),/unsupported type/);
 });

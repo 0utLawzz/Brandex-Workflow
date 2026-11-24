@@ -13,6 +13,7 @@ import { buildGenerationRetryDraft, buildGenerationRetryUpdates, findGenerationR
 import type { RecordItem } from '@/lib/standalone-db';
 import { caseLogoSource } from '@/lib/asset-url';
 import { requestWithTransfer } from '@/lib/api-request-client';
+import { CASE_ATTACHMENT_ACCEPT, CASE_ATTACHMENT_MIME_TYPES, CASE_ATTACHMENT_MAX_FILES, CASE_ATTACHMENT_MAX_FILE_BYTES, CASE_ATTACHMENT_MAX_TOTAL_BYTES } from '@/lib/attachment-policy';
 import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
@@ -336,15 +337,15 @@ export default function TrademarkApplicationPage() {
   const handleMultipleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArr = Array.from(e.target.files);
-      const acceptedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+      const acceptedTypes = new Set<string>(CASE_ATTACHMENT_MIME_TYPES);
       const combined = [...additionalFiles, ...filesArr];
       const invalidType = combined.find(file => !acceptedTypes.has(file.type));
-      const tooLarge = combined.find(file => file.size > 4 * 1024 * 1024);
-      if (combined.length > 10 || combined.reduce((total, file) => total + file.size, 0) > 8 * 1024 * 1024 || invalidType || tooLarge) {
+      const tooLarge = combined.find(file => file.size > CASE_ATTACHMENT_MAX_FILE_BYTES);
+      if (combined.length > CASE_ATTACHMENT_MAX_FILES || combined.reduce((total, file) => total + file.size, 0) > CASE_ATTACHMENT_MAX_TOTAL_BYTES || invalidType || tooLarge) {
         e.target.value = '';
         setStatusType('error');
         setStatusMsg(invalidType
-          ? 'Additional files must be PDFs, JPEGs, or PNGs.'
+          ? 'Additional files must be PDFs, JPEGs, PNGs, XLS, or XLSX spreadsheets.'
           : tooLarge
             ? 'Each attachment must be 4 MB or smaller.'
             : 'Attach up to 10 files and keep their combined size under 8 MB.');
@@ -1190,11 +1191,12 @@ export default function TrademarkApplicationPage() {
               {/* Multiple Document Upload */}
               <div className="p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px] mb-4">
                 <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-2 font-bold">
-                  Attach Additional Documents (PDFs, E-Stamp Scans, Power of Attorney)
+                  Attach Additional Documents (PDFs, scans, XLS/XLSX spreadsheets)
                 </label>
                 <input
                   type="file"
                   multiple
+                  accept={CASE_ATTACHMENT_ACCEPT}
                   ref={multiFileInputRef}
                   onChange={handleMultipleFilesChange}
                   className="font-['DM_Mono',monospace] text-[0.75rem]"

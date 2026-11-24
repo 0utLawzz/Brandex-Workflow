@@ -5,6 +5,7 @@ import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 import { previewWriteError } from '@/lib/preview-isolation';
 import { getSupabaseCredentials } from '@/lib/supabase';
+import { CASE_ATTACHMENT_MIME_TYPES, CASE_ATTACHMENT_MAX_FILES, CASE_ATTACHMENT_MAX_FILE_BYTES, CASE_ATTACHMENT_MAX_TOTAL_BYTES } from '@/lib/attachment-policy';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,12 +73,12 @@ export async function POST(request: Request) {
         }
     }
 
-    if (payload.additionalFiles !== undefined && (!Array.isArray(payload.additionalFiles) || payload.additionalFiles.length > 10)) {
+    if (payload.additionalFiles !== undefined && (!Array.isArray(payload.additionalFiles) || payload.additionalFiles.length > CASE_ATTACHMENT_MAX_FILES)) {
         return Response.json({ ok: false, error: 'Attach no more than 10 files.' }, { status: 400 });
     }
 
     if (Array.isArray(payload.additionalFiles)) {
-        const allowedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+        const allowedTypes = new Set<string>(CASE_ATTACHMENT_MIME_TYPES);
         let totalBytes = 0;
         for (const item of payload.additionalFiles) {
             if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -86,19 +87,19 @@ export async function POST(request: Request) {
             const attachment = item as Record<string, unknown>;
             if (typeof attachment.name !== 'string' || !attachment.name.trim() || attachment.name.length > 240 || /[\u0000-\u001f]/.test(attachment.name) || typeof attachment.mimeType !== 'string' ||
                 typeof attachment.dataUrl !== 'string' || !allowedTypes.has(attachment.mimeType)) {
-                return Response.json({ ok: false, error: 'Attachments must be PDF, PNG, or JPEG files.' }, { status: 400 });
+                return Response.json({ ok: false, error: 'Attachments must be PDF, PNG, JPEG, XLS, or XLSX files.' }, { status: 400 });
             }
             const prefix = `data:${attachment.mimeType};base64,`;
             if (!attachment.dataUrl.startsWith(prefix) || !/^[A-Za-z0-9+/=]+$/.test(attachment.dataUrl.slice(prefix.length))) {
                 return Response.json({ ok: false, error: 'Invalid attachment data.' }, { status: 400 });
             }
             const byteLength = Math.floor((attachment.dataUrl.length - prefix.length) * 3 / 4);
-            if (byteLength > 4 * 1024 * 1024) {
+            if (byteLength > CASE_ATTACHMENT_MAX_FILE_BYTES) {
                 return Response.json({ ok: false, error: 'Each attachment must be 4 MB or smaller.' }, { status: 413 });
             }
             totalBytes += byteLength;
         }
-        if (totalBytes > 8 * 1024 * 1024) {
+        if (totalBytes > CASE_ATTACHMENT_MAX_TOTAL_BYTES) {
             return Response.json({ ok: false, error: 'Combined attachments must be 8 MB or smaller.' }, { status: 413 });
         }
     }

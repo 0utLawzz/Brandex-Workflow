@@ -299,7 +299,9 @@ function saveAdditionalFiles(caseFolder, files, formData) {
   if (!files) return [];
   if (!Array.isArray(files) || files.length > 10) throw new Error("Attach no more than 10 files");
 
-  var allowedTypes = { "application/pdf": true, "image/jpeg": true, "image/png": true };
+  // BEGIN GENERATED ATTACHMENT TYPES
+  var allowedTypes = {"application/pdf":true,"image/jpeg":true,"image/png":true,"application/vnd.ms-excel":true,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":true};
+  // END GENERATED ATTACHMENT TYPES
   var totalBytes = 0;
   var saved = [];
   var caseKey = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"]
@@ -310,7 +312,7 @@ function saveAdditionalFiles(caseFolder, files, formData) {
     if (!item || !allowedTypes[item.mimeType] || typeof item.name !== "string" || typeof item.dataUrl !== "string") {
       throw new Error("An attachment has an unsupported type or invalid content");
     }
-    var match = item.dataUrl.match(/^data:(application\/pdf|image\/jpeg|image\/png);base64,([A-Za-z0-9+/=]+)$/);
+    var match = item.dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/);
     if (!match || match[1] !== item.mimeType) throw new Error("An attachment could not be decoded");
 
     var bytes = Utilities.base64Decode(match[2]);
