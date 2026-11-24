@@ -2,9 +2,11 @@ import type { BackupAsset } from './backup-package.ts';
 
 export type AssetCopy = { assetId: string; sourceUrl: string; dataUrl?: string; sha256?: string; size?: number; mimeType?: string; error?: string };
 export function driveFileId(value: string): string | null {
+  // Generation historically persisted Drive's opaque file ID, rather than a URL.
+  if (/^[A-Za-z0-9_-]{10,200}$/.test(value)) return value;
   try {
     const url = new URL(value);
-    if (url.protocol !== 'https:' || !['drive.google.com', 'docs.google.com'].includes(url.hostname)) return null;
+    if (url.protocol !== 'https:' || url.username || url.password || url.port || !['drive.google.com', 'docs.google.com'].includes(url.hostname)) return null;
     const id = url.pathname.match(/\/d\/([A-Za-z0-9_-]+)/)?.[1] || url.searchParams.get('id');
     return id && /^[A-Za-z0-9_-]{10,200}$/.test(id) ? id : null;
   } catch { return null; }

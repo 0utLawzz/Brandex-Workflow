@@ -72,6 +72,9 @@ function doPost(e) {
     if (body.action === "exportBackupAsset") {
       return jsonResponse(exportBackupAsset(body.fileId));
     }
+    if (body.action === "getImageThumbnail") {
+      return jsonResponse(getImageThumbnail(body.fileId));
+    }
     if (body.action === "generateFromForm") {
       var result = processFormSubmission(body);
       return jsonResponse({
@@ -126,6 +129,18 @@ function validateDriveFolder(folderId) {
   var permission = folder.getAccess(Session.getEffectiveUser().getEmail());
   if (permission !== DriveApp.Permission.EDIT && permission !== DriveApp.Permission.OWNER) throw new Error('The generation account needs editor access to the selected folder');
   return { ok: true, folderId: folder.getId(), name: folder.getName(), url: folder.getUrl() };
+}
+
+function getImageThumbnail(fileId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(fileId || ''))) throw new Error('Invalid Drive file ID');
+  var file = DriveApp.getFileById(fileId);
+  if (file.isTrashed() || !/^image\/(png|jpeg|gif|webp)$/.test(file.getMimeType())) throw new Error('Image unavailable');
+  var blob = file.getThumbnail();
+  if (!blob && file.getSize() <= 1024 * 1024) blob = file.getBlob();
+  if (!blob || !/^image\/(png|jpeg|gif|webp)$/.test(blob.getContentType())) throw new Error('No supported thumbnail');
+  var bytes = blob.getBytes();
+  if (bytes.length > 1024 * 1024) throw new Error('Thumbnail exceeds size limit');
+  return { ok: true, dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(bytes) };
 }
 
 function exportBackupAsset(fileId) {

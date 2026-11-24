@@ -14,6 +14,7 @@ import { proxyAppsScript } from './apps-script-proxy';
 import { validateClientContact } from './client-contact';
 import { planAssetRestore, remapAssetUrls } from './restore-assets';
 import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfer-client';
+import { safeAssetHref } from './asset-url';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -884,8 +885,8 @@ class SupabaseDBService {
     const client = getSupabaseClient();
     const byRecord = new Map<number, typeof documents>();
     for (const document of documents) {
-      if (!Number.isSafeInteger(document.record_id) || document.record_id < 1 || !document.file_url) {
-        throw new Error('Every document reference must include a valid case ID and Google Drive URL.');
+      if (!Number.isSafeInteger(document.record_id) || document.record_id < 1 || !safeAssetHref(document.file_url) || !document.file_name || document.file_name.length > 240) {
+        throw new Error('Every document reference requires a valid case ID, file name and safe HTTPS or supported embedded file URL.');
       }
       byRecord.set(document.record_id, [...(byRecord.get(document.record_id) || []), document]);
     }

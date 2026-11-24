@@ -7,6 +7,8 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import DriveFolderPicker from '@/app/components/DriveFolderPicker';
 import MonthlyCaseChart from '@/app/components/MonthlyCaseChart';
+import CaseLogo from '@/app/components/CaseLogo';
+import { safeAssetHref } from '@/lib/asset-url';
 import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
@@ -1251,7 +1253,7 @@ export default function RecordsPage() {
                         </td>
 
                         {/* Col 5: Case Name */}
-                        <td className="p-2 text-center">{r.img ? <a href={r.img} target="_blank" rel="noopener noreferrer" aria-label={`View logo for ${r.folder}`}><Image src={r.img} alt={`${r.folder} logo`} width={40} height={40} unoptimized className="h-10 w-10 rounded border object-contain" /></a> : <span aria-label="No image">—</span>}</td>
+                        <td className="p-2 text-center"><CaseLogo id={r.id} value={r.img} name={r.folder} /></td>
                         <td className="min-w-[240px] w-[30%] p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
                           <HighlightText text={r.folder} query={searchQuery} />
                           {r.tm && (
@@ -1925,7 +1927,7 @@ export default function RecordsPage() {
                 </div>
                 <div className="rounded border-2 border-[#0C0C0C] bg-white p-2">
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-2">Applicant / Mark Image</label>
-                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><Image src={editingRecord.img} alt="Applicant mark" width={56} height={56} className="h-14 w-14 rounded border object-contain" unoptimized /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
+                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><CaseLogo id={editingRecord.id} value={editingRecord.img} name={editingRecord.folder} size={56} /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
                   <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Applicant image must be an image no larger than 8 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
                 </div>
               </div>
@@ -2066,7 +2068,7 @@ export default function RecordsPage() {
               <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
                 <div className="mb-2 flex items-center gap-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold"><Paperclip className="h-4 w-4" /> LINKED CASE ATTACHMENTS</div>
                 {loadingEditingDocuments ? <p className="text-xs text-[#666]">Loading attachments…</p> : editingDocuments.length ? (
-                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={document.file_url} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
+                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={safeAssetHref(document.file_url) || undefined} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
                 ) : <p className="mb-3 text-xs text-[#666]">No linked attachments recorded.</p>}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                   <input value={newDocumentName} onChange={e=>setNewDocumentName(e.target.value)} placeholder="Attachment name" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
@@ -2200,7 +2202,7 @@ export default function RecordsPage() {
                     <span className="text-[#666]">PDF Document</span>
                   </div>
                   <iframe
-                    src={proofModal.url}
+                    src={safeAssetHref(proofModal.url) || undefined}
                     className="w-full flex-1 border-none"
                     title="Proof PDF Viewer"
                   />
@@ -2209,7 +2211,7 @@ export default function RecordsPage() {
                 <div className="relative max-h-[550px] w-full flex items-center justify-center p-2 bg-white border-2 border-[#0C0C0C] rounded shadow-[3px_3px_0_#0C0C0C]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={proofModal.url}
+                    src={safeAssetHref(proofModal.url) || undefined}
                     alt={proofModal.title}
                     className="max-h-[500px] max-w-full object-contain rounded"
                   />
@@ -2223,7 +2225,7 @@ export default function RecordsPage() {
               </span>
               <div className="flex items-center gap-2">
                 <a
-                  href={proofModal.url}
+                  href={safeAssetHref(proofModal.url) || undefined}
                   download={proofModal.docName || 'Brandex_Dispatch_Proof'}
                   className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2 px-4 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] flex items-center gap-1.5 hover:bg-[#0369a1] cursor-pointer"
                 >
