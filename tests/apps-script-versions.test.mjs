@@ -80,3 +80,11 @@ test('Excel attachments retain original bytes and are versioned on changed retry
   assert.notEqual(changed[0].fileId,first[0].fileId); assert.equal(f.files[0].bytes.toString(),'PK\u0003\u0004data');
   assert.throws(()=>f.context.saveAdditionalFiles(f.folder,[attachment('malware.js','text/javascript','x')],form),/unsupported type/);
 });
+test('case Picker destination is used directly while a client destination gets a case subfolder',()=>{
+  const f=fixture();
+  const caseFolder={id:'selected-case'};
+  const created={id:'created-case'};
+  const clientFolder={getFoldersByName:()=>({hasNext:()=>false}),createFolder:name=>{assert.equal(name,'A646-001 CASE');return created;}};
+  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','case'),caseFolder);
+  assert.equal(f.context.resolveCaseOutputFolder(caseFolder,clientFolder,'A646-001 CASE','client'),created);
+});

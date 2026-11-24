@@ -295,6 +295,11 @@ function getOrCreateClientFolder(parentFolder, rawFolderName) {
   return parentFolder.createFolder(folderName);
 }
 
+function resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, destinationMode) {
+  // A case-level Picker choice already is the final case folder.
+  return destinationMode === 'case' ? parentFolder : getOrCreateClientFolder(clientFolder, caseFolderName);
+}
+
 function saveAdditionalFiles(caseFolder, files, formData) {
   if (!files) return [];
   if (!Array.isArray(files) || files.length > 10) throw new Error("Attach no more than 10 files");
@@ -395,7 +400,7 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
     var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
     var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
-    newFolder = getOrCreateClientFolder(clientFolder, caseFolderName);
+    newFolder = resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, selectedDestination ? formData.destinationMode : 'configured-root');
   } else {
     newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
   }

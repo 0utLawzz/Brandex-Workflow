@@ -169,6 +169,8 @@ Hosted rollback discovery and fix: running the client-assignment fixture in a ro
 
 Hosted database fixture checkpoint: ran the existing identity-safe case CSV import and recovery restore/ID-remapping fixtures in exception-wrapped rollback-only blocks on the designated test project. Both PASSed against its PostgreSQL 17 schema. Postflight stayed 10 cases, 0 clients, 0 history, 0 documents and 0 recovery runs. These checks demonstrate hosted database behavior without keeping fixture rows; they do not prove PostgREST joins, browser authentication, Drive file bytes or Preview isolation.
 
+Picker destination checkpoint: Code.gs previously ignored the server-resolved `destinationMode` and always made a case subfolder, even when the operator selected the case folder itself. Case-level selections now use that validated folder directly for Logo/Documents/Dispatch; client-level selections still create/reuse one case subfolder. A VM folder fixture verifies both paths, and merge-contract synchronization passes. This source change is undeployed; actual Google Picker and test-folder generation remain PENDING.
+
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
 | PR | Historical scope and merged output | Unclosed or independently testable condition |
