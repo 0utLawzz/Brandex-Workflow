@@ -259,6 +259,10 @@ Evidence: Apps Script VM tests 6/6 PASS; PGlite integration tests 21/21 PASS, in
 
 Evidence: Apps Script syntax check PASS; Apps Script version/folder tests 7/7 PASS including current naming, series separation, legacy reuse, and ambiguous-match rejection. Apps Script deployment and real test-Drive folder execution remain PENDING.
 
+### 2026-11-25 local acceptance checkpoint
+
+At branch head `026b19a`, `npm test` PASS (122/122), `npm run lint` PASS, `npx tsc --noEmit` PASS, full `npm audit` PASS (0 vulnerabilities), and `npm run build` PASS. The reviewed branch is pushed and its remote head matches local. CI status is PENDING because the GitHub account connector is not connected in this session; the successful Git transport push is not CI evidence. Current live Supabase/Vercel connectors are unavailable; `supabase link` also cannot run without a Supabase access token. No hosted migration, production data write, Apps Script deployment, merge or Vercel deployment occurred.
+
 ### 2026-11-24 Records density checkpoint
 
 **PASS — source and local validation.** The Records workspace now presents a single compact, data-backed workflow summary and the existing monthly filing-date chart. The four large legacy statistic cards and optional consultant portfolio widget are no longer rendered; consultant selection remains available through the collapsible Filters panel. The Settings screen no longer exposes a preference for the removed widget. TypeScript, focused lint, monthly-analytics tests, and workspace-preferences tests PASS. Browser visual verification is PENDING because no controllable browser session is available in this chat; no hosted deployment has changed.
