@@ -27,6 +27,7 @@ test('client assignment updates relationships and audit rows atomically', async 
   try {
     const client = (await db.query("INSERT INTO public.clients(client_code,name,company_name) VALUES('887','SAVED CLIENT','SAVED BUSINESS') RETURNING id")).rows[0].id;
     const cases = (await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no) VALUES('ASSIGN ONE','A','886','001'),('ASSIGN TWO','A','886','002') RETURNING id")).rows.map(row => row.id);
+    await db.query('UPDATE public.trademark_records SET status=NULL WHERE id=$1',[cases[0]]);
     await db.exec('SAVEPOINT bad_assignment');
     await assert.rejects(db.query('SELECT public.assign_cases_to_client($1::bigint[],$2::bigint)', [[cases[0],99999999],client]), /no longer exists/);
     await db.exec('ROLLBACK TO SAVEPOINT bad_assignment');
@@ -36,6 +37,7 @@ test('client assignment updates relationships and audit rows atomically', async 
     const rows = (await db.query('SELECT client_id,client_code,applicant_name,trading_as FROM public.trademark_records WHERE id=ANY($1::bigint[])',[cases])).rows;
     assert.ok(rows.every(row=>String(row.client_id)===String(client) && row.client_code==='887' && row.applicant_name==='SAVED CLIENT' && row.trading_as==='SAVED BUSINESS'));
     assert.equal((await db.query('SELECT count(*)::int AS n FROM public.trademark_history WHERE record_id=ANY($1::bigint[])',[cases])).rows[0].n,2);
+    assert.equal((await db.query('SELECT status FROM public.trademark_history WHERE record_id=$1',[cases[0]])).rows[0].status,'PENDING');
   } finally { await db.exec('ROLLBACK'); }
 });
 test('CSV import is atomic and relates cases, proof documents and history', async () => {
