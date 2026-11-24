@@ -161,6 +161,8 @@ Connected-state recheck (read-only, 2026-11-24): Supabase connection recovered. 
 
 Test-project migration checkpoint: exact index-predicate preflight found **0 indexed rows** and no duplicate identity in the 10 existing test cases. The designated test project already had the three optional client folder columns, but lacked `uq_trademark_records_client_series_case`. Applied tracked additive migration `client_folder_metadata_and_case_identity_audit_20261124` through the Supabase migration tool. Postflight: 10 cases, 0 clients unchanged; identity index present; migration recorded once. Rollback for this test-only step is to remove that newly created index after disabling writes; leave pre-existing columns and all case rows intact. No production DDL/data change. Other migrations and authenticated Preview/Drive acceptance remain PENDING.
 
+Test recovery parity checkpoint: applied additive `consolidated_recovery_schema_and_snapshot_audit_20261124` to the same test project. Postflight: 10 cases/0 clients unchanged; `clients.father_name` and `clients.email` present; `get_recovery_snapshot()` executable by service_role and denied to anon. Rollback: revert callers, revoke/drop the new snapshot function; retain additive columns/data. No production change. The remaining migration chain and hosted backup execution are PENDING.
+
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
 | PR | Historical scope and merged output | Unclosed or independently testable condition |
