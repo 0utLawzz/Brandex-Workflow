@@ -9,7 +9,9 @@ import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
 import { CLASS_DATA, LAW_FIRM_DEFAULT, CATEGORIES, WORKFLOW_STATUSES } from '@/lib/data';
 import { supabaseDB, type CaseSeries } from '@/lib/supabase-db';
-import { buildGenerationRetryDraft, findGenerationRetryRecord } from '@/lib/generation-retry';
+import { buildGenerationRetryDraft, buildGenerationRetryUpdates, findGenerationRetryRecord } from '@/lib/generation-retry';
+import type { RecordItem } from '@/lib/standalone-db';
+import { caseLogoSource } from '@/lib/asset-url';
 import { formatCaseReference, getNextCaseNumber, normalizeCaseSeries, formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
 import { Copy, Check, ExternalLink, AlertTriangle, X, ShieldAlert, BookOpen, ArrowRight, CheckCircle2, Database } from 'lucide-react';
 
@@ -82,6 +84,8 @@ export default function TrademarkApplicationPage() {
   const [lastSavedToAppsScript, setLastSavedToAppsScript] = useState(false);
   const [generationPending, setGenerationPending] = useState(false);
   const [retryImageData, setRetryImageData] = useState('');
+  const [logoRemoved, setLogoRemoved] = useState(false);
+  const retryRecordRef = useRef<RecordItem | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
@@ -187,6 +191,7 @@ export default function TrademarkApplicationPage() {
             return;
           }
           const draft = buildGenerationRetryDraft(existing);
+          retryRecordRef.current = existing;
           setSelectedCategory(draft.category);
           setSelectionMenu(draft.selectionMenu);
           setClientCode(draft.clientCode);
@@ -222,7 +227,7 @@ export default function TrademarkApplicationPage() {
           setStatus(draft.status);
           setTrackingId(draft.trackingId);
           setRetryImageData(draft.imageData);
-          setPreviewSrc(draft.imageData || null);
+          setPreviewSrc(draft.imageData || caseLogoSource(existing.id, existing.img) || null);
           setLastSavedCaseId(retryId);
           setLastSavedSerialNo(draft.serialNo);
           setLastSavedFolder(draft.folder);
@@ -318,6 +323,7 @@ export default function TrademarkApplicationPage() {
       }
 
       setSelectedFile(file);
+      setLogoRemoved(false);
       const reader = new FileReader();
       reader.onload = (ev) => {
         setPreviewSrc(ev.target?.result as string);
@@ -397,7 +403,7 @@ export default function TrademarkApplicationPage() {
       return;
     }
 
-    await submitApplication(false);
+    await submitApplication(generationPending);
   };
 
   const submitApplication = async (retryGeneration: boolean) => {
@@ -420,6 +426,9 @@ export default function TrademarkApplicationPage() {
       return;
     }
     if (retryGeneration) {
+      if (!isValidPakistaniCnic(appCnic)) {
+        setStatusType('error'); setStatusMsg('CNIC must contain exactly 13 digits.'); return;
+      }
       const missing = [
         !folder.trim() && 'case folder',
         !/^\d{1,3}$/.test(clientCode) && 'client code',
@@ -496,7 +505,7 @@ export default function TrademarkApplicationPage() {
         payload.imageBase64 = base64;
         payload.imageName = selectedFile.name;
         payload.imageMime = selectedFile.type;
-      } else if (retryGeneration && retryImageData) {
+      } else if (retryGeneration && retryImageData && !logoRemoved) {
         payload.imageBase64 = retryImageData;
         payload.imageName = `${folder.trim()}.png`;
         payload.imageMime = retryImageData.startsWith('data:image/jpeg') ? 'image/jpeg' : 'image/png';
@@ -548,9 +557,10 @@ export default function TrademarkApplicationPage() {
         conAddr: conAdd.trim().toUpperCase(),
         img: payload.imageBase64 || '',
         noImg,
-        filingProcess: 'APPLICATION FILED',
+        filingProcess: 'PENDING',
         });
         if (!newRec?.id) throw new Error('Supabase did not confirm the new case ID.');
+        retryRecordRef.current = newRec;
         recordSavedToSupabase = true;
         insertedRecordId = newRec.id;
         setLastSavedCaseId(insertedRecordId);
@@ -558,6 +568,24 @@ export default function TrademarkApplicationPage() {
         setLastSavedFolder(payload.folder);
         setLastSavedToSupabase(recordSavedToSupabase);
         setLastSavedToAppsScript(false);
+      }
+
+      if (retryGeneration) {
+        const original = retryRecordRef.current;
+        if (!insertedRecordId || !original || original.id !== insertedRecordId) throw new Error('Reload the saved case before retrying. No new case was created.');
+        const draft = {
+          ...buildGenerationRetryDraft(original), category: selectedCategory, selectionMenu, clientCode, caseNo,
+          clientId: selectedClientId ? Number(selectedClientId) : original.clientId ?? null,
+          classNo, classDesc, conName, conAddr: conAdd, folder, tm, appType, appName, appSo, appCnic,
+          issueDate, expiryDate, filingDate, appTrade, appAdd, year, noImg, trackingId,
+        };
+        const updates = buildGenerationRetryUpdates(original, draft, payload.issueDate, logoRemoved ? '' : selectedFile ? payload.imageBase64 : undefined);
+        if (Object.keys(updates).length) {
+          setProgressPercent(30); setProgressLabel('Saving changes to the existing case');
+          const saved = await supabaseDB.updateRecordWithHistory(insertedRecordId, updates, 'Application details edited before document retry');
+          if (!saved) throw new Error('Retry changes were not confirmed saved.');
+          retryRecordRef.current = saved;
+        }
       }
 
       if (!retryGeneration && !insertedRecordId) throw new Error('The saved case could not be found for document generation.');
@@ -663,6 +691,13 @@ export default function TrademarkApplicationPage() {
   };
 
   const handleReset = () => {
+    retryRecordRef.current = null;
+    setRetryImageData('');
+    setLogoRemoved(false);
+    setLastSavedSerialNo('');
+    setLastSavedFolder('');
+    setLastSavedToAppsScript(false);
+    setStatusLinks(null);
     setGenerationPending(false);
     setLastSavedCaseId(null);
     setLastSavedToSupabase(false);
@@ -677,7 +712,7 @@ export default function TrademarkApplicationPage() {
     setFilingDate('');
     setAppTrade('');
     setAppAdd('');
-    setStatus('GENERATING APPLICATION');
+    setStatus('IN REVIEW');
     setTrackingId('');
     setNoImg('[TEXT HERE]');
     setPreviewSrc(null);
@@ -694,7 +729,7 @@ export default function TrademarkApplicationPage() {
 
       <div className="max-w-[880px] w-full mx-auto p-4 sm:p-7 pb-16 flex-1">
         <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">Case Generator</h1>
+          <h1 className="font-['Bebas_Neue'] text-[1.9rem] tracking-[1px]">{generationPending ? 'Case Documents' : 'Create Case'}</h1>
           <div className="flex gap-2.5 flex-wrap">
             <Link href="/clients" className="font-['DM_Mono',monospace] text-[0.72rem] tracking-[1px] py-2 px-3.5 bg-[#FAF6EE] border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[3px_3px_0_#0C0C0C] no-underline text-[#0C0C0C]">
               Manage Clients
@@ -878,7 +913,7 @@ export default function TrademarkApplicationPage() {
                     <option value="">-- SELECT CLASS (1–45) --</option>
                     {classList.map(c => (
                       <option key={c.n} value={c.n}>
-                        Class {c.n} {c.type !== 'GOODS' ? `(${c.type})` : ''}
+                        {c.n}
                       </option>
                     ))}
                   </select>
@@ -890,10 +925,11 @@ export default function TrademarkApplicationPage() {
                   <select
                     required
                     value={status}
+                    disabled={generationPending}
                     onChange={e => setStatus(e.target.value)}
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#FAF6EE] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px] cursor-pointer"
                   >
-                    {WORKFLOW_STATUSES.map(s => (
+                    {(generationPending ? [status] : WORKFLOW_STATUSES).map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -1144,6 +1180,8 @@ export default function TrademarkApplicationPage() {
                 )}
               </div>
 
+              {previewSrc && <button type="button" onClick={() => { setSelectedFile(null); setRetryImageData(''); setPreviewSrc(null); setLogoRemoved(true); }} className="mb-3 text-xs font-bold underline">Remove logo from this case</button>}
+
               {/* Multiple Document Upload */}
               <div className="p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px] mb-4">
                 <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-2 font-bold">
@@ -1186,7 +1224,7 @@ export default function TrademarkApplicationPage() {
                 disabled={submitting || seriesLoading || !!seriesLoadError || (!generationPending && seriesOptions.every(item => !item.is_active))}
                 className="font-['DM_Mono',monospace] text-[0.9rem] font-bold tracking-[1px] uppercase py-3.5 px-6 bg-[#C94A00] text-white border-[2.5px] border-[#0C0C0C] rounded-[6px] shadow-[5px_5px_0_#0C0C0C] cursor-pointer hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[7px_7px_0_#0C0C0C] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
               >
-                {submitting ? 'Saving & Generating Case...' : '⚡ Generate & Save Case Documents'}
+                {submitting ? 'Saving & Generating Case...' : generationPending ? 'Retry Case Documents' : 'Create Case & Generate Documents'}
               </button>
               <button
                 type="button"

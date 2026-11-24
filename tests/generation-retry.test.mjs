@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildGenerationRetryDraft, findGenerationRetryRecord, toDateTimeLocalInput } from '../lib/generation-retry.ts';
+import { buildGenerationRetryDraft, buildGenerationRetryUpdates, findGenerationRetryRecord, toDateTimeLocalInput } from '../lib/generation-retry.ts';
 
 test('converts Apps Script display dates into local datetime input values', () => {
   assert.equal(toDateTimeLocalInput('17-NOV-2026 11:59 AM'), '2026-11-17T11:59');
@@ -16,6 +16,19 @@ test('retry selects a unique saved ID even when names and trademark numbers are 
   assert.equal(findGenerationRetryRecord(records,NaN),null);
   const draft=buildGenerationRetryDraft({id:2,date:'',createdAt:'2026-11-24T12:00:00Z'});
   assert.equal(draft.issueDate,'');
+});
+
+test('retry edits persist without resetting workflow/legal stage, dates or missing legacy fields', () => {
+  const original={id:99,status:'APPROVED',filingProcess:'EXAMINATION / REPLY',folder:'ORIGINAL',date:'2026-11-24',appName:'PERSON',notes:'Keep this',img:'1234567890ABCDEFGHIJKLMNO'};
+  const draft=buildGenerationRetryDraft(original);
+  assert.deepEqual(buildGenerationRetryUpdates(original,draft,'24-NOV-2026 12:00 AM'),{});
+  const updates=buildGenerationRetryUpdates(original,{...draft,appSo:'ADDED FATHER',appAdd:'ADDED ADDRESS',status:'IN REVIEW',appName:'UPDATED'},'24-NOV-2026 12:00 AM');
+  assert.deepEqual(updates,{appName:'UPDATED',fatherName:'ADDED FATHER',address:'ADDED ADDRESS'});
+  assert.deepEqual(buildGenerationRetryUpdates(original,{...draft,issueDate:'2026-11-25T10:00'},'25-NOV-2026 10:00 AM'),{date:'25-NOV-2026 10:00 AM',issueDate:'25-NOV-2026 10:00 AM'});
+  assert.deepEqual(buildGenerationRetryUpdates(original,draft,'ignored',''),{img:''});
+  const pending = {...original,tm:'PENDING'};
+  assert.deepEqual(buildGenerationRetryUpdates(pending,{...buildGenerationRetryDraft(pending),tm:''},'ignored'),{});
+  assert.throws(()=>buildGenerationRetryUpdates(original,{...draft,id:100},'ignored'),/identity changed/);
 });
 
 test('restores existing case and applicant values for retry without inventing missing legal details', () => {

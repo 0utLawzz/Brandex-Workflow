@@ -1,4 +1,5 @@
 import type { RecordItem } from './standalone-db';
+import { buildCaseEditUpdates } from './case-edit-payload.ts';
 
 export interface GenerationRetryDraft {
   id: number;
@@ -96,4 +97,24 @@ export function findGenerationRetryRecord(records: RecordItem[], id: number): Re
   if (!Number.isSafeInteger(id) || id < 1) return null;
   const matches = records.filter(record => Number(record.id) === id);
   return matches.length === 1 ? matches[0] : null;
+}
+
+/** Retry saves only deliberately edited fields; workflow, legal stage and missing values survive. */
+export function buildGenerationRetryUpdates(original: RecordItem, draft: GenerationRetryDraft, formattedIssueDate: string, imageData?: string): Partial<RecordItem> {
+  if (draft.id !== original.id) throw new Error('Retry case identity changed. Reload the saved case.');
+  const before = buildGenerationRetryDraft(original);
+  const current = { ...original };
+  const fields = [
+    ['category','category'], ['selectionMenu','selectionMenu'], ['clientCode','clientCode'], ['caseNo','caseNo'], ['clientId','clientId'],
+    ['classNo','classNo'], ['classDesc','classDesc'], ['conName','conName'], ['conAddr','conAddr'], ['folder','folder'], ['tm','tm'],
+    ['appType','appType'], ['appName','appName'], ['appSo','fatherName'], ['appCnic','cnic'], ['expiryDate','expiryDate'],
+    ['filingDate','filingDate'], ['appTrade','appTrade'], ['appAdd','address'], ['year','year'], ['noImg','noImg'], ['trackingId','trackingId']
+  ] as const;
+  for (const [input, field] of fields) {
+    if (input === 'tm' && before.tm === 'PENDING' && !draft.tm) continue;
+    if (draft[input] !== before[input]) current[field] = draft[input] as never;
+  }
+  if (draft.issueDate !== before.issueDate) { current.date = formattedIssueDate; current.issueDate = formattedIssueDate; }
+  if (imageData !== undefined && imageData !== original.img) current.img = imageData;
+  return buildCaseEditUpdates(current, original);
 }

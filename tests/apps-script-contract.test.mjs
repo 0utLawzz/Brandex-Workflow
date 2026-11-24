@@ -59,7 +59,7 @@ test('a failed Apps Script run can be retried without reading or appending a she
     processRowAndReturnLinks: () => {
       generationAttempts += 1;
       if (generationAttempts === 1) throw new Error('temporary Docs failure');
-      return { folderUrl: 'folder', tm1Url: 'tm1', tm48Url: 'tm48' };
+      return { folderUrl: 'folder', tm1Url: 'tm1', tm48Url: 'tm48', imageId:'saved-logo-id' };
     },
   };
   const process = vm.runInNewContext(`${helpers}\nprocessFormSubmission`, context);
@@ -68,7 +68,19 @@ test('a failed Apps Script run can be retried without reading or appending a she
   const retryResult = process(formData);
   assert.equal(retryResult.serialNo, 'PB-ISB-TEST');
   assert.equal(retryResult.folderUrl, 'folder');
+  assert.equal(retryResult.imageId,'saved-logo-id');
   assert.equal(generationAttempts, 2);
+});
+
+test('generation response preserves the actual saved logo ID through the web endpoint', () => {
+  const handler=code.match(/function doPost\([\s\S]*?\n\}/)?.[0];
+  const run=vm.runInNewContext(`${handler}\ndoPost`,{
+    isAuthorizedBackendRequest:()=>true,
+    processFormSubmission:()=>({serialNo:'SERIAL',folderUrl:'folder',imageId:'saved-logo-id'}),
+    jsonResponse:value=>value
+  });
+  const result=run({postData:{contents:JSON.stringify({action:'generateFromForm'})}});
+  assert.equal(result.ok,true); assert.equal(result.imageId,'saved-logo-id');
 });
 
 test('form retries resend the original logo and attachments through idempotent Apps Script storage', async () => {

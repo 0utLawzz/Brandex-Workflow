@@ -80,6 +80,7 @@ function doPost(e) {
       return jsonResponse({
         ok: true,
         serialNo: result.serialNo,
+        imageId: result.imageId || '',
         folderUrl: result.folderUrl,
         tm1Url: result.tm1Url,
         tm48Url: result.tm48Url,
@@ -331,6 +332,7 @@ function processFormSubmission(data) {
 
     return {
       serialNo: serial,
+      imageId: processResult.imageId || '',
       folderUrl: processResult.folderUrl,
       tm1Url: processResult.tm1Url,
       tm48Url: processResult.tm48Url,
