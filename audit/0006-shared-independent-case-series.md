@@ -12,7 +12,7 @@
 - Create Case currently accepts a typed series value and presents the legacy values `A`, `X`, `N`, and `B` as a browser datalist. Custom values can also be typed.
 - Settings currently persists display preferences in browser local storage. It does not provide an organization-wide series registry.
 - Client/case data is stored in Supabase. Browser requests use the protected `/api/database` route; the route is protected by the application authentication middleware and uses a server-only Supabase service-role credential.
-- The live schema audit recorded in `AGENT_PROGRESS.md` found no existing shared settings/series table. The application must not rely on browser-local storage for shared business configuration.
+- The earlier live schema audit found no existing shared settings/series table (its evidence is consolidated in ADR 0008). The application must not rely on browser-local storage for shared business configuration.
 
 ## 2. Problem — why change?
 

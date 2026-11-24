@@ -82,5 +82,6 @@ Add implementation commit(s), PR, deployment status, and any deviations after th
 - [ADR 0005: Full-fidelity case backup and safe restore](0005-full-fidelity-case-backup-restore.md)
 - [ADR 0006: Shared independent case-series management](0006-shared-independent-case-series.md)
 - [ADR 0007: Complete case editing and guarded workflow transitions](0007-complete-case-edit-workflow.md)
+- [ADR 0008: Consolidated audit, acceptance matrix, and release evidence](0008-consolidated-2026-11-24-audit-and-fixes.md)
 
-New ADRs should be added to this index.
+ADR 0008 is the only current task, acceptance, environment-evidence, and rollout log. Historical ADRs retain their original decision context and may include superseded plans; use ADR 0008 for current status. New decision ADRs should be added to this index.

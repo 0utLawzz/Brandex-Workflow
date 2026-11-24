@@ -12,7 +12,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - Render application status as escaped React text instead of injecting HTML.
 - Require authenticated, non-cacheable app responses and proxy Apps Script access with a server-only token.
 - Remove legacy Supabase/Postgres helpers, including an unused SQL modal with permissive example policies.
-- Stop bundling sample client and case data with CNIC-like values; new stores now start empty.
+- Remove unused public sample client/case CSVs containing personal-like records; downloads generate blank header templates in the app.
 - Enforce PNG/JPEG-only logo uploads with a 2 MB maximum.
 
 ### Fixed
@@ -23,6 +23,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Maintenance
 - Ignore and remove tracked Next.js development output and remove duplicate/invalid unused assets.
 - Use a committed npm lockfile and `npm ci` in CI and deployment instructions.
+- Remove the unused Bun lockfile; `package-lock.json` is the single dependency lock used by the declared runtime and CI.
 - Pin patched PostCSS and safe TypeScript ESLint peer dependencies; add `npm audit` to CI.
 - Update contributor, deployment, and security documentation for the current Next.js app.
 

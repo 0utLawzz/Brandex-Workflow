@@ -1,57 +1,60 @@
 # ADR 0008 — Consolidated Audit, User Findings and Repository Reset Baseline
 
 **Date:** 2026-11-24  
-**Status:** Active audit and implementation authorized by user on 2026-11-24; production migration/merge/deployment require separate confirmation
+**Status:** Active consolidated review; production migration, merge, and production deployment require separate explicit confirmation
 **Baseline:** GitHub `main` at PR #9 merge `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`  
 **Scope:** PRs #1–#9 + user findings #01–#17 + security, runtime, deployment, data safety, developer experience, documentation and code hygiene.
 
-## Decision — Single source of truth from November 24
+## Decision — Single current audit and task log
 
-### Current execution evidence — 2026-11-24 reset
+### Current execution evidence — 2026-11-25
 
-Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #10 head `5a28bcb5c0ef1952e9a9920d34be9975dd2edf5e`. User's current authorization supersedes planning-only restrictions below for implementation and dependency-checked final cleanup. Production restrictions remain in force. Historical implementation records retain their original dates and are not current status claims.
+Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #10 head `5a28bcb5c0ef1952e9a9920d34be9975dd2edf5e`. Current pushed head: `8eefcd0614546c9cf111123a004058005b14f775`. User authorized the complete audit, implementation, cleanup, and small pushed backup commits. Production migration, merge, and Production deployment still require separate explicit confirmation. This section is current; dated checkpoints below are historical evidence and do not override it.
 
 | Gate | Status | Independently observed evidence |
 |---|---|---|
-| PR #1–#9 merged | PASS | GitHub fetch of all nine PRs confirms merged; #9 merge `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`. Feature verification remains pending. |
-| Baseline preview built | PASS | Vercel `dpl_5BhpTs1g5KUKP8jpYQgmtaTojzQ1`, READY, PR #10 head `5a28bcb`; build readiness only. |
-| Production commit | PASS | Vercel `dpl_BQX9YQKPhbH136nfiewzqVztqDbe`, READY, production target, main `6ec9f6b`. |
-| Production atomic RPC parity | FAIL | Read-only pg_proc query on `pjthtvkzuthxwpvcdqxy`: no `apply_case_%` functions. Current `lib/supabase-db.ts` invokes both workflow and metadata RPCs. Production save/transition success cannot be claimed. |
-| Test atomic RPC presence | PASS | `clviaughxebohniopzyg`: both `apply_case_metadata_update` and `apply_case_workflow_transition`; SECURITY INVOKER; EXECUTE ACL only postgres/service_role. Actual behavior retest pending. |
-| Table RLS | PASS | Both projects: clients, trademark_records, trademark_history, trademark_documents, case_series have RLS enabled; no public policies. This does not alone prove application authorization. |
-| Security advisors | PENDING | Production advisor returned five informational RLS-without-policy notices, observed 2026-11-23. No policy changes justified until server authorization audit completes. |
-| Clean install/build | PASS | Separate clean checkout: fresh npm ci and Node-22 production build at 7f584cc PASS, zero dependency vulnerabilities. Exact final-head verification remains required after changes. |
-| Findings #01–#17 runtime acceptance | PENDING | Source review started; no new runtime acceptance or production writes performed. |
+| PR #1–#9 merged | PASS | GitHub REST API verified all nine merged PRs on 2026-11-25; PR #9 merge is `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`. Their files/scopes were inventoried and reconciled below. |
+| PR #10 | PENDING | Still open as a draft at baseline head `5a28bcb`; it is the one review PR to update after final cleanup and checks. |
+| Consolidated branch pushed | PASS | `audit/consolidated-implementation-2026-11-24` remote matches `8eefcd0614546c9cf111123a004058005b14f775`. |
+| Current Vercel Preview deployment | PASS / auth pending | GitHub deployment API reports Preview success for exact head `8eefcd0` at `https://brandex-workflow-lbcvcrjpo-projectsb.vercel.app`. Anonymous HEAD redirects to Vercel SSO. Authenticated app and data-flow acceptance is PENDING. |
+| Production deployment baseline | PASS / live recheck pending | Latest GitHub-reported Production deployment is `6ec9f6b` at `https://brandex-workflow-irkyvboie-projectsb.vercel.app`, completed 2026-11-23. Current production UI/config was not inspected in this turn. |
+| Production atomic RPC parity | FAIL — last observed 2026-11-24 | Prior read-only query on `pjthtvkzuthxwpvcdqxy` found no `apply_case_%` functions although `lib/supabase-db.ts` calls workflow and metadata RPCs. Current recheck is PENDING because Supabase connection/token is unavailable. Treat production save/transition as unverified and do not migrate without fresh preflight. |
+| Test Supabase schema/RPCs | PENDING — last observed 2026-11-24 | Prior isolated project `clviaughxebohniopzyg` had the tracked chain applied with rollback fixtures; the new optional-proof migration has only been applied in local disposable databases. Hosted schema/parity recheck is PENDING. |
+| Production/test RLS and security advisors | PENDING — last observed 2026-11-23/24 | Earlier observations found RLS enabled and no public policies, plus informational advisor notices. This does not prove current authorization; fresh read-only inspection is pending. |
+| Local exact-head verification | PASS | At `8eefcd0`: `npm test` 123/123, lint, TypeScript, production build, `git diff --check`; PostgreSQL 17 applied 22 migrations and passed 3 rollback fixtures and recovery ACL check. |
+| GitHub CI exact-head verification | PENDING | No CI run is associated with the implementation branch yet. The Supabase Preview check for its Vercel deployment is skipped. Update PR #10 to this branch after cleanup to trigger PR checks. |
+| Clean-clone exact-head verification | PENDING | Clean clone passed at `2f79405`; rerun after final cleanup and current head. |
+| Authenticated Preview, real test Drive, and production parity | PENDING | Preview is behind Vercel SSO; no authenticated session or Drive test target is available in this execution context. Production data/deployment has not been changed. |
 
-Next: complete remaining implementation and security/data checks, then isolated hosted acceptance, dependency-checked final cleanup and one review PR. Preserve production restrictions and this single evidence log.
+Next: rerun clean-clone checks on the cleanup commit, fast-forward PR #10's head to the consolidated branch, collect CI evidence, and present final evidence plus the production approval gate. Preserve production restrictions and this single log.
 
 ### Current acceptance map
 
-Local PASS describes source/build/automated evidence only. Hosted acceptance stays PENDING until the isolated authenticated preview and test Drive flows are exercised. Local PostgreSQL 17 migration/fixture checks have passed; hosted schema/cache behavior remains unverified.
+The matrix separates local automated/source evidence from hosted runtime acceptance. A local PASS does not imply authenticated UI, current schema, Drive, or production behavior. Hosted acceptance stays PENDING until isolated Preview and test Drive flows are exercised.
 
 | Requirement | Local | Hosted/runtime | Evidence / remaining gate |
 |---|---|---|---|
-| #01 full-field persistence | PENDING | PENDING | Additive metadata/create RPCs, changed-field payload, client/category/serial/filing date persistence and rollback tests pass; full editor save/refresh/attachment acceptance remains. Production RPC parity still FAIL in baseline inspection. |
-| #02 Picker | PENDING | PENDING | Folder-only OAuth Picker, independent user/executing-account validation and saved client/case destinations implemented; Google configuration and actual selected-folder generation untested. |
+| #01 full-field persistence | PARTIAL | PENDING | Changed-field edit payload, metadata/create RPCs, and local transactional integration tests pass. Authenticated edit, refresh, and attachment acceptance remains; production RPC parity last failed on 2026-11-24 and must be rechecked. |
+| #02 Picker | PARTIAL | PENDING | Folder-only Picker, dual permission validation, persistent client/case destinations, and selected-folder generation routing are implemented and locally checked. Google configuration, authenticated Picker, and real selected-folder output remain untested. |
 | #03 integrated Home | PASS | PENDING | Home renders the Records workspace directly; generation stores an actual-success receipt and navigates Home. |
 | #04 breadcrumbs | PASS | PENDING | Shared semantic path trail included in workspace pages; visual/accessibility acceptance pending. |
 | #05 heading | PASS | PENDING | Case Record source heading and build checked. |
-| #06–#07 layout/filter/sort | PENDING | PENDING | Collapsed right-aligned global filters and header filters/sorts operate before pagination in source; full dataset/UI acceptance pending. |
-| #08 table/analytics | PENDING | PENDING | Default 50, segmented references, private logo previews, separate workflow/legal columns, six 3x2 actions and actual filing-date monthly totals implemented. Responsive layout, charts and real data require final review. |
-| #09 Clients | PENDING | PENDING | Compact searchable/sortable directory, prefix/code, contact editing/CSV and protected linked identities implemented. Bulk assignment now updates client links and audit rows atomically; visual/runtime acceptance pending. |
-| #10–#12 form | PENDING | PENDING | Independent series/client identity, stale-number-response cancellation, ID-only retry and separate E-Stamp/filing dates implemented. Copyright conventions and remaining form acceptance need reconciliation. |
-| #13 progress | PENDING | PENDING | Fake timer removed; actual save/generation milestones and Home receipt; opt-in sound/notifications. Animation, reduced-motion and genuine live failures/retries still need acceptance. |
+| #06–#07 layout/filter/sort | PARTIAL | PENDING | Collapsed right-aligned global filters and header filters/sorts are applied before pagination in source. No authenticated visual/dataset interaction acceptance was possible. |
+| #08 table/analytics | PARTIAL | PENDING | Default 50, segmented references, private logo previews, distinct workflow/legal columns, six primary actions in 3×2 layout, and filing-date analytics are implemented and covered by source/tests. Responsive and real-data UI acceptance remains. |
+| #09 Clients | PARTIAL | PENDING | Search/sort, prefix/code, contact fields/CSV, hidden-by-default CNIC, and guarded client assignment are implemented; assignment transaction has local DB coverage. Visual and hosted data acceptance remains. |
+| #10–#12 form | PARTIAL | PENDING | Independent identity segments, stale-number response cancellation, ID-based retry, separate date fields, and numeric classification are implemented. Full authenticated form/generation acceptance remains. |
+| #13 progress | PARTIAL | PENDING | Fake timer removed; save/generation milestones, success/error handling, and opt-in preferences are implemented. Real integration failure/retry and accessible visual behavior remain untested. |
 | #14 canonical mapping | PASS | PENDING | Permanent contract generates Apps Script map; sync and VM mapping tests pass. Actual deployed templates/generated documents untested. |
-| #15–#16 shared Settings | PENDING | PENDING | Revision-checked shared branding and shared series implemented; logo upload, branding propagation and integration state remain. |
-| #17 workflow/folders | PENDING | PENDING | Atomic transitions/retries and distinct database timestamps tested locally; selected folder hierarchy implemented. Original XLS/XLSX attachments and strict dispatch/delivery file-type checks pass focused tests. Actual proof upload into Dispatch and unresolved proof/prefix policies remain. |
+| #15–#16 shared Settings | PARTIAL | PENDING | Revision-checked shared branding and shared series have local tests. Hosted logo upload, cross-user propagation, Picker configuration, and integration state remain unverified. |
+| #17 workflow/folders | PASS | PENDING | Atomic workflow/history/document transitions, optional dispatch proof, required delivery receipt, per-case proof mapping, folder routing/naming, and legacy-folder ambiguity handling pass local PGlite/PostgreSQL 17/Apps Script VM checks. Hosted schema, real Drive upload/output, and timestamps in the live UI remain pending. |
 | Backup/restore | PASS | PENDING | Consistent raw snapshot, transactional ID maps/history/docs/configuration, checked asset copies, guarded target, content-checked retries and bounded 64-MiB chunk transport pass local tests. Native Google sharing/comments/revisions are not recovered. Hosted files/DB and legacy conversion remain pending. |
-| CSV identity | PENDING | PENDING | Explicit identity/header validation, reviewed blank templates and atomic whole-file case/client imports pass tests. Formula safety, extended full-field round-trip and verified destination mapping remain. |
-| API security | PENDING | PENDING | Signed auth, server-only keys, unified origin check, bounded readers, private raster thumbnails and RPC ACL tests pass. Bounded normal request/response transport and preview-isolation checks pass local unit/SQL tests, while real HTTP and hosted acceptance remain. Rate limiting, URL/file validation coverage and final secret review remain. |
-| Final cleanup | PENDING | PENDING | Perform at the end after dependency/reference review; consolidate AGENT.md, stale progress/docs and this checkpoint history. |
+| CSV identity | PASS | PENDING | Whole-file client/case identity validation, round trips, duplicate/mismatch rejection, and transactional SQL imports pass local tests. Hosted import and representative full-field data acceptance remain. |
+| API security | PARTIAL | PENDING | Auth boundaries, same-origin checks, bounded request/transfer handling, file/URL validation, preview isolation, RPC ACLs, and dependency audit have local coverage. Hosted configuration, current RLS/advisors, shared-auth rate limiting, and final secret review remain. |
+| Final cleanup | PASS | PENDING | One root `AGENT.md` remains; obsolete progress/schema docs retired; stale static client/case sample CSVs and unused Bun lock removed after reference checks. `package-lock.json` is the only lock. Current setup/security/deployment docs and ADR index updated. Fresh-clone exact-head checks remain. |
 
 Historical baseline observations below retain their original checkpoint context; the matrix above is current.
 
-Baseline verification: `npm test` passed all 46 existing tests on host Node v24.22.0. These tests do not establish production RPC availability, authenticated browser persistence, selected-folder generation or complete restore. Fresh `npm ci` is being checked separately; build/lint/security checks remain pending.
+Historical baseline verification: `npm test` passed 46 tests on Node v24.22.0 before this consolidated work. That baseline did not establish production RPC availability, authenticated browser persistence, selected-folder generation, or complete restore.
 
 Fresh `npm ci` completed: 349 packages installed, 356 audited, zero reported vulnerabilities. Node 22 CI parity remains pending. Local commit attempt stopped because this checkout has no configured author identity; no global identity configuration changed.
 
@@ -119,7 +122,7 @@ Retry/metadata guard checkpoint: metadata RPC rejects unknown keys before writes
 
 Origin/CSV/filing checkpoint: all write routes now use one explicit origin/protocol/host/port check, including generation/login/logout; missing origin fails closed. Apps Script upstream calls have a 120-second timeout (a timeout does not establish that Google rolled back a run). CSV rejects malformed syntax, duplicate headers, guessed client columns and conflicting modern/legacy references; existing identities are normalized before local duplicate checks. Added optional actual application filing_date (DATE) via CLI-created additive migration, no historical backfill. Create/Edit/CSV/canonical merge mapping and monthly filed counts use that field independently of E-Stamp issue date; corrected misleading editor labels. Local suite 82/82 PASS; typecheck PASS; lint zero errors/two existing dependency warnings. Earlier 80-test checkpoint also passes under Node 22.23.5. A separate clean checkout of 6d691a7 completed npm ci and production build on Node 24.22.0; this is not yet exact-current-head or Node-22 build evidence. Supabase client pinned to resolved 2.119.0 and supported Node/npm ranges declared. Hosted PostgreSQL-17 migration, authenticated browser/Drive, large recovery transport and exact-head clean verification remain PENDING. Production/test hosted schema and deployments unchanged.
 
-This ADR is the *current consolidated work queue* until a subsequent reviewed ADR/release supersedes it. Earlier `AGENT.md`, `AGENT_PROGRESS.md`, PR descriptions and ADRs are **historical evidence**, not automatically current instructions or evidence that work remains undone. Preserve their factual provenance, but never copy unchecked old checkboxes into new tasks. Current source + migrations + live read-only observation + verified tests take precedence. Any conflict must be logged with evidence and resolved before implementing. Do not edit production, migrate data, delete files, merge or deploy during this planning stage.
+This ADR is the current consolidated work queue and evidence log. Earlier progress checklists, PR descriptions, and ADRs are historical evidence, not automatically current instructions or proof that work remains undone. Preserve their factual provenance; never copy unchecked old checkboxes into new tasks. Current source, migrations, live read-only observations, and verified tests take precedence. Log and resolve conflicts before implementation. The user authorized implementation and dependency-checked cleanup; production migration, merge, and production deployment still require separate explicit confirmation.
 
 **Interpretation of status:** CODE FOUND ≠ runtime verified; READY ≠ working; SCREEN VISIBLE ≠ saved/persisted. Label each task VERIFIED / CODE FOUND / PARTIAL / NOT FOUND / NOT TESTED. Do not count the same issue twice.
 
@@ -229,17 +232,12 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 6. **Deployment:** distinguish GitHub CI, Vercel Preview, Production and Apps Script deployed versions/config; prove no Preview-only fix; production and preview may point to same database, so no write tests without isolation.
 7. **Reproducible local dev:** choose one supported package manager+lockfile after examining dependencies, Node version, .gitignore, `.next` and `node_modules` handling, environment templates, clean clone install/build/test and smoke procedures across local, Google AI and Vercel. No credentials in repo.
 
-## One consolidated implementation batch — AFTER audit evidence and user review
+## Consolidated implementation and release sequence
 
-**P0:** data safety, atomic production schema mismatch, security issues; test migrations/restore in disposable target, produce backup/preflight/postflight/rollback and request explicit production go/no-go.
-
-**P1:** full-fidelity backup and restore, safe identity CSV round-trip, client/case Drive Picker + validated folder mapping and generated output; robust edit persistence, statuses, attachment tests.
-
-**P2:** Home/Clients/Create Case/Settings presentation changes (#03–#13, #15–16) with current UI reuse, compact table, dropdowns, analytics based on real timestamps, reduced-motion behavior.
-
-**P3 — LAST: Repository hygiene and canonical documentation (explicit user instruction).** Perform dependency/reference analysis before deleting any code. Remove only demonstrably dead code, temp/generated artifacts mistakenly tracked, obsolete references, duplicated modules and contradictory stale documents; *do not* delete active fallback or historical evidence needed for audit/recovery without checking. Retain **one authoritative agent/rules entry point** (`AGENT.md`), one concise current progress/release status document, one current deployment/setup guide, and a compact indexed ADR decision history as required; avoid doc-on-doc duplication and superseded checklists. Update `.gitignore`, installation instructions, naming, structure and CI checks. Git history preserves old commits; archive/delete obsolete prose only once its current value is safely consolidated. Check imports/references and run full test suite/build after removals.
-
-**P4 Final acceptance:** Run clean-clone `npm ci`/tests/lint/typecheck/build, Apps Script syntax, dependency/security scans, protected browser E2E, disposable DB restores/migrations, Drive folder generation, UI cross-device checks. Open **one consolidated review PR** describing all changes, risks, rollback and evidence. Merge only after checks/review, deploy only with explicit production confirmation, post-deploy smoke verify, and tag release. No claim of 'final' without verified acceptance.
+- **Audit and safety:** PR #1–#9 merge state and file scopes independently verified. Current source and additive migration chain pass local checks. Production RPC absence was last observed on 2026-11-24; current production/test schema, RLS, and migration history require a fresh read-only preflight before any hosted migration.
+- **Application scope:** Findings #01–#17, workflow, folder naming, recovery, and identity CSV are implemented in the consolidated branch to the local status shown above. Hosted acceptance is separate and remains pending wherever listed.
+- **Repository hygiene — last implementation phase:** Check imports, scripts, CI, docs, and generated contracts before removal. Remove only demonstrably obsolete code or documents; preserve active fallback and ADR decision history. Keep one authoritative `AGENT.md`, this current task/evidence log, focused setup/security/deployment references, and no duplicate progress/schema checklist. Update `.gitignore` only for confirmed generated artifacts. Re-run full verification after cleanup.
+- **Final acceptance:** Fresh-clone `npm ci`, tests, lint, typecheck, audit, Apps Script syntax, contract sync, PostgreSQL 17 migrations/rollback fixtures, build, and GitHub PR checks. Authenticated Preview, isolated test database, test Drive generation, and visual responsive checks require working protected credentials and are reported separately. Update the existing draft PR #10 to one consolidated review PR with evidence, risks, and rollback. Do not merge or deploy Production or apply a production migration without separate explicit confirmation.
 
 ## Work-control log
 
@@ -272,3 +270,9 @@ At branch head `2f79405`, `npm test` PASS (122/122), `npm run lint` PASS, `npx t
 **PASS — local implementation.** Per user's explicit decision, dispatch requires approval, date, and tracking detail or a dispatch note; proof is optional. The form enables dispatch without an attachment. When proof is supplied, existing type/size validation, Drive upload to the selected case folder, and same-case document linkage remain active. New additive migration `20261125090000_optional_dispatch_proof.sql` preserves the guarded atomic workflow transition, history write, and only inserts a proof document when a non-empty proof is supplied. Integration coverage checks dispatch with no proof, retained history, empty document pointer, and rejection when dispatch detail is missing.
 
 Evidence: `npm test` PASS (123/123), lint PASS, TypeScript PASS, `git diff --check` PASS, build PASS; PostgreSQL 17 applies 22 migrations and passes its 3 rollback fixtures plus recovery ACL check. Migration has only been exercised in local disposable verification; applying it to hosted test or production remains PENDING. Protected Preview UI and Drive upload checks remain PENDING.
+
+### 2026-11-25 dependency-checked hygiene checkpoint
+
+**PASS — source/document cleanup and local verification.** Replaced stale root handover with one authoritative `AGENT.md`; retired `AGENT_PROGRESS.md` and incorrect `STATUS_AND_COLUMNS.md` after checking references and consolidating current evidence here. Rewrote README, contributor, security, and deployment guidance to match Supabase-backed operations and optional dispatch proof. Indexed this ADR as the only current work/evidence log while preserving ADRs 0001–0007 as historical decisions. Removed the unreferenced Bun lock (runtime, docs, and CI consistently use npm) and two unreferenced public sample CSVs containing client-like personal data (the app generates blank CSV templates). Added `supabase/.temp/` to `.gitignore`; preserved unrelated local build/dependency caches. No application code, database data, hosted environment, or deployment changed in this cleanup.
+
+Evidence: local link scan found no broken Markdown targets; no other root agent/rule files exist; sample CSV names had no code callers; `package-lock.json` remains the only lock. `npm test` 123/123, lint, TypeScript, `npm audit` (0 vulnerabilities), contract sync, Apps Script syntax, diff check, PostgreSQL 17 (22 migrations + 3 rollback fixtures + recovery ACL), and production build all PASS on the cleaned worktree. Exact-head clean-clone verification and GitHub CI remain PENDING until this batch is pushed and PR #10 is updated.

@@ -1,111 +1,40 @@
-# BRANDEX WORKFLOW — Vercel & Production Deployment Guide
+# Deployment and production rollout
 
-## 1. Architecture Overview
+This guide describes the guarded release sequence. It is not authorization to change production. The active audit and exact migration inventory are maintained in [ADR 0008](audit/0008-consolidated-2026-11-24-audit-and-fixes.md).
 
-Brandex Workflow is a full-featured Legal Practice CMS for Brandex Law Associates built on Next.js 15 (App Router).
+## Architecture
 
-### Persistence & Storage Tiers
-1. **Primary Cloud Database (Supabase PostgreSQL):**
-   - Tables: `trademark_records`, `trademark_history`, `trademark_documents`, `clients`.
-   - Stores all trademark filings, case status transitions, courier dispatch tracking, and uploaded proof documents/receipts.
-2. **Local Sovereignty (Browser Engine):**
-   - Implemented via `lib/standalone-db.ts` to ensure 0ms latency and uninterrupted operation even during intermittent internet connectivity.
-3. **Document MailMerge Backend:**
-   - Google Apps Script (`Code.gs`) generates official Form TM-1 and TM-48 documents directly in Google Drive.
+- Vercel hosts the Next.js application and server-side API routes.
+- Supabase PostgreSQL is the operational database. The tracked files in `supabase/migrations/` are additive migrations; `supabase_schema.sql` is a clean-install schema, not a production reset script.
+- Google Apps Script (`Code.gs`) is deployed separately and writes generated documents to Google Drive. GitHub/Vercel deployments do not update Apps Script.
+- Preview must have separately reviewed test Supabase and Apps Script targets. Do not assume Preview is isolated from production based on its URL or Ready status.
 
----
+## Review release
 
-## 2. Deploying to Vercel (Step-by-Step)
+1. Review the consolidated implementation PR, its evidence in ADR 0008, and all required GitHub checks.
+2. Confirm the Vercel Preview is built from the exact PR head and uses the designated test database and test Apps Script deployment.
+3. Run authenticated acceptance in Preview: create/edit a disposable case; validate workflow transitions with and without optional dispatch proof; test selected-folder Picker and generation; exercise CSV and recovery only against disposable targets.
+4. Confirm no production schema, data, Drive file, Apps Script deployment, or Vercel Production deployment changed during review.
 
-### Option A: Deploy via GitHub Integration (Recommended)
+## Production rollout — requires separate explicit approval
 
-1. **Commit and Push Code to GitHub:**
-   ```bash
-   git add .
-   git commit -m "feat: complete brandex cms with supabase persistence, dispatch receipts and clean UI"
-   git push origin main
-   ```
+Before acting on production, obtain the user's explicit approval for the specific migration, merge, and deployment steps. Then:
 
-2. **Import into Vercel:**
-   - Go to [vercel.com](https://vercel.com) and log in.
-   - Click **Add New...** → **Project**.
-   - Select your GitHub repository (`0utLawzz/Brandex-Workflow`).
+1. Use a clean release worktree. This repository currently has no `supabase/config.toml`; if using the Supabase CLI, run `npx supabase init` there and review its generated local config before linking. Sign in with `npx supabase login`, then explicitly link production with `npx supabase link --project-ref pjthtvkzuthxwpvcdqxy`. Do not put access tokens or database passwords in shell history or the repository.
+2. Record current `main`, Vercel Production deployment, production Supabase project/schema, migration history, row counts, RLS/policies, and function signatures. Re-run the production RPC and schema parity preflight; do not rely on historical observations in ADR 0008.
+3. Compare migration histories using `npx supabase migration list --remote`. Inspect the exact pending operation list with `npx supabase db push --dry-run --remote`. Both commands must identify `pjthtvkzuthxwpvcdqxy`; stop if the target differs, history is unknown/out of sync, or the dry run includes unexpected files. Supabase CLI v3 targets local by default, so keep `--remote` explicit.
+4. Take and verify a current database backup and document the recovery point. Preserve existing records, history, document references, IDs, and Drive files.
+5. Stop on schema drift, duplicate identity, missing privileges, or unknown migration history. Reconcile manually applied schema changes through a separately reviewed migration; do not use `migration repair` to guess or suppress mismatches.
+6. After separate explicit approval, apply only the reviewed additive migrations in order with `npx supabase db push --remote`. Do not execute `supabase_schema.sql` against an existing database.
+7. Verify function definitions and EXECUTE grants, RLS and policies, constraints/indexes, migration records, and before/after row counts. Run rollback-only workflow/edit/restore fixtures where authorized; verify production data remains unchanged by those fixtures.
+8. Merge the approved PR only after all required checks and migration evidence pass. Deploy the exact reviewed commit to Vercel Production only after separate approval.
+9. Run a protected, read-only production smoke check first. Any write smoke check requires its own explicit approval and a disposable, clearly identified record. Confirm Apps Script deployment version and Drive output separately.
+10. Record deployment IDs, commit, migration results, checks, and rollback decision in ADR 0008. Never claim success until each external system is independently verified.
 
-3. **Configure Project Settings in Vercel:**
-   - **Framework Preset:** `Next.js` (Automatically detected).
-   - **Root Directory:** `./`
-   - **Build Command:** `npm run build`
-   - **Output Directory:** `.next`
-   - **Node.js Version:** `20.x` or `22.x`
+## Rollback
 
-4. **Add Environment Variables:**
-   Under the **Environment Variables** section, add the following key-value pairs:
+Stop writes if postflight differs from the reviewed expectation. Roll application code back to the last verified deployment. Database rollback must follow the migration-specific instructions and dependency order in the migration/ADR; retain existing data and historical documents. Do not blindly drop additive columns, functions, or tables after they may contain data. Restore from backup only after a separate preflight and explicit approval.
 
-   | Key | Description | Example / Location |
-   | --- | --- | --- |
-   | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL | `https://your-project.supabase.co` |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Anon public key | `eyJhbGciOi...` |
-   | `APP_ACCESS_USER` | Staff login username | `IT` or `admin` |
-   | `APP_ACCESS_PASSWORD` | Staff login password | `YourStrongPassword` |
-   | `APPS_SCRIPT_RECORDS_TOKEN` | Secret token matching Script Property | `your-secret-token` |
-   | `NEXT_PUBLIC_APPS_SCRIPT_URL` | Google Apps Script Web App URL | `https://script.google.com/macros/s/.../exec` |
-   | `NEXT_PUBLIC_SHEET_URL` | Google Sheet URL | `https://docs.google.com/spreadsheets/d/...` |
+## Integration credentials
 
-5. **Deploy:**
-   - Click **Deploy**. Vercel will install dependencies, build the Next.js production bundle, and publish your site with automatic SSL and global CDN caching.
-
----
-
-### Option B: Deploy via Vercel CLI
-
-1. Install Vercel CLI globally:
-   ```bash
-   npm i -g vercel
-   ```
-2. Log in and deploy from project directory:
-   ```bash
-   vercel
-   ```
-3. Deploy to production:
-   ```bash
-   vercel --prod
-   ```
-
----
-
-## 3. Database Schema Setup in Supabase
-
-1. Open your Supabase Dashboard: [https://supabase.com/dashboard](https://supabase.com/dashboard)
-2. Select your project → Navigate to **SQL Editor**.
-3. Open `supabase_schema.sql` from this repository, copy its contents, paste them into the SQL Editor, and click **Run**.
-4. The script creates:
-   - `trademark_records` (including `dispatched_image`, `dispatched_doc_name`, `dispatched_doc_type`, `receipt_image`)
-   - `trademark_history` (audit logs of stage transitions)
-   - `trademark_documents` (file attachments, airway bills, receipts)
-   - `clients` (client ledger profiles)
-   - Row Level Security (RLS) policies allowing secure authenticated access.
-
----
-
-## 4. Google Apps Script Configuration
-
-1. Open your Google Spreadsheet for trademark records.
-2. Go to **Extensions** → **Apps Script**.
-3. Paste the contents of `Code.gs` from this repository.
-4. Under **Project Settings** (gear icon) → **Script Properties**, add:
-   - Property: `RECORDS_ACCESS_TOKEN`
-   - Value: The exact same secret value as your `APPS_SCRIPT_RECORDS_TOKEN`.
-5. Click **Deploy** → **New Deployment** → Type: **Web App**:
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-6. Copy the Web App URL and set it as `NEXT_PUBLIC_APPS_SCRIPT_URL`.
-
----
-
-## 5. Security Checklist
-
-- [x] All database mutations and sensitive operations run securely.
-- [x] Passwords and API tokens are never exposed in client bundles (`process.env.APP_ACCESS_PASSWORD`).
-- [x] Protected routes require authentication via `middleware.ts`.
-- [x] PapaParse parses CSV files safely with zero infinite-loop risks.
-- [x] Dispatch receipts and documents are stored as verified data URLs or Supabase records with size limits (up to 12MB).
+Use the environment variable names in `.env.example` and the deployment's secret store. Do not put private values in this guide, GitHub, browser-visible variables, screenshots, or logs. Picker API keys must have appropriate restrictions; backend tokens remain server-only. Configure Preview and Production independently.

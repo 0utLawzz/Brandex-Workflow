@@ -231,4 +231,4 @@ Required before marking implementation complete:
 - Corrected Settings explanatory text to match the approved model.
 - No historical references, production rows, schema, Apps Script deployment, Drive files, or Vercel production deployment changed.
 - CI and preview verification are pending; this is not yet a merged or deployed release.
-- Remaining work is tracked in `AGENT_PROGRESS.md`, including shared Series management, edit/persistence parity, workflow transitions, full backup restore, CSV round-trip, Google Picker, schema reconciliation, and authenticated QA.
+- At this 2026-11-23 checkpoint, remaining work was tracked in `AGENT_PROGRESS.md`. That progress file has since been retired; use the current acceptance/evidence matrix in [ADR 0008](0008-consolidated-2026-11-24-audit-and-fixes.md).

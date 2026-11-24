@@ -1,46 +1,15 @@
-# Contributing to Brandex Workflow
+# Contributing
 
-Brandex Workflow is a Next.js application with a separate Google Apps Script backend. Keep the two deployment paths and their data boundaries clear when making changes.
+Read [AGENT.md](AGENT.md) for the single authoritative engineering and security rules. Read [ADR 0008](audit/0008-consolidated-2026-11-24-audit-and-fixes.md) for current audit status, evidence, and open acceptance gates; earlier ADRs preserve historical decisions.
 
-## Data and deployment boundaries
+## Local workflow
 
-- Client profiles and case edits use browser `localStorage`; they are not shared across browsers.
-- Application submissions and Records sync go through authenticated Next.js API routes to Google Apps Script, Google Sheets, and Drive.
-- `Code.gs` is deployed separately from the Next.js app. A Git push does not update the live Apps Script deployment.
-- Supabase is not connected to app persistence. Do not apply `supabase_schema.sql` to production.
+Use Node.js `>=22.13.0 <25` and npm `>=10 <12`. Install with `npm ci`. Keep environment files local and use only disposable database, Apps Script, and Drive targets for integration work.
 
-## Local setup
+Before requesting review, run the checks relevant to the change. The full CI set is documented in the repository workflow and README. Database migrations must also pass the disposable PostgreSQL 17 migration and rollback-fixture check.
 
-Use Node.js 20 or 22 and npm:
+## Integration boundaries
 
-```bash
-npm ci
-npm run dev
-```
+`Code.gs` is deployed independently of Vercel. Keep it synchronized with `lib/merge-contract.ts` using `node scripts/sync-merge-contract.mjs --check`. Supabase stores operational cases and clients; do not introduce Google Sheets as a second source of truth.
 
-Copy `.env.example` to `.env` only when local integration credentials are needed. Never commit `.env` or paste secrets into source files. A normal local UI run does not need production Apps Script credentials; the proxy will report that integration is not configured.
-
-## Make changes
-
-- Next.js pages and API routes live under `app/`; shared browser storage and server helpers live under `lib/`.
-- Keep Apps Script access tokens server-only. Never use a `NEXT_PUBLIC_` prefix for `APPS_SCRIPT_RECORDS_TOKEN`.
-- When changing `Code.gs`, update the Apps Script project, set Script Property `RECORDS_ACCESS_TOKEN`, authorize required Google scopes, and deploy a new web-app version. Verify the deployment URL remains the one configured for the app.
-- When changing Sheet columns or dropdowns, update `STATUS_AND_COLUMNS.md` and keep `setupSpreadsheet()`, `setupDropdowns()`, and `getRecordsForView()` aligned.
-- Avoid testing submissions against production Sheets or Drive. Use a staging Apps Script project and Sheet for integration checks.
-
-## Checks
-
-Run these before requesting review:
-
-```bash
-npm run lint
-npx tsc --noEmit
-npm run build
-npm audit
-```
-
-GitHub Actions runs lint and a production build on pushes and pull requests to `main`. There is no automated Apps Script runtime test suite; inspect backend changes carefully and verify them in staging before deploying.
-
-## Security reports
-
-Report suspected vulnerabilities privately to the repository owner. Do not include production credentials, client records, CNICs, or private documents in issues or pull requests.
+Never include secrets or client data in commits, screenshots, logs, issues, or pull requests. Do not merge or deploy production or apply a production migration without separate explicit user approval.
