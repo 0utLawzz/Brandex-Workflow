@@ -11,6 +11,7 @@ import type { RecoveryOptions, RecoveryReport } from './recovery-policy';
 import { createBackupPackage } from './backup-package';
 import { copyBackupAssets } from './backup-assets';
 import { proxyAppsScript } from './apps-script-proxy';
+import { validateClientContact } from './client-contact';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -187,6 +188,7 @@ export function mapRowToClient(row: any): ClientProfile {
 
 export function mapClientToRow(client: Partial<ClientProfile>): Record<string, any> {
   const row: Record<string, any> = {};
+  Object.assign(row, validateClientContact(client));
   if (client.client_code !== undefined) row.client_code = client.client_code;
   if (client.client_prefix !== undefined) row.client_prefix = client.client_prefix;
   if (client.city !== undefined) row.city = client.city;

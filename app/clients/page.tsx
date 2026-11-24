@@ -23,6 +23,8 @@ export default function ClientsPage() {
   const [cnic, setCnic] = useState('');
   const [address, setAddress] = useState('');
   const [consultantName, setConsultantName] = useState('BRANDEX LAW ASSOCIATES');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -76,6 +78,8 @@ export default function ClientsPage() {
       city: client.city || '',
       folder_reference: client.folder_reference || '',
       client_name: client.client_name,
+      phone: client.phone || '',
+      email: client.email || '',
       father_name: client.father_name || '',
       trading_as: client.trading_as || '',
       cnic: client.cnic || '',
@@ -109,7 +113,8 @@ export default function ClientsPage() {
         trading_as: (editFormData.trading_as || '').trim().toUpperCase(),
         cnic: editCnic,
         address: (editFormData.address || '').trim().toUpperCase(),
-        consultant_name: (editFormData.consultant_name || '').trim().toUpperCase()
+        consultant_name: (editFormData.consultant_name || '').trim().toUpperCase(),
+        phone: editFormData.phone || '', email: editFormData.email || ''
       });
       if (updated) {
         await loadClients();
@@ -155,6 +160,7 @@ export default function ClientsPage() {
         cnic: newCnic,
         address: address.trim().toUpperCase(),
         consultant_name: consultantName.trim().toUpperCase(),
+        phone: phone.trim(), email: email.trim(),
         total_cases: 0,
         created_at: new Date().toISOString()
       });
@@ -170,6 +176,7 @@ export default function ClientsPage() {
       setTradingAs('');
       setCnic('');
       setAddress('');
+      setPhone(''); setEmail('');
       setClientCode(String(parseInt(clientCode, 10) + 1).padStart(3, '0'));
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save client');
@@ -332,6 +339,8 @@ export default function ClientsPage() {
               <input type="text" placeholder="CA / OPTIONAL" value={clientFolderReference} onChange={e => setClientFolderReference(e.target.value.toUpperCase())}
                 className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]" />
             </div>
+            <label className="text-sm font-bold">Phone<input type="tel" maxLength={40} value={phone} onChange={event => setPhone(event.target.value)} className="mt-1 w-full rounded border-2 border-[#0C0C0C] bg-white p-2.5" /></label>
+            <label className="text-sm font-bold">Email<input type="email" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded border-2 border-[#0C0C0C] bg-white p-2.5" /></label>
             <div className="sm:col-span-2">
               <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">
                 Client Registered Address *
@@ -463,6 +472,7 @@ export default function ClientsPage() {
             </div>
 
             <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="grid gap-3 sm:grid-cols-2"><label>Phone<input type="tel" maxLength={40} value={editFormData.phone || ''} onChange={event => setEditFormData(current => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded border-2 bg-white p-2" /></label><label>Email<input type="email" maxLength={254} value={editFormData.email || ''} onChange={event => setEditFormData(current => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded border-2 bg-white p-2" /></label></div>
               <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Google Drive destination</p><DriveFolderPicker clientId={editingClient.id} onSaved={folderId => { setEditingClient(current => current ? { ...current, drive_folder_id: folderId } : null); void loadClients(); }} />{editingClient.drive_folder_id && <a href={`https://drive.google.com/drive/folders/${encodeURIComponent(editingClient.drive_folder_id)}`} target="_blank" rel="noopener noreferrer" className="mt-2 block text-xs underline">Open saved folder</a>}</div>
               <div className="grid grid-cols-4 gap-3">
                 <div>

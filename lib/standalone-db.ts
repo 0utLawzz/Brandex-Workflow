@@ -2,6 +2,7 @@
 
 import Papa from 'papaparse';
 import { createBackupPackage, validateBackupPackage } from './backup-package.ts';
+import { validateClientContact } from './client-contact.ts';
 
 // =========================================================================
 // BRANDEX LAW ASSOCIATES — CSV AND BACKUP UTILITIES
@@ -92,6 +93,16 @@ const STORAGE_KEY_RECORDS = 'brandex_standalone_records_v2';
 const STORAGE_KEY_CLIENTS = 'brandex_standalone_clients_v2';
 const STORAGE_KEY_HISTORY = 'brandex_standalone_history_v2';
 const STORAGE_KEY_DOCS = 'brandex_standalone_docs_v2';
+const CASE_CSV_EXTRA_FIELDS = [
+  ['Series', 'selectionMenu'], ['Case Number', 'caseNo'], ['Client ID', 'clientId'],
+  ['Legal Case Stage', 'filingProcess'], ['Serial Number', 'serialNo'], ['Category', 'category'],
+  ['Class Description', 'classDesc'], ['Application Type', 'appType'], ['Father Name', 'fatherName'],
+  ['Issue Date', 'issueDate'], ['Expiry Date', 'expiryDate'], ['Using Since', 'year'],
+  ['Consultant Address', 'conAddr'], ['Logo URL', 'img'], ['No Image Text', 'noImg'],
+  ['Dispatch Proof URL', 'dispatchedImage'], ['Dispatch Proof Name', 'dispatchedDocName'],
+  ['Dispatch Proof Type', 'dispatchedDocType'], ['Receipt URL', 'receiptImage'],
+  ['Created At', 'createdAt'], ['Updated At', 'updatedAt']
+] as const;
 
 class StandaloneDB {
   private isBrowser(): boolean {
@@ -315,14 +326,14 @@ class StandaloneDB {
       "Client Code",
       "CNIC",
       "Address",
-      "Notes"
+      "Notes", ...CASE_CSV_EXTRA_FIELDS.map(([label]) => label)
     ];
 
     const data = records.map(r => [
       r.id,
       r.date || '',
       r.clientCode && r.selectionMenu && r.caseNo
-        ? `${r.selectionMenu}${String(r.clientCode).padStart(3, '0')}-${String(r.caseNo).padStart(3, '0')}`
+        ? `${r.selectionMenu}-${String(r.clientCode).padStart(3, '0')}-${String(r.caseNo).padStart(3, '0')}`
         : '',
       r.folder || '',
       r.tm || '',
@@ -339,7 +350,7 @@ class StandaloneDB {
       r.clientCode || '',
       r.cnic || '',
       r.address || '',
-      r.notes || ''
+      r.notes || '', ...CASE_CSV_EXTRA_FIELDS.map(([, field]) => r[field] ?? '')
     ]);
 
     return Papa.unparse({
@@ -484,18 +495,22 @@ class StandaloneDB {
         return { success: false, message: "CSV file contains no data rows", count: 0 };
       }
 
-      // Check header row (case-insensitive fuzzy detection)
+      // Prefer exact exported headers before legacy aliases; absent columns stay absent.
       const headerRow = rows[0].map((h: any) => String(h || '').trim().toLowerCase());
       
       const findCol = (possibleNames: string[], defaultIndex: number): number => {
         for (const name of possibleNames) {
-          const idx = headerRow.findIndex((h: string) => h === name.toLowerCase() || h.includes(name.toLowerCase()));
+          const exact = headerRow.indexOf(name.toLowerCase());
+          if (exact !== -1) return exact;
+        }
+        for (const name of possibleNames) {
+          const idx = headerRow.findIndex((h: string) => h === name.toLowerCase());
           if (idx !== -1) return idx;
         }
-        return defaultIndex;
+        return -1;
       };
 
-      const colDate = findCol(["date", "filing date"], 1);
+      const colDate = findCol(["date", "issue date"], -1);
       const colCaseRef = findCol(["case ref", "case reference"], 2);
       const colFolder = findCol(["case name", "folder", "mark name", "trademark name", "mark"], 3);
       const colTm = findCol(["tm no", "tm number", "trademark no", "tm"], 4);
@@ -515,6 +530,7 @@ class StandaloneDB {
       const colNotes = findCol(["notes", "internal notes", "note"], 18);
 
       const existing = persist ? this.getRecords() : [];
+      const seenReferences = new Set(existing.map(record => `${record.selectionMenu}-${record.clientCode}-${record.caseNo}`.toUpperCase()));
       let importedCount = 0;
       let maxId = persist && existing.length > 0 ? Math.max(...existing.map(r => r.id || 0)) : 0;
       const importedRecords: RecordItem[] = [];
@@ -539,35 +555,46 @@ class StandaloneDB {
         // Restore it so an export/import round-trip preserves X/A/N/B and the
         // original case identity instead of silently defaulting to series A.
         const caseReference = val(colCaseRef).toUpperCase();
+        const modernReference = /^([A-Z][A-Z0-9]{0,7})-(\d{1,3})-(\d{1,3})$/.exec(caseReference);
         const caseReferenceMatch = /^([A-Z][A-Z0-9]{0,7}?)(\d{3})-(\d{3})$/.exec(caseReference);
         const legacyCaseReferenceMatch = /^(\d{1,3})-([A-Z][A-Z0-9]{0,7})-(\d{1,3})$/.exec(caseReference);
+        const series = (val(headerRow.indexOf('series')) || modernReference?.[1] || caseReferenceMatch?.[1] || legacyCaseReferenceMatch?.[2] || '').toUpperCase();
+        const code = val(colClientCode) || modernReference?.[2] || caseReferenceMatch?.[2] || legacyCaseReferenceMatch?.[1] || '';
+        const number = val(headerRow.indexOf('case number')) || modernReference?.[3] || caseReferenceMatch?.[3] || legacyCaseReferenceMatch?.[3] || '';
+        if (!/^[A-Z][A-Z0-9]{0,7}$/.test(series) || !/^\d{1,3}$/.test(code) || !/^\d{1,3}$/.test(number)) throw new Error(`Row ${i + 1}: missing or invalid series/client/case identity.`);
+        const identity = `${series}-${code.padStart(3, '0')}-${number.padStart(3, '0')}`;
+        const fromReference = modernReference ? `${modernReference[1]}-${modernReference[2].padStart(3, '0')}-${modernReference[3].padStart(3, '0')}` : '';
+        if (fromReference && fromReference !== identity) throw new Error(`Row ${i + 1}: reference conflicts with separate identity columns.`);
+        if (seenReferences.has(identity)) throw new Error(`Row ${i + 1}: duplicate case identity ${identity}.`);
+        seenReferences.add(identity);
 
         maxId++;
         const newRec: RecordItem = {
           id: maxId,
-          date: val(colDate) || new Date().toLocaleDateString('en-GB'),
-          folder: (folder || 'UNTITLED CASE').toUpperCase(),
+          date: val(colDate),
+          folder: folder.toUpperCase(),
           tm: tm.toUpperCase(),
-          classNo: val(colClass).replace(/\D/g, '') || '1',
-          appName: (appName || 'APPLICANT').toUpperCase(),
+          classNo: val(colClass).replace(/\D/g, ''),
+          appName: appName.toUpperCase(),
           appTrade: val(colAppTrade).toUpperCase(),
           conName: (val(colLawFirm) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
           lawFirm: (val(colLawFirm) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
           status: (val(colStatus) || 'PENDING').toUpperCase(),
-          filingProcess: (val(colStatus) || 'PENDING').toUpperCase(),
+          filingProcess: val(headerRow.indexOf('legal case stage')),
           trackingId: val(colTracking).toUpperCase(),
           dispatchedDate: val(colDispDate),
           dispatchedNote: val(colDispNote),
           deliveredDate: val(colDelivDate),
           receiverName: val(colReceiver).toUpperCase(),
-          clientCode: val(colClientCode) || caseReferenceMatch?.[2] || legacyCaseReferenceMatch?.[1] || '',
-          selectionMenu: caseReferenceMatch?.[1] || legacyCaseReferenceMatch?.[2] || '',
-          caseNo: caseReferenceMatch?.[3] || legacyCaseReferenceMatch?.[3] || '',
+          clientCode: code.padStart(3, '0'),
+          selectionMenu: series,
+          caseNo: number.padStart(3, '0'),
           cnic: val(colCnic),
           address: val(colAddress).toUpperCase(),
           notes: val(colNotes),
-          year: new Date().getFullYear().toString(),
-          createdAt: new Date().toISOString()
+          year: val(headerRow.indexOf('using since')),
+          ...Object.fromEntries(CASE_CSV_EXTRA_FIELDS.filter(([, field]) => !['selectionMenu', 'caseNo', 'clientId'].includes(field)).filter(([label]) => headerRow.includes(label.toLowerCase())).map(([label, field]) => [field, val(headerRow.indexOf(label.toLowerCase()))])),
+          ...(val(headerRow.indexOf('client id')) ? { clientId: Number(val(headerRow.indexOf('client id'))) } : {})
         };
 
         existing.unshift(newRec);
@@ -593,7 +620,7 @@ class StandaloneDB {
       "Address",
       "City",
       "Additional Folder Reference",
-      "Consultant Name"
+      "Consultant Name", "Phone", "Email", "Drive Folder ID"
     ];
 
     const data = clients.map(c => [
@@ -606,7 +633,7 @@ class StandaloneDB {
       c.address || '',
       c.city || '',
       c.folder_reference || '',
-      c.consultant_name || 'BRANDEX LAW ASSOCIATES'
+      c.consultant_name || 'BRANDEX LAW ASSOCIATES', c.phone || '', c.email || '', c.drive_folder_id || ''
     ]);
 
     return Papa.unparse({
@@ -665,6 +692,8 @@ class StandaloneDB {
       const colCity = findCol(["city"], -1);
       const colFolderReference = findCol(["additional folder reference", "folder reference", "folder_reference"], -1);
       const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
+      const colPhone = findCol(['phone', 'telephone'], -1);
+      const colEmail = findCol(['email'], -1);
 
       const existing = persist ? this.getClients() : [];
       const seenCodes = new Set(existing.map(client => client.client_code));
@@ -686,6 +715,7 @@ class StandaloneDB {
         seenCodes.add(clientCode);
         
         const importedClient = {
+          ...validateClientContact({ phone: val(colPhone), email: val(colEmail) }),
           client_code: clientCode.padStart(3, '0'),
           client_prefix: val(colPrefix).toUpperCase(),
           city: val(colCity).toUpperCase(),
