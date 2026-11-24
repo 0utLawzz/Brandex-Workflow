@@ -154,3 +154,30 @@ test('actual filing dates persist independently, reject invalid dates and can be
     assert.equal(row.filing_date, null); assert.equal(row.issue_date,'2026-10-01'); assert.equal(row.mark_name,'FILED');
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('recovery staging enforces expiry, chunk identity, byte counts and service-only access', async () => {
+  await db.exec('BEGIN; SET LOCAL ROLE service_role');
+  const id = 'bfbb1823-d2ef-4ce4-b455-76b7cba79f65';
+  const rejectSafely = async (sql, params, pattern) => {
+    await db.exec('SAVEPOINT staging_failure');
+    await assert.rejects(db.query(sql, params), pattern);
+    await db.exec('ROLLBACK TO SAVEPOINT staging_failure');
+  };
+  try {
+    await db.query('SELECT public.begin_recovery_transfer($1,$2,$3,$4,$5)',[id,'upload',4,1,'a'.repeat(64)]);
+    await db.query('SELECT public.put_recovery_chunk($1,0,$2)',[id,'dGVzdA==']);
+    await db.query('SELECT public.put_recovery_chunk($1,0,$2)',[id,'dGVzdA==']);
+    await rejectSafely('SELECT public.put_recovery_chunk($1,0,$2)',[id,'YWJjZA=='],/conflicts/);
+    await rejectSafely('SELECT public.put_recovery_chunk($1,0,$2)',[id,'YQ=='],/size mismatch/);
+    await rejectSafely('SELECT public.put_recovery_chunk($1,1,$2)',[id,'dGVzdA=='],/Invalid recovery chunk/);
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.recovery_transfer_chunks WHERE transfer_id=$1',[id])).rows[0].n,1);
+    await db.query("UPDATE public.recovery_transfers SET expires_at=now()-interval '1 second' WHERE id=$1",[id]);
+    await rejectSafely('SELECT public.put_recovery_chunk($1,0,$2)',[id,'dGVzdA=='],/expired/);
+    await db.query('SELECT public.begin_recovery_transfer($1,$2,$3,$4,$5)',['877c086f-d6fa-479c-bbc7-58163d0c30cb','download',4,1,'b'.repeat(64)]);
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.recovery_transfer_chunks WHERE transfer_id=$1',[id])).rows[0].n,0);
+    for (const role of ['anon','authenticated']) {
+      const acl = (await db.query("SELECT has_table_privilege($1,'public.recovery_transfers','SELECT') AS reads,has_function_privilege($1,'public.put_recovery_chunk(uuid,integer,text)','EXECUTE') AS writes",[role])).rows[0];
+      assert.equal(acl.reads,false); assert.equal(acl.writes,false);
+    }
+  } finally { await db.exec('ROLLBACK'); }
+});

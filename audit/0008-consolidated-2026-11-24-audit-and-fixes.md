@@ -119,6 +119,8 @@ This ADR is the *current consolidated work queue* until a subsequent reviewed AD
 
 **Interpretation of status:** CODE FOUND ≠ runtime verified; READY ≠ working; SCREEN VISIBLE ≠ saved/persisted. Label each task VERIFIED / CODE FOUND / PARTIAL / NOT FOUND / NOT TESTED. Do not count the same issue twice.
 
+Recovery transport checkpoint: browser backup export/restore now uses authenticated same-origin 512 KiB byte chunks, a 64 MiB package limit and whole-package SHA-256 verification. Temporary service-only RLS tables cap concurrent transfers at eight, reject conflicting chunk retries and deny expired uploads; normal completion deletes staging, and each new transfer purges expired rows (no scheduled purge has been deployed). Restore still requires explicit review plus administrator-enabled exact target and validates the complete upload before any asset/database recovery. Large Unicode archive and simulated browser HTTP round-trip tests verify small bodies, corruption/missing chunk failure and cleanup. Local PostgreSQL tests cover size/conflict/expiry/privilege checks. Full suite 86/86 PASS on Node 22.23.5; typecheck PASS; lint zero errors/two existing warnings; npm audit zero vulnerabilities. Separate clean checkout at 8cc90ea completed npm ci and production build under Node 22.23.5. New transport build and hosted PostgreSQL-17/authenticated preview/Drive acceptance remain PENDING. Asset manifest byte flags now match verified copies. Workspace settings/series recovery and legacy conversion remain outstanding. No hosted schema or deployment changes.
+
 ## PR 1–9 scope reconciliation (initial PR description review, runtime recheck pending)
 
 | PR | Historical scope and merged output | Unclosed or independently testable condition |

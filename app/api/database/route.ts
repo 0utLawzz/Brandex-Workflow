@@ -2,7 +2,6 @@ import { hasSameOrigin } from '@/lib/request-origin';
 import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
-import { standaloneDB } from '@/lib/standalone-db';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 
@@ -156,12 +155,8 @@ export async function POST(request: Request) {
         result = await supabaseDB.saveDocumentReferences(body.documents);
         break;
       case 'getBackupSnapshot':
-        result = await supabaseDB.getBackupSnapshot(body.includeAssets === true);
-        break;
       case 'restoreBackupJSON':
-        if (typeof body.json !== 'string' || body.json.length > 10 * 1024 * 1024) return invalidPayload('A valid backup file is required.', 413);
-        result = await supabaseDB.restoreBackupJSON(body.json, { confirmed: body.options?.confirmed === true, allowMissingAssets: body.options?.allowMissingAssets === true });
-        break;
+        return invalidPayload('Reload the workspace to use the verified backup transfer.', 409);
       default:
         return invalidPayload('Unknown database operation.');
     }

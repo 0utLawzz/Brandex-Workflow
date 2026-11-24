@@ -9,6 +9,7 @@ import type { RestorePreflight } from '@/lib/restore-preflight';
 import { planAssetRestore } from '@/lib/restore-assets';
 import { buildBackupAssetManifest } from '@/lib/backup-package';
 import type { RecoveryReport } from '@/lib/recovery-policy';
+import { MAX_RECOVERY_BYTES } from '@/lib/recovery-transfer';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -28,6 +29,8 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   if (!isOpen) return null;
 
   const handleExport = async () => {
+    setChecking(true);
+    setStatusMsg({ text: 'Preparing a consistent backup and checking available file copies…', type: 'warning' });
     try {
       const json = await supabaseDB.getBackupSnapshot(true);
       const parsed = JSON.parse(json);
@@ -45,10 +48,14 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         : { text: 'Backup JSON downloaded. Review the backup report before relying on it for recovery.', type: 'success' });
     } catch (e: any) {
       setStatusMsg({ text: e.message || 'Failed to export backup', type: 'error' });
-    }
+    } finally { setChecking(false); }
   };
 
   const importBackup = async (content: string) => {
+    if (new TextEncoder().encode(content).length > MAX_RECOVERY_BYTES) {
+      setStatusMsg({ text: 'Backup exceeds the 64 MiB recovery limit.', type: 'error' });
+      setPreflight(null); setImportText(''); return;
+    }
     setChecking(true);
     setPreflight(null);
     setRestoreReport(null);
@@ -90,6 +97,10 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_RECOVERY_BYTES) {
+      setStatusMsg({ text: 'Backup exceeds the 64 MiB recovery limit.', type: 'error' });
+      setPreflight(null); setImportText(''); e.target.value = ''; return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
@@ -155,6 +166,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
           </p>
           <button
             onClick={handleExport}
+            disabled={checking}
             className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#C94A00] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer"
           >
             <Download className="w-4 h-4" /> EXPORT BACKUP (.JSON)

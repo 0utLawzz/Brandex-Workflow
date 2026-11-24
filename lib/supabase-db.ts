@@ -13,6 +13,7 @@ import { copyBackupAssets } from './backup-assets';
 import { proxyAppsScript } from './apps-script-proxy';
 import { validateClientContact } from './client-contact';
 import { planAssetRestore, remapAssetUrls } from './restore-assets';
+import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfer-client';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -662,7 +663,7 @@ class SupabaseDBService {
   }
 
   public async getBackupSnapshot(includeAssets = false): Promise<string> {
-    if (typeof window !== 'undefined') return requestDatabase('getBackupSnapshot', { includeAssets });
+    if (typeof window !== 'undefined') return downloadRecoveryBackup(includeAssets);
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('get_recovery_snapshot'));
@@ -685,6 +686,8 @@ class SupabaseDBService {
         return file;
       });
       const missing = exported.assetCopies.filter((copy: any) => !copy.dataUrl).length;
+      const verifiedIds = new Set(exported.assetCopies.filter((copy: any) => copy.dataUrl && copy.sha256 && !copy.error).map((copy: any) => copy.assetId));
+      exported.assets = exported.assets.map((asset: any) => ({ ...asset, bytesIncluded: verifiedIds.has(asset.assetId) }));
       exported.backupStatus = missing ? 'partial' : 'complete';
       exported.counts.assetsMissingBytes = missing;
       exported.counts.assetsWithBytes = exported.assetCopies.length - missing;
@@ -729,7 +732,7 @@ class SupabaseDBService {
   }
 
   public async restoreBackupJSON(json: string, options: RecoveryOptions = { confirmed: false, allowMissingAssets: false }): Promise<RecoveryReport> {
-    if (typeof window !== 'undefined') return requestDatabase('restoreBackupJSON', { json, options });
+    if (typeof window !== 'undefined') return uploadRecoveryBackup(json, options);
     const { isConfigured, url } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Backup was not restored.');
     const projectRef = assertRecoveryTarget(url, process.env.RECOVERY_RESTORE_ENABLED, process.env.RECOVERY_RESTORE_PROJECT_REF, options.confirmed === true);
