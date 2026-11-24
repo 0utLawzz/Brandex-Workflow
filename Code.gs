@@ -63,6 +63,9 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "Authentication required" });
     }
 
+    if (body.action === "restoreBackupAsset") {
+      return jsonResponse(restoreBackupAsset(body));
+    }
     if (body.action === "validateDriveFolder") {
       return jsonResponse(validateDriveFolder(body.folderId));
     }
@@ -91,6 +94,29 @@ function doPost(e) {
 function isAuthorizedBackendRequest(body) {
   var expectedToken = PropertiesService.getScriptProperties().getProperty("RECORDS_ACCESS_TOKEN");
   return Boolean(expectedToken && body && body.accessToken && body.accessToken === expectedToken);
+}
+
+function restoreBackupAsset(input) {
+  validateDriveFolder(input.folderId);
+  var match = String(input.dataUrl || '').match(/^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!match || match[2].length > 12 * 1024 * 1024) throw new Error('Invalid recovery bytes');
+  var bytes = Utilities.base64Decode(match[2]);
+  if (bytes.length > 8 * 1024 * 1024) throw new Error('Recovery file exceeds byte limit');
+  var digest = function(value) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value).map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); };
+  var hash = digest(bytes);
+  if (hash !== input.sha256) throw new Error('Recovery checksum mismatch');
+  var name = hash + '_' + String(input.name || 'recovered-file').replace(/[\\/:*?"<>|]/g, '_').slice(0,150);
+  var folder = DriveApp.getFolderById(input.folderId);
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    var existing = folder.getFilesByName(name);
+    var file;
+    if (existing.hasNext()) {
+      file = existing.next();
+      if (digest(file.getBlob().getBytes()) !== hash) throw new Error('Existing recovery file has different bytes');
+    } else file = folder.createFile(Utilities.newBlob(bytes, match[1], name));
+    return { ok:true, url:file.getUrl(), sha256:hash, mimeType:match[1], name:name };
+  } finally { lock.releaseLock(); }
 }
 
 function validateDriveFolder(folderId) {

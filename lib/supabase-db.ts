@@ -12,6 +12,7 @@ import { createBackupPackage } from './backup-package';
 import { copyBackupAssets } from './backup-assets';
 import { proxyAppsScript } from './apps-script-proxy';
 import { validateClientContact } from './client-contact';
+import { planAssetRestore, remapAssetUrls } from './restore-assets';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
@@ -782,12 +783,22 @@ class SupabaseDBService {
     const destination = await this.getBackupSnapshot();
     const preflight = preflightRestore(JSON.stringify(actualPackage), destination);
     if (!preflight.valid) throw new Error(`Restore preflight failed: ${preflight.errors.join(' ')}`);
-    if (preflight.counts.missingAssets && options.allowMissingAssets !== true) throw new Error('File bytes are missing. Review the partial recovery warning before proceeding.');
-    const snapshot = { clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents };
+    const assets = await planAssetRestore(actualPackage.assets, packageData.assetCopies || []);
+    if (assets.missing && options.allowMissingAssets !== true) throw new Error('File bytes are missing. Review the partial recovery warning before proceeding.');
+    const replacements = new Map<string, { url: string; mimeType: string }>();
+    const recoveryFolder = process.env.RECOVERY_DRIVE_FOLDER_ID;
+    if (assets.uploads.length && (!recoveryFolder || !/^[A-Za-z0-9_-]{10,200}$/.test(recoveryFolder))) throw new Error('An administrator-approved recovery Drive folder is required before copying files.');
+    for (const asset of assets.uploads) {
+      const response = await proxyAppsScript({ action: 'restoreBackupAsset', folderId: recoveryFolder, dataUrl: asset.dataUrl, sha256: asset.sha256, name: asset.name });
+      const restored = await response.json();
+      if (!response.ok || restored.ok !== true || restored.sha256 !== asset.sha256 || typeof restored.url !== 'string' || !restored.url.startsWith('https://drive.google.com/')) throw new Error(`Recovery file copy failed. ${replacements.size} previously copied files remain in the approved recovery folder; retrying reuses verified copies.`);
+      replacements.set(asset.sourceUrl, { url: restored.url, mimeType: asset.mimeType });
+    }
+    const snapshot = remapAssetUrls({ clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents }, replacements);
     const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('restore_recovery_snapshot', { p_snapshot: snapshot }));
     if (error) throw new Error(`Atomic restore failed: ${error.message}. No partial database restore was committed; retry the same file to check an uncertain response.`);
     if (!data || !data.caseIdMap || !data.clientIdMap || ['records', 'clients', 'history', 'documents'].some(key => !Number.isSafeInteger(data[key]))) throw new Error('Restore response is incomplete. Retry the same file to retrieve the stored report.');
-    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, alreadyRestored: data.alreadyRestored === true, missingAssets: preflight.counts.missingAssets, projectRef };
+    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {

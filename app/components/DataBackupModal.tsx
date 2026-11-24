@@ -6,6 +6,8 @@ import { standaloneDB } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { preflightRestore } from '@/lib/restore-preflight';
 import type { RestorePreflight } from '@/lib/restore-preflight';
+import { planAssetRestore } from '@/lib/restore-assets';
+import { buildBackupAssetManifest } from '@/lib/backup-package';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -52,6 +54,13 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
     try {
       const destination = await supabaseDB.getBackupSnapshot();
       const report = preflightRestore(content, destination);
+      if (report.valid) {
+        const source = JSON.parse(content);
+        const assets = await planAssetRestore(buildBackupAssetManifest({ records: source.records || [], clients: source.clients || [], history: source.history || [], documents: source.documents || [] }), source.assetCopies || []);
+        report.counts.missingAssets = assets.missing;
+        report.warnings = report.warnings.filter(warning => !warning.includes('file recovery is incomplete'));
+        if (assets.missing) report.warnings.push(`${assets.missing} referenced files have no verified byte copy; recovery will be partial.`);
+      }
       setPreflight(report);
       if (report.valid) setImportText(content);
       setStatusMsg({ text: report.valid ? 'Preflight completed. No data was changed. Review collisions and missing files below.' : 'Preflight failed. No data was changed.', type: report.valid ? 'warning' : 'error' });
