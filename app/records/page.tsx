@@ -646,6 +646,22 @@ export default function RecordsPage() {
     } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Attachment link could not be saved.'); }
   };
 
+  const handleSelectDispatchProof = async (document: DocumentAttachment) => {
+    if (!editingRecord || savingRecord) return;
+    const caseId = editingRecord.id;
+    setSavingRecord(true);
+    try {
+      const updated = await supabaseDB.updateRecordWithHistory(caseId, { dispatchDocumentId: document.id }, 'Existing attachment selected as current dispatch proof');
+      if (!updated) throw new Error('Proof selection was not confirmed. Reload before retrying.');
+      const proof = { dispatchDocumentId: updated.dispatchDocumentId, dispatchedImage: updated.dispatchedImage, dispatchedDocName: updated.dispatchedDocName, dispatchedDocType: updated.dispatchedDocType };
+      setEditingRecord(current => current?.id === caseId ? { ...current, ...proof } : current);
+      setOriginalEditingRecord(current => current?.id === caseId ? { ...current, ...proof } : current);
+      setBulkNotice('Current dispatch proof saved. Document history was preserved.');
+      await loadAllRecords();
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Proof selection failed.'); }
+    finally { setSavingRecord(false); }
+  };
+
   // Handle single record edit save
   const handleSaveRecord = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1973,10 +1989,10 @@ export default function RecordsPage() {
                   {editingRecord.dispatchedImage && (
                     <button
                       type="button"
-                      onClick={() => setEditingRecord({ ...editingRecord, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
+                      onClick={() => setEditingRecord({ ...editingRecord, dispatchDocumentId: null, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
                       className="text-[0.65rem] text-[#dc2626] font-bold hover:underline cursor-pointer"
                     >
-                      Remove Slip
+                      Clear current proof
                     </button>
                   )}
                 </div>
@@ -2068,7 +2084,7 @@ export default function RecordsPage() {
               <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
                 <div className="mb-2 flex items-center gap-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold"><Paperclip className="h-4 w-4" /> LINKED CASE ATTACHMENTS</div>
                 {loadingEditingDocuments ? <p className="text-xs text-[#666]">Loading attachments…</p> : editingDocuments.length ? (
-                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={safeAssetHref(document.file_url) || undefined} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
+                  <ul className="mb-3 space-y-2">{editingDocuments.map(document => <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><span className="flex items-center gap-2"><a href={safeAssetHref(document.file_url) || undefined} target="_blank" rel="noopener noreferrer" className="font-bold text-[#C94A00] underline">Open</a><button type="button" disabled={savingRecord || editingRecord.dispatchDocumentId === document.id} onClick={() => void handleSelectDispatchProof(document)} className="rounded border px-2 py-1 disabled:opacity-50">{editingRecord.dispatchDocumentId === document.id ? 'Current dispatch proof' : 'Use as dispatch proof'}</button></span></li>)}</ul>
                 ) : <p className="mb-3 text-xs text-[#666]">No linked attachments recorded.</p>}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                   <input value={newDocumentName} onChange={e=>setNewDocumentName(e.target.value)} placeholder="Attachment name" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />

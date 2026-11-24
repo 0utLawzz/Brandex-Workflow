@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
-import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
+import { CASE_SELECT_WITH_PROOF, mapDispatchProofFromRow, decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
 import { validateWorkflowTransition } from './case-workflow';
@@ -18,9 +18,9 @@ import { safeAssetHref } from './asset-url';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
-async function readTable(client: ReturnType<typeof getSupabaseClient>, table: string): Promise<{ data: any[]; error: { message: string } | null }> {
+async function readTable(client: ReturnType<typeof getSupabaseClient>, table: string, columns = '*'): Promise<{ data: any[]; error: { message: string } | null }> {
   const data = await readAllRows<any>(before => {
-    let query = client.from(table).select('*', { count: 'exact' }).order('id', { ascending: false }).limit(500);
+    let query = client.from(table).select(columns, { count: 'exact' }).order('id', { ascending: false }).limit(500);
     if (before !== null) query = query.lt('id', before);
     return withSupabaseTimeout(query);
   });
@@ -115,9 +115,7 @@ export function mapRowToRecord(row: any): RecordItem {
     notes: savedNotes.notes,
     dispatchedDate: row.dispatched_date || row.dispatchedDate || '',
     dispatchedNote: row.dispatched_note || row.dispatchedNote || '',
-    dispatchedImage: row.dispatched_image || row.dispatch_receipt || row.dispatchedImage || '',
-    dispatchedDocName: row.dispatched_doc_name || row.dispatchedDocName || '',
-    dispatchedDocType: row.dispatched_doc_type || row.dispatchedDocType || '',
+    ...mapDispatchProofFromRow(row),
     deliveredDate: row.delivered_date || row.deliveredDate || '',
     receiverName: row.receiver_name || row.receiverName || '',
     receiptImage: row.receipt_image || row.receiptImage || '',
@@ -285,7 +283,7 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await readTable(client, 'trademark_records');
+      const { data, error } = await readTable(client, 'trademark_records', CASE_SELECT_WITH_PROOF);
 
       if (error) {
         console.error('[SupabaseDB] Supabase records query failed:', error.message);
@@ -355,10 +353,12 @@ class SupabaseDBService {
 
   public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {
     if (typeof window !== 'undefined') return requestDatabase('updateRecord', { id, updates });
+    if (updates.status === undefined) return this.updateRecordWithHistory(id, updates, 'Case metadata updated');
+    const allowed = new Set(['status','notes','dispatchedDate','dispatchedNote','trackingId','dispatchedImage','dispatchedDocName','dispatchedDocType','deliveredDate','receiverName','receiptImage']);
+    if (Object.keys(updates).some(key => !allowed.has(key))) throw new Error('Save case metadata separately from a workflow transition.');
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const row = mapRecordToRow(updates);
       if (updates.status !== undefined) {
         const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
           client.from('trademark_records').select('status').eq('id', id).maybeSingle()
@@ -386,42 +386,12 @@ class SupabaseDBService {
         }));
         if (transitionError) throw new Error(`Atomic workflow transition failed: ${transitionError.message}`);
         const { data: transitioned, error: transitionedError } = await withSupabaseTimeout(
-          client.from('trademark_records').select().eq('id', id).maybeSingle()
+          client.from('trademark_records').select(CASE_SELECT_WITH_PROOF).eq('id', id).maybeSingle()
         );
         if (transitionedError) throw new Error(`Workflow transition succeeded but case reload failed: ${transitionedError.message}`);
         return transitioned ? mapRowToRecord(transitioned) : null;
       }
-      if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
-        const { data: current, error: currentError } = await withSupabaseTimeout(
-          client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
-        );
-        if (currentError) throw new Error(`Could not read current case identity: ${currentError.message}`);
-        if (!current) throw new Error('Case was not found while validating its reference.');
-        const identity = {
-          clientCode: String(updates.clientCode ?? current.client_code ?? ''),
-          selectionMenu: String(updates.selectionMenu ?? current.selection_menu ?? 'A'),
-          caseNo: String(updates.caseNo ?? current.case_no ?? '')
-        };
-        await assertUniqueCaseReference(client, identity, id);
-        if (updates.clientCode !== undefined) row.client_code = identity.clientCode.replace(/\D/g, '').padStart(3, '0');
-        if (updates.selectionMenu !== undefined) row.selection_menu = normalizeCaseSeries(identity.selectionMenu);
-        if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
-      }
 
-      const result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
-      if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
-      if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
-
-      const updated = mapRowToRecord(result.data);
-      if (updates.dispatchedImage) {
-        await this.saveDocumentReferences([{
-          record_id: id,
-          file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
-          file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
-          file_url: updates.dispatchedImage,
-        }]);
-      }
-      return updated;
     }
 
     throw new Error('Supabase server credentials are not configured. Case was not updated.');
@@ -477,7 +447,7 @@ class SupabaseDBService {
     }));
     if (error) throw new Error(`Atomic case edit failed: ${error.message}`);
     const { data, error: readError } = await withSupabaseTimeout(
-      client.from('trademark_records').select().eq('id', id).maybeSingle()
+      client.from('trademark_records').select(CASE_SELECT_WITH_PROOF).eq('id', id).maybeSingle()
     );
     if (readError) throw new Error(`Case was updated but reload failed: ${readError.message}`);
     return data ? mapRowToRecord(data) : null;

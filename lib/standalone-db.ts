@@ -13,6 +13,7 @@ import { CSV_ENCODING_HEADER, CSV_TEXT_ENCODING, encodeCsvText, decodeCsvText, c
 export interface RecordItem {
   id: number;
   clientId?: number | null;
+  dispatchDocumentId?: number | null;
   serialNo?: string | null;
   category?: string | null;
   date: string;

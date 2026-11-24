@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from '../lib/case-fields.ts';
+import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow, mapDispatchProofFromRow } from '../lib/case-fields.ts';
 
 test('maps all case identity and application fields to existing Supabase columns', () => {
   const fields = {
@@ -24,6 +24,13 @@ test('maps all case identity and application fields to existing Supabase columns
     consultant_addr: 'MAIN STREET',
   });
   assert.deepEqual(mapCaseFieldsFromRow(mapCaseFieldsToRow(fields)), fields);
+});
+
+test('saved dispatch pointer is numeric and explicit joined proof survives row mapping', () => {
+  assert.deepEqual(mapCaseFieldsFromRow({dispatch_document_id:'123'}),{dispatchDocumentId:123});
+  assert.deepEqual(mapCaseFieldsToRow({dispatchDocumentId:null}),{dispatch_document_id:null});
+  assert.deepEqual(mapDispatchProofFromRow({dispatch_document:{file_url:'https://example.com/proof.pdf',file_name:'Proof.pdf',file_type:'application/pdf'}}),{dispatchedImage:'https://example.com/proof.pdf',dispatchedDocName:'Proof.pdf',dispatchedDocType:'application/pdf'});
+  assert.equal(mapDispatchProofFromRow({}).dispatchedImage,'');
 });
 
 test('does not replace omitted fields during a partial case update', () => {

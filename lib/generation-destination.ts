@@ -1,11 +1,12 @@
 import { getSupabaseClient } from './supabase';
 import { mapRowToRecord } from './supabase-db';
 import { recordToMergeApi } from './merge-contract';
+import { CASE_SELECT_WITH_PROOF } from './case-fields';
 
 /** Resolve saved destinations server-side; browser folder IDs are never authoritative. */
 export async function resolveGenerationDestination(recordId: number) {
   const client = getSupabaseClient();
-  const { data: record, error } = await client.from('trademark_records').select('*').eq('id', recordId).single();
+  const { data: record, error } = await client.from('trademark_records').select(CASE_SELECT_WITH_PROOF).eq('id', recordId).single();
   if (error || !record) throw new Error('Saved case destination could not be loaded. Verify the destination migration.');
   let query = client.from('clients').select('id,client_prefix,client_code,name,city,folder_reference,drive_folder_id');
   if (record.client_id) query = query.eq('id', record.client_id);

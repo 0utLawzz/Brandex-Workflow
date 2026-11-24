@@ -47,3 +47,10 @@ test('configuration dry run allows initial branding only on empty targets and re
   destination.series[0].sort_order=4;
   assert.ok(check().errors.some(error=>/Series N conflicts/.test(error)));
 });
+
+test('dispatch proof references must resolve to a document belonging to the same source case', () => {
+  const source=fixture(); source.records[0].dispatchDocumentId=88;
+  assert.ok(preflightRestore(JSON.stringify(source),empty).errors.some(error=>/dispatch proof/.test(error)));
+  source.documents=[{id:88,record_id:1,file_url:'https://example.com/proof.pdf'}];
+  assert.equal(preflightRestore(JSON.stringify(source),empty).valid,true);
+});

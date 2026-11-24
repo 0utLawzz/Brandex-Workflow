@@ -246,3 +246,40 @@ test('recovery retries verify unchanged client, case, history and document conte
     assert.equal((await restore()).rows[0].report.alreadyRestored,true);
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('dispatch stores an explicit same-case proof pointer and metadata replacement/clear retains history', async () => {
+  await db.exec('BEGIN');
+  try {
+    const id=(await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,status) VALUES('PROOF','PROOF','974','001','APPROVED') RETURNING id")).rows[0].id;
+    await db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'DISPATCHED','Sent',$2::jsonb)",[id,JSON.stringify({dispatchedDate:'2026-11-24',trackingId:'TRACK',dispatchedImage:'https://example.com/original.pdf',dispatchedDocName:'Original.pdf',dispatchedDocType:'application/pdf'})]);
+    const first=(await db.query('SELECT d.* FROM public.trademark_records r JOIN public.trademark_documents d ON (d.id,d.record_id)=(r.dispatch_document_id,r.id) WHERE r.id=$1',[id])).rows[0];
+    assert.equal(first.file_url,'https://example.com/original.pdf');
+    await db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)',[id,JSON.stringify({dispatchedImage:'https://example.com/replacement.pdf',dispatchedDocName:'Replacement.pdf'}),'New evidence']);
+    const next=(await db.query('SELECT dispatch_document_id FROM public.trademark_records WHERE id=$1',[id])).rows[0].dispatch_document_id;
+    assert.notEqual(String(next),String(first.id));
+    await db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)',[id,JSON.stringify({dispatch_document_id:null,dispatchedImage:''}),'Clear current proof']);
+    assert.equal((await db.query('SELECT dispatch_document_id FROM public.trademark_records WHERE id=$1',[id])).rows[0].dispatch_document_id,null);
+    assert.equal((await db.query('SELECT count(*)::int n FROM public.trademark_documents WHERE record_id=$1',[id])).rows[0].n,2);
+    const other=(await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no) VALUES('OTHER','PROOF','974','002') RETURNING id")).rows[0].id;
+    await db.exec('SAVEPOINT wrong_proof');
+    await assert.rejects(db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)',[other,JSON.stringify({dispatch_document_id:first.id}),'Wrong case']),/must belong/);
+    await db.exec('ROLLBACK TO SAVEPOINT wrong_proof');
+    await db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)',[id,JSON.stringify({dispatch_document_id:first.id}),'Select historical evidence']);
+    await db.exec('SET CONSTRAINTS fk_case_dispatch_document IMMEDIATE');
+    await db.query('DELETE FROM public.trademark_records WHERE id=$1',[id]);
+  } finally { await db.exec('ROLLBACK'); }
+});
+
+test('recovery remaps an explicit proof relationship into a populated target', async () => {
+  await db.exec('BEGIN');
+  try {
+    await db.exec("INSERT INTO public.trademark_records(id,mark_name,selection_menu,client_code,case_no) VALUES(801,'EXISTING','PROOF','973','001')");
+    const source={clients:[],records:[{id:801,mark_name:'RECOVER PROOF',selection_menu:'PROOF',client_code:'972',case_no:'001',dispatch_document_id:803}],history:[],documents:[{id:803,record_id:801,file_name:'PROOF',file_url:'https://example.com/proof.pdf'}]};
+    const report=(await db.query('SELECT public.restore_recovery_snapshot($1::jsonb) AS report',[JSON.stringify(source)])).rows[0].report;
+    assert.notEqual(report.caseIdMap['801'],801);
+    const row=(await db.query('SELECT r.id,d.record_id,d.file_url FROM public.trademark_records r JOIN public.trademark_documents d ON (r.dispatch_document_id,r.id)=(d.id,d.record_id) WHERE r.id=$1',[report.caseIdMap['801']])).rows[0];
+    assert.equal(String(row.id),String(row.record_id)); assert.equal(row.file_url,'https://example.com/proof.pdf');
+    await db.exec('SET CONSTRAINTS fk_case_dispatch_document IMMEDIATE');
+    assert.equal((await db.query('SELECT public.restore_recovery_snapshot($1::jsonb) AS report',[JSON.stringify(source)])).rows[0].report.alreadyRestored,true);
+  } finally { await db.exec('ROLLBACK'); }
+});

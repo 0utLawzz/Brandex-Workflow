@@ -49,11 +49,16 @@ export function preflightRestore(sourceJson: string, destinationJson: string): R
   }
   const references = new Set<string>();
   const existing = new Set((destination.data.records || []).map(caseIdentity).filter(Boolean));
+  const documentsById = new Map((data.documents || []).map((document: Row) => [Number(document.id), document as Row]));
   for (const row of records) {
     const reference = caseIdentity(row);
     if (!reference || references.has(reference)) report.errors.push(`Case ${row.id}: missing or duplicate case identity.`);
     references.add(reference);
     if (existing.has(reference)) report.counts.existingReferences++;
+    if (row.dispatchDocumentId !== undefined && row.dispatchDocumentId !== null) {
+      const document = documentsById.get(Number(row.dispatchDocumentId)) as Row | undefined;
+      if (!document || Number(document.record_id) !== Number(row.id)) report.errors.push(`Case ${row.id}: unresolved or mismatched current dispatch proof.`);
+    }
     if (row.clientId !== undefined && row.clientId !== null) {
       const client = clientIds.get(Number(row.clientId));
       if (!client) report.errors.push(`Case ${row.id}: unresolved client ${row.clientId}.`);

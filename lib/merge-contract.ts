@@ -41,6 +41,7 @@ export const CASE_MERGE_FIELDS = [
   {"tag":"RECORD_ID","api":"recordId","record":"id","storage":"id"},
   {"tag":"LOGO_URL","api":"img","record":"img","storage":"logo_url; IMAGE is the binary placeholder"},
   {"tag":"DISPATCH_PROOF_URL","api":"dispatchedImage","record":"dispatchedImage","storage":"trademark_documents.file_url"},
+  {"tag":"DISPATCH_DOCUMENT_ID","api":"dispatchDocumentId","record":"dispatchDocumentId","storage":"dispatch_document_id"},
   {"tag":"DISPATCH_PROOF_NAME","api":"dispatchedDocName","record":"dispatchedDocName","storage":"trademark_documents.file_name"},
   {"tag":"DISPATCH_PROOF_TYPE","api":"dispatchedDocType","record":"dispatchedDocType","storage":"trademark_documents.file_type"},
   {"tag":"RECEIPT_URL","api":"receiptImage","record":"receiptImage","storage":"receipt_image"},
