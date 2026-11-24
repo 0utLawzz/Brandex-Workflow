@@ -91,6 +91,7 @@ export default function ClientsPage() {
   const handleSaveEditedClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient || !editFormData.client_name?.trim()) return;
+    if (!/^\d{1,3}$/.test(String(editFormData.client_code || '').trim())) { setErrorMsg('Client code must contain 1 to 3 digits.'); return; }
     const editPrefix = String(editFormData.client_prefix || '').trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9]{0,7}$/.test(editPrefix)) {
       setErrorMsg('Client prefix must start with a letter and contain 1–8 letters or numbers.');
@@ -104,7 +105,7 @@ export default function ClientsPage() {
     setEditSaving(true);
     try {
       const updated = await supabaseDB.updateClient(editingClient.id, {
-        client_code: (editFormData.client_code || '').replace(/\D/g, '').slice(0, 3).padStart(3, '0'),
+        client_code: (editFormData.client_code || '').trim().padStart(3, '0'),
         client_prefix: String(editFormData.client_prefix || '').trim().toUpperCase(),
         city: (editFormData.city || '').trim().toUpperCase(),
         folder_reference: (editFormData.folder_reference || '').trim().toUpperCase(),

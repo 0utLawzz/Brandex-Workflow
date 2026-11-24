@@ -77,3 +77,21 @@ test('creation saves IN REVIEW and history atomically, with separate approval ti
     await assert.rejects(db.query("SELECT public.create_case_record('{\"selection_menu\":\"A\",\"client_code\":\"991\",\"case_no\":\"001\",\"mark_name\":\"INVALID\"}')"), /missing or ambiguous/);
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('client imports roll back duplicates and identity guards protect linked cases', async () => {
+  await db.exec('BEGIN');
+  const rejectSafely = async (query, pattern) => {
+    await db.exec('SAVEPOINT expected_failure');
+    await assert.rejects(db.query(query), pattern);
+    await db.exec('ROLLBACK TO SAVEPOINT expected_failure');
+  };
+  try {
+    await rejectSafely("SELECT public.import_client_csv('[{\"client_code\":\"989\",\"name\":\"FIRST\"},{\"client_code\":\"989\",\"name\":\"DUPLICATE\"}]')", /duplicate/);
+    assert.equal((await db.query("SELECT count(*)::int n FROM public.clients WHERE client_code='989'")).rows[0].n,0);
+    const client = (await db.query("INSERT INTO public.clients(client_code,name) VALUES('990','GUARDED') RETURNING id")).rows[0].id;
+    await db.query("INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,client_id) VALUES('GUARDED','GUARD','990','001',$1)",[client]);
+    await rejectSafely(`DELETE FROM public.clients WHERE id=${Number(client)}`,/has cases/);
+    await rejectSafely(`UPDATE public.clients SET client_code='988' WHERE id=${Number(client)}`,/in use/);
+    await rejectSafely(`INSERT INTO public.trademark_records(mark_name,selection_menu,client_code,case_no,client_id) VALUES('WRONG','GUARD','987','002',${Number(client)})`,/same client/);
+  } finally { await db.exec('ROLLBACK'); }
+});

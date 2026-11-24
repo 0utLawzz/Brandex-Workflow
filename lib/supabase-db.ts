@@ -720,25 +720,12 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Import was not saved.');
 
-    const client = getSupabaseClient();
-    let importedCount = 0;
-    for (let offset = 0; offset < clients.length; offset += 100) {
-      const batch = clients.slice(offset, offset + 100);
-      const rows = batch.map(profile => ({
-        ...mapClientToRow(profile),
-        created_at: profile.created_at || new Date().toISOString()
-      }));
-      const { data, error } = await withSupabaseTimeout(client.from('clients').insert(rows).select());
-      if (error) {
-        throw new Error(`CSV import saved ${importedCount} of ${clients.length} clients before failing: ${error.message}`);
-      }
-      const inserted = Array.isArray(data) ? data.map(mapRowToClient) : [];
-      if (inserted.length !== batch.length) {
-        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${clients.length} clients; Supabase returned an incomplete batch.`);
-      }
-      importedCount += inserted.length;
-    }
-    return importedCount;
+    if (clients.length > 5000) throw new Error('Import no more than 5000 clients at once.');
+    const rows = clients.map(profile => ({ ...mapClientToRow(profile), ...(profile.created_at ? { created_at: profile.created_at } : {}) }));
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('import_client_csv', { p_rows: rows }));
+    if (error) throw new Error(`Atomic client import failed: ${error.message}`);
+    if (data !== clients.length) throw new Error('Client import confirmation is incomplete. Reload before retrying.');
+    return data;
   }
 
   public async restoreBackupJSON(json: string, options: RecoveryOptions = { confirmed: false, allowMissingAssets: false }): Promise<RecoveryReport> {
