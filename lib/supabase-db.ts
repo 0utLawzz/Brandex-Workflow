@@ -362,39 +362,21 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Import was not saved.');
 
-    const client = getSupabaseClient();
-    let importedCount = 0;
-    for (let offset = 0; offset < records.length; offset += 100) {
-      const batch = records.slice(offset, offset + 100);
-      const rows = batch.map(record => {
+    if (records.length > 5000) throw new Error('Import no more than 5000 cases at once.');
+    const rows = records.map(record => {
         const row = mapRecordToRow(record);
         row.selection_menu = record.selectionMenu ?? '';
         row.client_code = record.clientCode ?? '';
         row.case_no = record.caseNo ?? '';
         delete row.id;
-        row.created_at = record.createdAt || new Date().toISOString();
-        return row;
-      });
-
-      let result = await withSupabaseTimeout(client.from('trademark_records').insert(rows).select());
-      if (result.error?.message.includes('client_id') && rows.some(row => row.client_id !== undefined)) {
-        const compatibleRows = rows.map(row => {
-          const compatibleRow = { ...row };
-          delete compatibleRow.client_id;
-          return compatibleRow;
-        });
-        result = await withSupabaseTimeout(client.from('trademark_records').insert(compatibleRows).select());
-      }
-      if (result.error) {
-        throw new Error(`CSV import saved ${importedCount} of ${records.length} cases before failing: ${result.error.message}`);
-      }
-      const inserted = Array.isArray(result.data) ? result.data.map(mapRowToRecord) : [];
-      if (inserted.length !== batch.length) {
-        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${records.length} cases; Supabase returned an incomplete batch.`);
-      }
-      importedCount += inserted.length;
-    }
-    return importedCount;
+        if (record.createdAt) row.created_at = record.createdAt;
+        if (record.updatedAt) row.updated_at = record.updatedAt;
+        return { row, proof: { url: record.dispatchedImage || '', name: record.dispatchedDocName || '', type: record.dispatchedDocType || '' } };
+    });
+    const result = await withSupabaseTimeout(getSupabaseClient().rpc('import_case_csv', { p_rows: rows }));
+    if (result.error) throw new Error(`Atomic CSV import failed: ${result.error.message}`);
+    if (result.data !== records.length) throw new Error('Import confirmation is incomplete. Reload cases before retrying.');
+    return result.data;
   }
 
   public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {

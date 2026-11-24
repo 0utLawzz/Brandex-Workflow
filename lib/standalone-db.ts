@@ -360,119 +360,7 @@ class StandaloneDB {
   }
 
   public generateSampleRecordsCSV(): string {
-    const headers = [
-      "ID",
-      "Date",
-      "Case Ref",
-      "Case Name",
-      "TM No",
-      "Class",
-      "Applicant",
-      "Trading As",
-      "Law Firm",
-      "Workflow Stage",
-      "Tracking ID",
-      "Dispatched Date",
-      "Dispatched Note",
-      "Delivered Date",
-      "Receiver Name",
-      "Client Code",
-      "CNIC",
-      "Address",
-      "Notes"
-    ];
-
-    const sampleRows = [
-      [
-        1,
-        "02/10/2026",
-        "A646-001",
-        "AEROFLEX COURIER",
-        "TM-589201",
-        "39",
-        "MUHAMMAD USMAN RAZA",
-        "AEROFLEX LOGISTICS PAKISTAN",
-        "BRANDEX LAW ASSOCIATES",
-        "DISPATCHED",
-        "TCS-99201488",
-        "Tue 10-Nov-2026",
-        "Dispatched hardcopy Form TM-1 and TM-48 via TCS Express.",
-        "",
-        "",
-        "646",
-        "35201-1234567-1",
-        "PLOT 14, SECTOR I-9, ISLAMABAD",
-        "Priority examination requested."
-      ],
-      [
-        2,
-        "05/10/2026",
-        "646-A-002",
-        "NOVACURE PHARMA",
-        "TM-602114",
-        "5",
-        "DR. TARIQ MAHMOOD",
-        "NOVACURE HEALTH LABORATORIES",
-        "BRANDEX LAW ASSOCIATES",
-        "DELIVERED",
-        "LCS-7718290",
-        "Mon 09-Nov-2026",
-        "Original Registration Certificate dispatched via Leopards.",
-        "12-Nov-26",
-        "DR. TARIQ MAHMOOD (DIRECTOR)",
-        "646",
-        "37405-7654321-3",
-        "COMMERCIAL PLAZA, BLUE AREA, ISLAMABAD",
-        "Delivered with signed acknowledgment copy."
-      ],
-      [
-        3,
-        "12/10/2026",
-        "647-A-001",
-        "GOLDEN GRAIN MILLS",
-        "TM-614882",
-        "30",
-        "CHAUDHRY ASLAM PERVAIZ",
-        "GOLDEN AGRI FOODS",
-        "BRANDEX LAW ASSOCIATES",
-        "APPROVED",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "647",
-        "35102-9988776-5",
-        "G.T. ROAD, GUJRANWALA",
-        "Trademark advertised in Trademark Journal."
-      ],
-      [
-        4,
-        "18/10/2026",
-        "648-A-001",
-        "ZENITH TECH SOFTWARES",
-        "TM-620441",
-        "42",
-        "HAMZA KHALID",
-        "ZENITH CLOUD INNOVATIONS",
-        "BRANDEX LAW ASSOCIATES",
-        "IN REVIEW",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "648",
-        "35202-3344556-7",
-        "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE",
-        "Filing completed, waiting for hearing notice."
-      ]
-    ];
-
-    return Papa.unparse({
-      fields: headers,
-      data: sampleRows
-    });
+    return this.exportRecordsCSV([]);
   }
 
   public importRecordsCSV(csvText: string, persist = true): { success: boolean; message: string; count: number; records?: RecordItem[] } {
@@ -643,18 +531,7 @@ class StandaloneDB {
   }
 
   public generateSampleClientsCSV(): string {
-    const headers = ["Client Prefix", "Client Code", "Full Name", "Father Name", "Trading As", "CNIC", "Address", "City", "Additional Folder Reference", "Consultant Name"];
-
-    const sampleRows = [
-      ["A", "646", "MUHAMMAD USMAN RAZA", "HAJI ABDUL RAZZAQ", "AEROFLEX LOGISTICS PAKISTAN", "35201-1234567-1", "PLOT 14, SECTOR I-9, ISLAMABAD", "ISLAMABAD", "", "BRANDEX LAW ASSOCIATES"],
-      ["X", "647", "CHAUDHRY ASLAM PERVAIZ", "CHAUDHRY BASHIR AHMED", "GOLDEN AGRI FOODS", "35102-9988776-5", "G.T. ROAD, GUJRANWALA", "GUJRANWALA", "", "BRANDEX LAW ASSOCIATES"],
-      ["N", "648", "HAMZA KHALID", "KHALID MEHMOOD", "ZENITH CLOUD INNOVATIONS", "35202-3344556-7", "ARFA SOFTWARE TECHNOLOGY PARK, LAHORE", "LAHORE", "", "BRANDEX LAW ASSOCIATES"]
-    ];
-
-    return Papa.unparse({
-      fields: headers,
-      data: sampleRows
-    });
+    return this.exportClientsCSV([]);
   }
 
   public importClientsCSV(csvText: string, persist = true): { success: boolean; message: string; count: number; clients?: Array<Omit<ClientProfile, 'id'>> } {
