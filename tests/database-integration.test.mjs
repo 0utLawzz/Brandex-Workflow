@@ -61,3 +61,19 @@ test('metadata RPC persists category, serial and client relationship with audit 
     assert.equal((await db.query('SELECT count(*)::int AS n FROM public.trademark_history WHERE record_id=$1',[id])).rows[0].n,1);
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('creation saves IN REVIEW and history atomically, with separate approval timestamp', async () => {
+  await db.exec('BEGIN');
+  try {
+    await db.exec("INSERT INTO public.clients(client_code,name) VALUES('992','CREATE TEST')");
+    const result = await db.query("SELECT public.create_case_record('{\"selection_menu\":\"A\",\"client_code\":\"992\",\"case_no\":\"001\",\"mark_name\":\"TEST\",\"status\":\"APPROVED\"}') AS saved");
+    const saved = result.rows[0].saved;
+    assert.equal(saved.status, 'IN REVIEW'); assert.ok(saved.in_review_at); assert.equal(saved.approved_at, null);
+    const history = await db.query('SELECT status FROM public.trademark_history WHERE record_id=$1',[saved.id]);
+    assert.equal(history.rows[0].status,'RECORD_CREATED');
+    await db.query("SELECT public.apply_case_workflow_transition(ARRAY[$1::bigint],'APPROVED','Test approval','{}')",[saved.id]);
+    const row = (await db.query('SELECT in_review_at,approved_at,status FROM public.trademark_records WHERE id=$1',[saved.id])).rows[0];
+    assert.ok(row.approved_at); assert.equal(row.status,'APPROVED');
+    await assert.rejects(db.query("SELECT public.create_case_record('{\"selection_menu\":\"A\",\"client_code\":\"991\",\"case_no\":\"001\",\"mark_name\":\"INVALID\"}')"), /missing or ambiguous/);
+  } finally { await db.exec('ROLLBACK'); }
+});

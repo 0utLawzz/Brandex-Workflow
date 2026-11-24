@@ -676,7 +676,7 @@ export default function TrademarkApplicationPage() {
     setAppName('');
     setAppSo('');
     setAppCnic('');
-    setYear('2023');
+    setYear('');
     setAppTrade('');
     setAppAdd('');
     setStatus('GENERATING APPLICATION');

@@ -317,38 +317,9 @@ class SupabaseDBService {
         if (record.id) row.id = record.id;
         row.created_at = new Date().toISOString();
 
-        let { data, error } = await client
-          .from('trademark_records')
-          .insert([row])
-          .select()
-          .single();
-
-        // Existing projects may not yet have applied the additive client relationship migration.
-        if (error?.message.includes('client_id') && row.client_id !== undefined) {
-          delete row.client_id;
-          const retry = await client.from('trademark_records').insert([row]).select().single();
-          data = retry.data;
-          error = retry.error;
-        }
-
-        if (!error && data) {
-          const inserted = mapRowToRecord(data);
-          try {
-            const { error: historyError } = await client.from('trademark_history').insert([{
-              record_id: inserted.id,
-              status: 'RECORD_CREATED',
-              notes: `Case #${inserted.caseNo || '001'} created with initial status: ${inserted.status || 'PENDING'}`,
-              created_at: new Date().toISOString(),
-            }]);
-            if (historyError) console.warn('[SupabaseDB] Initial case history was not saved remotely:', historyError.message);
-          } catch (historyError) {
-            console.warn('[SupabaseDB] Initial case history request failed:', historyError);
-          }
-          return inserted;
-        } else if (error) {
-          console.warn('[SupabaseDB] Record insert failed on remote DB:', error.message);
-          throw new Error(`Supabase record save failed: ${error.message}`);
-        }
+        const { data, error } = await withSupabaseTimeout(client.rpc('create_case_record', { p_row: row }));
+        if (error || !data) throw new Error(`Atomic case creation failed: ${error?.message || 'No saved case returned'}`);
+        return mapRowToRecord(data);
       } catch (err) {
         console.warn('[SupabaseDB] Error sending record to Supabase:', err);
         throw err;

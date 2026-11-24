@@ -3,6 +3,7 @@ import type { RecordItem } from './standalone-db';
 // Edit Case must send only fields the operator actually changed. In particular,
 // lifecycle/proof defaults from legacy rows must never be rewritten by a metadata edit.
 const EDITABLE_FIELDS = [
+  'clientId', 'serialNo', 'category',
   'selectionMenu', 'clientCode', 'caseNo', 'folder', 'tm', 'classNo', 'classDesc',
   'appType', 'appName', 'appTrade', 'fatherName', 'cnic', 'address', 'date',
   'issueDate', 'expiryDate', 'year', 'conName', 'conAddr', 'lawFirm', 'filingProcess',
