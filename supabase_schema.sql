@@ -99,7 +99,7 @@ ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS folder_reference TEXT;
 -- Prevent duplicate case references for the same client and series.
 -- The preflight check aborts safely rather than renumbering or deleting existing records.
-DO $
+DO $$
 BEGIN
   IF EXISTS (
     SELECT 1
@@ -119,7 +119,7 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Duplicate client/series/case references exist. Review them before applying the BrandEx case identity index.';
   END IF;
-END $;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_trademark_records_client_series_case
 ON public.trademark_records (

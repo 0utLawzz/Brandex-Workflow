@@ -35,7 +35,7 @@ BEGIN
   IF p_snapshot IS NULL OR jsonb_typeof(p_snapshot) <> 'object' THEN RAISE EXCEPTION 'Invalid recovery snapshot'; END IF;
   -- Serialize restores and ordinary writes while identities are checked and inserted.
   LOCK TABLE public.clients, public.trademark_records, public.trademark_history,
-    public.trademark_documents, public.recovery_runs IN SHARE ROW EXCLUSIVE MODE;
+    public.trademark_documents IN SHARE ROW EXCLUSIVE MODE;
   SELECT r.report INTO prior FROM public.recovery_runs r WHERE r.package_hash = v_package_hash;
   IF prior IS NOT NULL THEN RETURN prior || jsonb_build_object('alreadyRestored', true); END IF;
   FOREACH collection IN ARRAY ARRAY['clients', 'records', 'history', 'documents'] LOOP
