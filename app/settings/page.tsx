@@ -70,10 +70,6 @@ export default function SettingsPage() {
               <option value={10}>10 records</option><option value={25}>25 records</option><option value={50}>50 records</option><option value={100}>100 records</option>
             </select>
           </label>
-          <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-[#0C0C0C]/10 pt-4 text-sm">
-            <span><strong className="block">Law firm summary</strong><span className="text-xs text-[#666]">Show or hide the consultant summary above the records.</span></span>
-            <input type="checkbox" checked={preferences.showLawFirmWidget} onChange={event => update({ showLawFirmWidget: event.target.checked })} className="h-5 w-5 accent-[#C94A00]" />
-          </label>
         </section>
 
         <section className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">

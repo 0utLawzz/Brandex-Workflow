@@ -16,7 +16,7 @@ import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import { validateWorkflowTransition } from '@/lib/case-workflow';
 import { buildCaseEditUpdates, getInlineAssetBytes, MAX_INLINE_ASSET_BYTES } from '@/lib/case-edit-payload';
-import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
+import { readWorkspacePreferences } from '@/lib/workspace-preferences';
 import {
   CheckSquare,
   Square,
@@ -35,8 +35,6 @@ import {
   PackageCheck,
   FileText,
   UserCheck,
-  Building2,
-  Calendar,
   Pencil,
   Trash2,
   Database,
@@ -122,7 +120,6 @@ export default function RecordsPage() {
   const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string>>>({});
   const [columnSort, setColumnSort] = useState<{ column: TableColumn; direction: 'asc' | 'desc' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showCharts, setShowCharts] = useState(true);
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -236,7 +233,6 @@ export default function RecordsPage() {
   useEffect(() => {
     const preferences = readWorkspacePreferences();
     setPageSize(preferences.pageSize);
-    setShowCharts(preferences.showLawFirmWidget);
     loadAllRecords();
   }, []);
 
@@ -354,45 +350,16 @@ export default function RecordsPage() {
     onSort={() => { setColumnSort(current => ({ column, direction: current?.column === column && current.direction === 'asc' ? 'desc' : 'asc' })); setCurrentPage(1); }}
     onFilter={value => { setColumnFilters(current => ({ ...current, [column]: value })); setCurrentPage(1); }} />;
 
-  // 4 BOX STATISTICS & LAW FIRM WIDGET DATA
-  const stats = useMemo(() => {
-    let pending = 0;
-    let inReview = 0;
-    let approved = 0;
-    let rejected = 0;
-    let dispatched = 0;
-    let delivered = 0;
-    const byFirm: Record<string, number> = {};
-
-    allRecords.forEach(r => {
-      const st = String(r.status || '').toUpperCase();
-      if (st.includes('DELIVERED')) delivered++;
-      else if (st.includes('DISPATCHED')) dispatched++;
-      else if (st.includes('APPROVED')) approved++;
-      else if (st.includes('REJECT')) rejected++;
-      else if (st.includes('REVIEW')) inReview++;
-      else if (st.includes('PENDING')) pending++;
-
-      const firm = (r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES').trim().toUpperCase();
-      byFirm[firm] = (byFirm[firm] || 0) + 1;
-    });
-
-    const firmsSorted = Object.entries(byFirm).sort((a, b) => b[1] - a[1]);
-
-    return {
-      total: allRecords.length,
-      pending,
-      inReview,
-      pendingInReview: pending + inReview,
-      approved,
-      rejected,
-      approvedRejected: approved + rejected,
-      dispatched,
-      delivered,
-      dispatchedDelivered: dispatched + delivered,
-      byFirm: firmsSorted
-    };
-  }, [allRecords]);
+  const caseSummary = useMemo(() => allRecords.reduce((summary, record) => {
+    const status = String(record.status || '').toUpperCase();
+    summary.total++;
+    if (status.includes('DELIVERED')) summary.delivered++;
+    else if (status.includes('DISPATCHED')) summary.dispatched++;
+    else if (status.includes('APPROVED')) summary.approved++;
+    else if (status.includes('REJECT')) summary.rejected++;
+    else summary.review++;
+    return summary;
+  }, { total: 0, review: 0, approved: 0, rejected: 0, dispatched: 0, delivered: 0 }), [allRecords]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedRecords.length / pageSize));
@@ -777,139 +744,16 @@ export default function RecordsPage() {
           </div>
         )}
 
-        {/* =========================================================================
-            4 BOX STATISTICS ROW (TOTAL, PENDING/REVIEW, APPROVED/REJECTED, DISPATCHED/DELIVERED)
-           ========================================================================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Box 1: Total */}
-          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C]">
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              TOTAL CASES
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.total}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#0D9970] mt-1 font-bold">
-              All saved cases
-            </div>
-          </div>
-
-          {/* Box 2: Pending & In Review (Default) */}
-          <div
-            onClick={() => setFilterStatus('PENDING_IN_REVIEW')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'PENDING_IN_REVIEW' ? 'bg-[#FFE066]' : 'bg-[#FAF6EE] hover:bg-[#fff9db]'
-              }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#0C0C0C] uppercase">
-                PENDING / IN REVIEW
-              </span>
-              <span className="font-['DM_Mono',monospace] text-[0.65rem] bg-[#0C0C0C] text-[#FAF6EE] px-1.5 py-0.2 rounded font-bold">
-                DEFAULT
-              </span>
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.pendingInReview}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              {stats.pending} Pending · {stats.inReview} In Review
-            </div>
-          </div>
-
-          {/* Box 3: Approved / Rejected */}
-          <div
-            onClick={() => setFilterStatus('APPROVED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'APPROVED' ? 'bg-[#EBF7F2]' : 'bg-[#FAF6EE] hover:bg-[#f0fbf6]'
-              }`}
-          >
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              APPROVED / REJECTED
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.approvedRejected}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              <span className="text-[#0D9970]">{stats.approved} Approved</span> ·{' '}
-              <span className="text-[#dc2626]">{stats.rejected} Rejected</span>
-            </div>
-          </div>
-
-          {/* Box 4: Dispatched / Delivered */}
-          <div
-            onClick={() => setFilterStatus('DISPATCHED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'DISPATCHED' ? 'bg-[#e0f2fe]' : 'bg-[#FAF6EE] hover:bg-[#f0f9ff]'
-              }`}
-          >
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              DISPATCHED / DELIVERED
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.dispatchedDelivered}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              <span className="text-[#0284c7]">{stats.dispatched} Dispatched</span> ·{' '}
-              <span className="text-[#0D9970]">{stats.delivered} Delivered</span>
-            </div>
-          </div>
-        </div>
+        <section aria-label="Case summary" className="mb-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-[#0C0C0C]/20 py-3 text-xs text-[#444]">
+          <span><strong className="text-[#0C0C0C]">{caseSummary.total}</strong> total cases</span>
+          <span><strong className="text-[#0C0C0C]">{caseSummary.review}</strong> pending or in review</span>
+          <span><strong className="text-[#0D9970]">{caseSummary.approved}</strong> approved</span>
+          <span><strong className="text-[#DC2626]">{caseSummary.rejected}</strong> rejected</span>
+          <span><strong className="text-[#0284c7]">{caseSummary.dispatched}</strong> dispatched</span>
+          <span><strong className="text-[#0D9970]">{caseSummary.delivered}</strong> delivered</span>
+        </section>
 
         <MonthlyCaseChart records={allRecords} />
-
-        {/* =========================================================================
-            LAW FIRM WIDGET (Replaced Workflow Stage Distribution)
-           ========================================================================= */}
-        {showCharts && (
-          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px] mb-6">
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#C94A00]" />
-                <h2 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px]">
-                  Cases by Law Firm / Legal Consultant
-                </h2>
-              </div>
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-                Top Practice Portfolios
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {stats.byFirm.slice(0, 6).map(([firmName, count]) => {
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-                return (
-                  <div
-                    key={firmName}
-                    onClick={() => {
-                      if (selectedConsultants.includes(firmName)) {
-                        setSelectedConsultants(prev => prev.filter(f => f !== firmName));
-                      } else {
-                        setSelectedConsultants(prev => [...prev, firmName]);
-                      }
-                    }}
-                    className={`p-3 border-2 border-[#0C0C0C] rounded-[4px] cursor-pointer transition-all ${selectedConsultants.includes(firmName)
-                        ? 'bg-[#C94A00] text-white shadow-[2px_2px_0_#0C0C0C]'
-                        : 'bg-white hover:bg-[#F0E8D0]'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold truncate max-w-[200px]" title={firmName}>
-                        {firmName}
-                      </span>
-                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold ml-2">
-                        {count} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-[#ddd] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${selectedConsultants.includes(firmName) ? 'bg-[#FFE066]' : 'bg-[#0D9970]'}`}
-                        style={{ width: `${Math.max(8, pct)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* =========================================================================
             CONTROLS, SHORT FILTER BUTTONS & MULTI-SELECT CONSULTANT
@@ -1027,17 +871,6 @@ export default function RecordsPage() {
                 <option value="status">Workflow Stage</option>
               </select>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const nextValue = !showCharts;
-                  setShowCharts(nextValue);
-                  saveWorkspacePreferences({ ...readWorkspacePreferences(), showLawFirmWidget: nextValue });
-                }}
-                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2.5 px-3 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded-[4px] cursor-pointer"
-              >
-                {showCharts ? 'Hide Firm Widget' : 'Show Firm Widget'}
-              </button>
             </div>
           </div>
         </details>
