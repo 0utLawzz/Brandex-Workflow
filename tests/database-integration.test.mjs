@@ -215,3 +215,34 @@ test('workspace and series recover with case rows atomically and never overwrite
     assert.equal((await db.query('SELECT count(*)::int n FROM public.trademark_records')).rows[0].n,1);
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('recovery retries verify unchanged client, case, history and document content across time zones', async () => {
+  await db.exec("BEGIN; SET LOCAL ROLE service_role; SET LOCAL timezone='Asia/Karachi'");
+  const source = JSON.stringify({
+    clients:[{id:601,client_code:'975',name:'INTACT'}],
+    records:[{id:602,client_id:601,client_code:'975',case_no:'001',selection_menu:'INTACT',mark_name:'INTACT'}],
+    history:[{id:603,record_id:602,status:'IMPORTED',notes:'ORIGINAL'}],
+    documents:[{id:604,record_id:602,file_name:'ORIGINAL',file_type:'application/pdf',file_url:'https://drive.google.com/file/d/1234567890/view'}]
+  });
+  const restore = () => db.query('SELECT public.restore_recovery_snapshot($1::jsonb) AS report',[source]);
+  try {
+    const first = (await restore()).rows[0].report;
+    assert.equal(first.fingerprints,undefined);
+    await db.exec("SET LOCAL timezone='UTC'");
+    assert.equal((await restore()).rows[0].report.alreadyRestored,true);
+    for (const mutation of [
+      "UPDATE public.clients SET name='EDITED' WHERE id=601",
+      "UPDATE public.trademark_records SET mark_name='EDITED' WHERE id=602",
+      "UPDATE public.trademark_history SET notes='EDITED' WHERE id=603",
+      "DELETE FROM public.trademark_documents WHERE id=604"
+    ]) {
+      await db.exec('SAVEPOINT original_content');
+      await db.exec(mutation);
+      await db.exec('SAVEPOINT before_retry');
+      await assert.rejects(restore(),/restored rows are missing or changed/);
+      await db.exec('ROLLBACK TO SAVEPOINT before_retry');
+      await db.exec('ROLLBACK TO SAVEPOINT original_content');
+    }
+    assert.equal((await restore()).rows[0].report.alreadyRestored,true);
+  } finally { await db.exec('ROLLBACK'); }
+});
