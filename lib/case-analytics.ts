@@ -1,5 +1,5 @@
 import { toDateInputValue } from './case-reference.ts';
-type AnalyticsCase = { createdAt?: string; dispatchedDate?: string; deliveredDate?: string };
+type AnalyticsCase = { createdAt?: string; filingDate?: string | null; dispatchedDate?: string; deliveredDate?: string };
 function monthOf(value: string | undefined): string {
   if (!value) return '';
   if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
@@ -15,17 +15,20 @@ export function monthlyCaseAnalytics(records: AnalyticsCase[], now = new Date())
   const [year, month] = current.split('-').map(Number);
   const buckets = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(Date.UTC(year, month - 12 + index, 1));
-    return { month: date.toISOString().slice(0, 7), created: 0, dispatched: 0, delivered: 0 };
+    return { month: date.toISOString().slice(0, 7), filed: 0, created: 0, dispatched: 0, delivered: 0 };
   });
   const byMonth = new Map(buckets.map(bucket => [bucket.month, bucket]));
   let missingCreatedDates = 0;
+  let missingFilingDates = 0;
   for (const record of records) {
     const created = monthOf(record.createdAt);
     if (!created) missingCreatedDates++;
-    for (const [key, value] of [['created', created], ['dispatched', monthOf(record.dispatchedDate)], ['delivered', monthOf(record.deliveredDate)]] as const) {
+    const filed = monthOf(record.filingDate || undefined);
+    if (!filed) missingFilingDates++;
+    for (const [key, value] of [['filed', filed], ['created', created], ['dispatched', monthOf(record.dispatchedDate)], ['delivered', monthOf(record.deliveredDate)]] as const) {
       const bucket = byMonth.get(value);
       if (bucket) bucket[key]++;
     }
   }
-  return { buckets, missingCreatedDates };
+  return { buckets, missingCreatedDates, missingFilingDates };
 }

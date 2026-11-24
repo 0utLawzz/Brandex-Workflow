@@ -10,6 +10,7 @@ export const CASE_MERGE_FIELDS = [
   {"tag":"APP_CNIC","api":"appCnic","record":"cnic","storage":"cnic"},
   {"tag":"ISSUE_DATE","api":"issueDate","record":"issueDate","storage":"issue_date"},
   {"tag":"EXPIRY_DATE","api":"expiryDate","record":"expiryDate","storage":"expiry_date"},
+  {"tag":"FILING_DATE","api":"filingDate","record":"filingDate","storage":"filing_date; actual application filing date"},
   {"tag":"APP_TRADE","api":"appTrade","record":"appTrade","storage":"trading_as"},
   {"tag":"APP_ADD","api":"appAdd","record":"address","storage":"address"},
   {"tag":"YEAR","api":"year","record":"year","storage":"usage_year"},

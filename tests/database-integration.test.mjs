@@ -136,3 +136,21 @@ test('recovery retry detects records removed after a previous restore', async ()
     await db.exec('ROLLBACK TO SAVEPOINT removed_row');
   } finally { await db.exec('ROLLBACK'); }
 });
+
+test('actual filing dates persist independently, reject invalid dates and can be cleared', async () => {
+  await db.exec('BEGIN');
+  try {
+    await db.exec("INSERT INTO public.clients(client_code,name) VALUES('977','FILED')");
+    const saved = (await db.query("SELECT public.create_case_record('{\"selection_menu\":\"A\",\"client_code\":\"977\",\"case_no\":\"001\",\"mark_name\":\"FILED\",\"issue_date\":\"2026-10-01\",\"filing_date\":\"2026-11-24\"}') AS saved")).rows[0].saved;
+    assert.equal(saved.filing_date, '2026-11-24');
+    assert.equal(saved.issue_date, '2026-10-01');
+    await db.exec('SAVEPOINT invalid_filing_date');
+    await assert.rejects(db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)', [saved.id, JSON.stringify({filing_date:'2026-02-30',mark_name:'UNSAFE'}),'bad']), /date/);
+    await db.exec('ROLLBACK TO SAVEPOINT invalid_filing_date');
+    const snapshot = (await db.query('SELECT public.get_recovery_snapshot() AS snapshot')).rows[0].snapshot;
+    assert.equal(snapshot.records.find(row => row.id === saved.id).filing_date, '2026-11-24');
+    await db.query('SELECT public.apply_case_metadata_update($1,$2::jsonb,$3)', [saved.id, JSON.stringify({filing_date:null}),'clear date']);
+    const row = (await db.query('SELECT filing_date,issue_date,mark_name FROM public.trademark_records WHERE id=$1',[saved.id])).rows[0];
+    assert.equal(row.filing_date, null); assert.equal(row.issue_date,'2026-10-01'); assert.equal(row.mark_name,'FILED');
+  } finally { await db.exec('ROLLBACK'); }
+});

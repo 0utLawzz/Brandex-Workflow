@@ -50,6 +50,28 @@ test('client CSV validates every identity before any local writes', () => {
   assert.deepEqual(standaloneDB.getClients(), []);
 });
 
+test('ambiguous CSV columns, malformed rows and conflicting legacy references fail before writes', () => {
+  standaloneDB.clearAllData();
+  for (const csv of [
+    'Case Ref,Case Name,Client Code\nN333-001,CASE,444',
+    'Case Ref,Case Name,Series\n333-N-001,CASE,X',
+    'Case Ref,Case Name,Series,Client Code,Case Number\ninvalid,CASE,N,333,001',
+    'Case Ref,Case Ref,Case Name\nN-333-001,N-444-001,CASE',
+    'Case Ref,Case Name\nN-333-001,"unterminated'
+  ]) assert.equal(standaloneDB.importRecordsCSV(csv).success, false, csv);
+  assert.deepEqual(standaloneDB.getRecords(), []);
+  for (const csv of [
+    'Client Prefix,Full Name\n123,PERSON',
+    'Client Code,Consultant Name\n123,CONSULTANT',
+    'Client Code,Client Code,Full Name\n123,456,PERSON',
+    'Client Code,Full Name\n123,"unterminated'
+  ]) {
+    const result = standaloneDB.importClientsCSV(csv);
+    assert.equal(result.count, 0, csv);
+  }
+  assert.deepEqual(standaloneDB.getClients(), []);
+});
+
 test('records CSV round-trip preserves client, series, and case number', () => {
   standaloneDB.clearAllData();
   standaloneDB.addRecord({

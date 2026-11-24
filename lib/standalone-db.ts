@@ -25,6 +25,7 @@ export interface RecordItem {
   appTrade: string;
   year: string;
   expiryDate?: string | null;
+  filingDate?: string | null;
   conName: string;
   conAddr?: string | null;
   lawFirm?: string;
@@ -98,6 +99,7 @@ const CASE_CSV_EXTRA_FIELDS = [
   ['Legal Case Stage', 'filingProcess'], ['Serial Number', 'serialNo'], ['Category', 'category'],
   ['Class Description', 'classDesc'], ['Application Type', 'appType'], ['Father Name', 'fatherName'],
   ['Issue Date', 'issueDate'], ['Expiry Date', 'expiryDate'], ['Using Since', 'year'],
+  ['Application Filing Date', 'filingDate'],
   ['Consultant Address', 'conAddr'], ['Logo URL', 'img'], ['No Image Text', 'noImg'],
   ['Dispatch Proof URL', 'dispatchedImage'], ['Dispatch Proof Name', 'dispatchedDocName'],
   ['Dispatch Proof Type', 'dispatchedDocType'], ['Receipt URL', 'receiptImage'],
@@ -374,7 +376,7 @@ class StandaloneDB {
         skipEmptyLines: 'greedy',
       });
 
-      if (parseResult.errors && parseResult.errors.length > 0 && (!parseResult.data || parseResult.data.length === 0)) {
+      if (parseResult.errors && parseResult.errors.length > 0) {
         return { success: false, message: parseResult.errors[0]?.message || "CSV parse error", count: 0 };
       }
 
@@ -385,6 +387,7 @@ class StandaloneDB {
 
       // Prefer exact exported headers before legacy aliases; absent columns stay absent.
       const headerRow = rows[0].map((h: any) => String(h || '').trim().toLowerCase());
+      if (new Set(headerRow).size !== headerRow.length) throw new Error('Duplicate CSV headers are ambiguous. No cases were imported.');
       
       const findCol = (possibleNames: string[], defaultIndex: number): number => {
         for (const name of possibleNames) {
@@ -418,7 +421,7 @@ class StandaloneDB {
       const colNotes = findCol(["notes", "internal notes", "note"], 18);
 
       const existing = persist ? this.getRecords() : [];
-      const seenReferences = new Set(existing.map(record => `${record.selectionMenu}-${record.clientCode}-${record.caseNo}`.toUpperCase()));
+      const seenReferences = new Set(existing.map(record => `${String(record.selectionMenu || '').trim().toUpperCase()}-${String(record.clientCode || '').trim().padStart(3, '0')}-${String(record.caseNo || '').trim().padStart(3, '0')}`));
       let importedCount = 0;
       let maxId = persist && existing.length > 0 ? Math.max(...existing.map(r => r.id || 0)) : 0;
       const importedRecords: RecordItem[] = [];
@@ -451,7 +454,10 @@ class StandaloneDB {
         const number = val(headerRow.indexOf('case number')) || modernReference?.[3] || caseReferenceMatch?.[3] || legacyCaseReferenceMatch?.[3] || '';
         if (!/^[A-Z][A-Z0-9]{0,7}$/.test(series) || !/^\d{1,3}$/.test(code) || !/^\d{1,3}$/.test(number)) throw new Error(`Row ${i + 1}: missing or invalid series/client/case identity.`);
         const identity = `${series}-${code.padStart(3, '0')}-${number.padStart(3, '0')}`;
-        const fromReference = modernReference ? `${modernReference[1]}-${modernReference[2].padStart(3, '0')}-${modernReference[3].padStart(3, '0')}` : '';
+        if (caseReference && !modernReference && !caseReferenceMatch && !legacyCaseReferenceMatch) throw new Error(`Row ${i + 1}: invalid case reference.`);
+        const fromReference = modernReference ? `${modernReference[1]}-${modernReference[2].padStart(3, '0')}-${modernReference[3].padStart(3, '0')}`
+          : caseReferenceMatch ? `${caseReferenceMatch[1]}-${caseReferenceMatch[2].padStart(3, '0')}-${caseReferenceMatch[3].padStart(3, '0')}`
+          : legacyCaseReferenceMatch ? `${legacyCaseReferenceMatch[2]}-${legacyCaseReferenceMatch[1].padStart(3, '0')}-${legacyCaseReferenceMatch[3].padStart(3, '0')}` : '';
         if (fromReference && fromReference !== identity) throw new Error(`Row ${i + 1}: reference conflicts with separate identity columns.`);
         if (seenReferences.has(identity)) throw new Error(`Row ${i + 1}: duplicate case identity ${identity}.`);
         seenReferences.add(identity);
@@ -462,7 +468,7 @@ class StandaloneDB {
           date: val(colDate),
           folder: folder.toUpperCase(),
           tm: tm.toUpperCase(),
-          classNo: val(colClass).replace(/\D/g, ''),
+          classNo: val(colClass),
           appName: appName.toUpperCase(),
           appTrade: val(colAppTrade).toUpperCase(),
           conName: (val(colLawFirm) || 'BRANDEX LAW ASSOCIATES').toUpperCase(),
@@ -545,18 +551,21 @@ class StandaloneDB {
         skipEmptyLines: 'greedy',
       });
 
+      if (parseResult.errors.length) throw new Error(parseResult.errors[0].message || 'Invalid CSV syntax.');
+
       const rows = parseResult.data;
       if (!rows || rows.length < 2) {
         return { success: false, message: "CSV file contains no data rows", count: 0 };
       }
 
       const headerRow = rows[0].map((h: any) => String(h || '').trim().toLowerCase());
+      if (new Set(headerRow).size !== headerRow.length) throw new Error('Duplicate CSV headers are ambiguous. No clients were imported.');
       const findCol = (possibleNames: string[], defaultIndex: number): number => {
         for (const name of possibleNames) {
-          const idx = headerRow.findIndex((h: string) => h === name.toLowerCase() || h.includes(name.toLowerCase()));
+          const idx = headerRow.indexOf(name.toLowerCase());
           if (idx !== -1) return idx;
         }
-        return defaultIndex;
+        return -1;
       };
 
       const colPrefix = findCol(["client prefix", "prefix", "client_prefix"], -1);
@@ -571,9 +580,10 @@ class StandaloneDB {
       const colConsultant = findCol(["consultant name", "consultant", "law firm", "consultant_name"], 6);
       const colPhone = findCol(['phone', 'telephone'], -1);
       const colEmail = findCol(['email'], -1);
+      if (colCode < 0 || colName < 0) throw new Error('Client CSV requires explicit Client Code and Full Name columns.');
 
       const existing = persist ? this.getClients() : [];
-      const seenCodes = new Set(existing.map(client => client.client_code));
+      const seenCodes = new Set(existing.map(client => String(client.client_code).trim().padStart(3, '0')));
       let importedCount = 0;
       const importedClients: Array<Omit<ClientProfile, 'id'>> = [];
 

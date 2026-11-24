@@ -1,3 +1,4 @@
+import { hasSameOrigin } from '@/lib/request-origin';
 import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
@@ -6,25 +7,6 @@ import { resolveGenerationDestination } from '@/lib/generation-destination';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 
 export const dynamic = 'force-dynamic';
-
-function hasSameOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) return false;
-  try {
-    const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-    const host = forwardedHost || request.headers.get('host');
-    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-    const originUrl = new URL(origin);
-    return Boolean(
-      host &&
-      originUrl.host === host &&
-      (originUrl.protocol === `${proto}:` || originUrl.protocol === 'https:')
-    );
-  } catch {
-    return false;
-  }
-}
 
 function invalidPayload(message: string, status = 400) {
   return Response.json({ ok: false, error: message }, { status, headers: { 'Cache-Control': 'no-store' } });

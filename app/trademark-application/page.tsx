@@ -47,6 +47,7 @@ export default function TrademarkApplicationPage() {
   const [appCnic, setAppCnic] = useState('');
   const [issueDate, setIssueDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
+  const [filingDate, setFilingDate] = useState('');
   const [appTrade, setAppTrade] = useState('');
   const [appAdd, setAppAdd] = useState('');
   const [year, setYear] = useState('');
@@ -225,6 +226,7 @@ export default function TrademarkApplicationPage() {
           setAppCnic(draft.appCnic);
           setIssueDate(draft.issueDate);
           setExpiryDate(draft.expiryDate);
+          setFilingDate(draft.filingDate);
           setAppTrade(draft.appTrade);
           setAppAdd(draft.appAdd);
           setYear(draft.year);
@@ -467,6 +469,7 @@ export default function TrademarkApplicationPage() {
       appCnic: appCnic.trim().toUpperCase(),
       issueDate: formatDisplayDate(issueDate ? new Date(issueDate) : new Date()).toUpperCase(),
       expiryDate: expiryDate.trim().toUpperCase(),
+      filingDate,
       appTrade: appTrade.trim().toUpperCase(),
       appAdd: appAdd.trim().toUpperCase(),
       year,
@@ -548,6 +551,7 @@ export default function TrademarkApplicationPage() {
         year,
         date: payload.issueDate,
         expiryDate: expiryDate.trim().toUpperCase(),
+        filingDate,
         conAddr: conAdd.trim().toUpperCase(),
         img: payload.imageBase64 || '',
         noImg,
@@ -677,6 +681,7 @@ export default function TrademarkApplicationPage() {
     setAppSo('');
     setAppCnic('');
     setYear('');
+    setFilingDate('');
     setAppTrade('');
     setAppAdd('');
     setStatus('GENERATING APPLICATION');
@@ -1009,6 +1014,10 @@ export default function TrademarkApplicationPage() {
                     suppressHydrationWarning
                     className="w-full p-2.5 border-[2.5px] border-[#0C0C0C] bg-[#E8DFC7] font-['Space_Grotesk'] text-[0.9rem] uppercase rounded-[4px]"
                   />
+                </div>
+                <div>
+                  <label htmlFor="application-filing-date" className="block text-xs mb-1 font-bold">Application Filing Date (optional)</label>
+                  <input id="application-filing-date" type="date" value={filingDate} onChange={event => setFilingDate(event.target.value)} className="w-full p-2.5 border-2 border-[#0C0C0C] bg-[#FAF6EE] rounded" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block font-['DM_Mono',monospace] text-[0.75rem] mb-1 font-bold">

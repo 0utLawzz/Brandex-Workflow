@@ -1,3 +1,4 @@
+import { hasSameOrigin } from '@/lib/request-origin';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { supabaseDB } from '@/lib/supabase-db';
 import { resolveGenerationDestination } from '@/lib/generation-destination';
@@ -6,24 +7,7 @@ import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-    const origin = request.headers.get('origin');
-    if (origin) {
-        try {
-            // Vercel and other reverse proxies may expose the public request
-            // origin through forwarded headers while the runtime sees an
-            // internal URL.
-            const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-            const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-            const requestHost = forwardedHost || request.headers.get('host');
-            const requestProto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-            const originUrl = new URL(origin);
-            if (!requestHost || originUrl.host !== requestHost || (originUrl.protocol !== `${requestProto}:` && originUrl.protocol !== 'https:')) {
-                return Response.json({ ok: false, error: 'Cross-site requests are not allowed.' }, { status: 403 });
-            }
-        } catch {
-            return Response.json({ ok: false, error: 'Invalid request origin.' }, { status: 403 });
-        }
-    }
+    if (!hasSameOrigin(request)) return Response.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
 
     let payload: Record<string, unknown>;
 

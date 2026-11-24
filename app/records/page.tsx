@@ -1896,15 +1896,15 @@ export default function RecordsPage() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Filing Date</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">E-Stamp Issue Date</label>
                   <input type="date" value={toDateInputValue(editingRecord.date || editingRecord.issueDate)} onChange={e => setEditingRecord({ ...editingRecord, date: e.target.value, issueDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Expiry Date</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">E-Stamp Expiry Date</label>
                   <input type="date" value={toDateInputValue(editingRecord.expiryDate || '')} onChange={e => setEditingRecord({ ...editingRecord, expiryDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Year</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Using Since</label>
                   <input type="text" value={editingRecord.year || ''} onChange={e => setEditingRecord({ ...editingRecord, year: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
@@ -1913,6 +1913,8 @@ export default function RecordsPage() {
                 </div>
               </div>
               <div>
+                <label htmlFor="edit-filing-date" className="block text-xs font-bold mb-1">Application Filing Date</label>
+                <input id="edit-filing-date" type="date" value={editingRecord.filingDate || ''} onChange={event => setEditingRecord({ ...editingRecord, filingDate: event.target.value })} className="mb-3 w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Class Description</label>
                 <textarea rows={2} value={editingRecord.classDesc || ''} onChange={e => setEditingRecord({ ...editingRecord, classDesc: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
               </div>

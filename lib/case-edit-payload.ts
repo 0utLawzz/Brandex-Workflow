@@ -4,6 +4,7 @@ import type { RecordItem } from './standalone-db';
 // lifecycle/proof defaults from legacy rows must never be rewritten by a metadata edit.
 const EDITABLE_FIELDS = [
   'clientId', 'serialNo', 'category',
+  'filingDate',
   'selectionMenu', 'clientCode', 'caseNo', 'folder', 'tm', 'classNo', 'classDesc',
   'appType', 'appName', 'appTrade', 'fatherName', 'cnic', 'address', 'date',
   'issueDate', 'expiryDate', 'year', 'conName', 'conAddr', 'lawFirm', 'filingProcess',

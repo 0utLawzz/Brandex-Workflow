@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_SESSION_MAX_AGE, createAuthSession, verifyAuthSession } from '@/lib/auth-session';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { hasSameOrigin } from '@/lib/request-origin';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: Request) {
+    if (!hasSameOrigin(request)) return NextResponse.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
     try {
         const body = await readBoundedJson(request, 8192);
         const { username, password } = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;

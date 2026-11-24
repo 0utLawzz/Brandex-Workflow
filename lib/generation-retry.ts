@@ -20,6 +20,7 @@ export interface GenerationRetryDraft {
   appCnic: string;
   issueDate: string;
   expiryDate: string;
+  filingDate: string;
   appTrade: string;
   appAdd: string;
   year: string;
@@ -80,6 +81,7 @@ export function buildGenerationRetryDraft(record: RecordItem): GenerationRetryDr
     appCnic: record.cnic || '',
     issueDate,
     expiryDate: record.expiryDate || '',
+    filingDate: record.filingDate || '',
     appTrade: record.appTrade || '',
     appAdd: record.address || '',
     year: record.year || '',

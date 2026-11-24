@@ -1,3 +1,4 @@
+import { hasSameOrigin } from '@/lib/request-origin';
 import { getSupabaseClient } from '@/lib/supabase';
 import { validateSharedSettings } from '@/lib/shared-settings';
 import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
@@ -9,9 +10,7 @@ export async function GET() {
 }
 export async function POST(request: Request) {
   try {
-    const origin = request.headers.get('origin');
-    const host = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || request.headers.get('host');
-    if (!origin || new URL(origin).host !== host) return Response.json({ error: 'Cross-site request rejected.' }, { status: 403, headers });
+    if (!hasSameOrigin(request)) return Response.json({ error: 'Cross-site request rejected.' }, { status: 403, headers });
     const settings = validateSharedSettings(await readBoundedJson(request, 8192));
     const { revision, ...values } = settings;
     const { data, error } = await getSupabaseClient().from('workspace_settings').update({ ...values, revision: revision + 1, updated_at: new Date().toISOString() }).eq('id', true).eq('revision', revision).select('display_name,brand_prefix,tagline,logo_url,revision').maybeSingle();

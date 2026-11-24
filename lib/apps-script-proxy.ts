@@ -17,6 +17,7 @@ export async function proxyAppsScript(payload: Record<string, unknown>) {
             body: JSON.stringify({ ...payload, accessToken }),
             cache: 'no-store',
             redirect: 'follow',
+            signal: AbortSignal.timeout(120000),
         });
         const data = await upstream.json();
 

@@ -5,6 +5,7 @@ const CASE_FIELD_COLUMNS = {
   classDesc: 'class_desc',
   appType: 'app_type',
   expiryDate: 'expiry_date',
+  filingDate: 'filing_date',
   conAddr: 'consultant_addr',
 } as const;
 
@@ -39,13 +40,14 @@ export type CaseFields = {
   classDesc?: string | null;
   appType?: string | null;
   expiryDate?: string | null;
+  filingDate?: string | null;
   conAddr?: string | null;
 };
 
 export function mapCaseFieldsToRow(fields: CaseFields): Record<string, string | number | null> {
   const row: Record<string, string | number | null> = {};
   for (const [field, column] of Object.entries(CASE_FIELD_COLUMNS) as [CaseField, string][]) {
-    if (fields[field] !== undefined) row[column] = fields[field]!;
+    if (fields[field] !== undefined) row[column] = field === 'filingDate' && fields[field] === '' ? null : fields[field]!;
   }
   return row;
 }
