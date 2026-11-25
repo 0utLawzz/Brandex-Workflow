@@ -9,6 +9,18 @@ This guide describes the guarded release sequence. It is not authorization to ch
 - Google Apps Script (`Code.gs`) is deployed separately and writes generated documents to Google Drive. GitHub/Vercel deployments do not update Apps Script.
 - Preview must have separately reviewed test Supabase and Apps Script targets. Do not assume Preview is isolated from production based on its URL or Ready status.
 
+## Verified environment baseline — 2026-11-25
+
+- GitHub `main` is PR #9 merge `6ec9f6b`; the Production Vercel deployment is still that revision at `https://brandex-workflow-irkyvboie-projectsb.vercel.app`.
+- The authenticated review Preview is `https://brandex-workflow-fitxqf3s7-projectsb.vercel.app`. It currently refuses writes with `PREVIEW CHANGES ARE LOCKED. CONFIGURE AN APPROVED TEST DATABASE FIRST.` No write or Drive operation has been attempted.
+- Production Supabase `pjthtvkzuthxwpvcdqxy` has 485 trademark records and 8 clients, but lacks the current app's 10 queried columns and all three workflow/metadata RPCs.
+- The review repository has 23 SQL migration files. Production has 3 migration-history entries; the isolated test project `clviaughxebohniopzyg` has 21. Their names/timestamps do not map one-to-one to the repository files. Supabase's migration-list command compares timestamps, and `db push` applies every migration it considers pending. **Do not run `db push` or `migration repair` against either hosted database until a reviewed migration-lineage map and exact dry run reconcile this divergence.** A dry-run listing many old migrations is a stop condition, not a release plan. See the [Supabase migration-list reference](https://supabase.com/docs/reference/cli/supabase-migration-list) and [db push reference](https://supabase.com/docs/reference/cli/supabase-db-push).
+- The test project has the expected app columns and three RPCs; this is schema evidence only. It has 10 trademark rows and no clients, so it does not yet support representative Edit/Picker/Drive acceptance.
+
+### Preview isolation requirements
+
+Before the app can write in Preview, configure Preview-only environment values to point at the test project, including `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, and `PREVIEW_WRITE_PROJECT_REF=clviaughxebohniopzyg`. Configure a distinct non-production `PREVIEW_APPS_SCRIPT_URL` and matching `APPS_SCRIPT_RECORDS_TOKEN`; it must differ from `PRODUCTION_APPS_SCRIPT_URL`. Configure the restricted Google Picker client, API key, and project number. Keep service-role keys and Apps Script tokens server-side; never put them in browser-visible variables, Git, or logs. Until both test database and test Apps Script targets are independently confirmed, leave the Preview write/file guard enabled.
+
 ## Review release
 
 1. Review the consolidated implementation PR, its evidence in ADR 0008, and all required GitHub checks.
@@ -22,7 +34,7 @@ Before acting on production, obtain the user's explicit approval for the specifi
 
 1. Use a clean release worktree. This repository currently has no `supabase/config.toml`; if using the Supabase CLI, run `npx supabase init` there and review its generated local config before linking. Sign in with `npx supabase login`, then explicitly link production with `npx supabase link --project-ref pjthtvkzuthxwpvcdqxy`. Do not put access tokens or database passwords in shell history or the repository.
 2. Record current `main`, Vercel Production deployment, production Supabase project/schema, migration history, row counts, RLS/policies, and function signatures. Re-run the production RPC and schema parity preflight; do not rely on historical observations in ADR 0008.
-3. Compare migration histories using `npx supabase migration list --remote`. Inspect the exact pending operation list with `npx supabase db push --dry-run --remote`. Both commands must identify `pjthtvkzuthxwpvcdqxy`; stop if the target differs, history is unknown/out of sync, or the dry run includes unexpected files. Supabase CLI v3 targets local by default, so keep `--remote` explicit.
+3. Compare migration histories using `npx supabase migration list --remote`. **The current history divergence is known and unresolved.** First reconcile every remote timestamp to the exact reviewed SQL/schema state; do not use `migration repair` as a shortcut. Only after that review, inspect `npx supabase db push --dry-run --remote`. Both commands must identify `pjthtvkzuthxwpvcdqxy`; stop if the target differs, history remains ambiguous, or the dry run includes any unreviewed file. Supabase CLI v3 targets local by default, so keep `--remote` explicit.
 4. Take and verify a current database backup and document the recovery point. Preserve existing records, history, document references, IDs, and Drive files.
 5. Stop on schema drift, duplicate identity, missing privileges, or unknown migration history. Reconcile manually applied schema changes through a separately reviewed migration; do not use `migration repair` to guess or suppress mismatches.
 6. After separate explicit approval, apply only the reviewed additive migrations in order with `npx supabase db push --remote`. Do not execute `supabase_schema.sql` against an existing database.
