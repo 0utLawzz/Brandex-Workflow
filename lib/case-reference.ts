@@ -7,7 +7,11 @@ export function normalizeCaseSeries(value: string | null | undefined): string {
 }
 
 export function formatCaseReference(series: string, clientCode: string, caseNo: string): string {
-  const prefix = normalizeCaseSeries(series);
+  // Legacy rows may have incomplete or invalid series values. Formatting is
+  // used while rendering the records table, so keep that display path safe;
+  // write paths still call normalizeCaseSeries and reject invalid input.
+  let prefix: string;
+  try { prefix = normalizeCaseSeries(series); } catch { return ''; }
   const code = String(clientCode || '').replace(/\D/g, '');
   const number = String(caseNo || '').replace(/\D/g, '');
   if (!code || code.length > 3 || !number || number.length > 3) return '';
