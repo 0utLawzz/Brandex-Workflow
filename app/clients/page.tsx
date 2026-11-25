@@ -51,21 +51,36 @@ export default function ClientsPage() {
   const loadClients = async () => {
     setLoading(true);
     setErrorMsg('');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await supabaseDB.getClients();
-      setClients(res.clients);
-      setDbSource(res.source);
+      const response = await fetch('/api/clients', { cache: 'no-store', signal: controller.signal });
+      const res = await response.json().catch(() => null) as {
+        ok?: boolean;
+        error?: string;
+        clients?: ClientProfile[];
+        source?: 'supabase' | 'local';
+      } | null;
+      if (!response.ok || res?.ok !== true || !Array.isArray(res.clients)) {
+        throw new Error(res?.error || `Client profiles could not be loaded (${response.status}).`);
+      }
+      const loadedClients = res.clients;
+      setClients(loadedClients);
+      setDbSource(res.source === 'local' ? 'local' : 'supabase');
 
       // Compute next suggested client code
-      if (res.clients.length > 0) {
-        const codes = res.clients.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
+      if (loadedClients.length > 0) {
+        const codes = loadedClients.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
         if (codes.length > 0) {
           setClientCode(String(Math.max(...codes) + 1).padStart(3, '0'));
         }
       }
     } catch (error: any) {
-      setErrorMsg(error?.message || 'Clients could not be loaded from Supabase.');
+      setErrorMsg(error?.name === 'AbortError'
+        ? 'Client profiles took too long to load. Retry, or check the database connection.'
+        : error?.message || 'Clients could not be loaded from Supabase.');
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
