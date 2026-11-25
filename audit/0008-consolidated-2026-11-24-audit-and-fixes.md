@@ -9,24 +9,24 @@
 
 ### Current execution evidence — 2026-11-25
 
-Review branch: `audit/consolidated-implementation-2026-11-24`, starting at PR #10 head `5a28bcb5c0ef1952e9a9920d34be9975dd2edf5e`. Current pushed head: `8eefcd0614546c9cf111123a004058005b14f775`. User authorized the complete audit, implementation, cleanup, and small pushed backup commits. Production migration, merge, and Production deployment still require separate explicit confirmation. This section is current; dated checkpoints below are historical evidence and do not override it.
+Review branch: `audit/consolidated-implementation-2026-11-24`; PR #10 source branch `audit-baseline-2026-11-24`. Both pushed refs currently point to `b7633a6a8a5ada36768c90a014e7a2ecce79d4a2`. PR #10 is open and draft, based on `main`; do not merge. User authorized the complete audit, implementation, cleanup, and small pushed backup commits. Production migration, merge, and Production deployment still require separate explicit confirmation. This section is current; dated checkpoints below are historical evidence and do not override it.
 
 | Gate | Status | Independently observed evidence |
 |---|---|---|
 | PR #1–#9 merged | PASS | GitHub REST API verified all nine merged PRs on 2026-11-25; PR #9 merge is `6ec9f6b1d55facf03654bc7c36f2e94b44be90a5`. Their files/scopes were inventoried and reconciled below. |
-| PR #10 | PENDING | Still open as a draft at baseline head `5a28bcb`; it is the one review PR to update after final cleanup and checks. |
-| Consolidated branch pushed | PASS | `audit/consolidated-implementation-2026-11-24` remote matches `8eefcd0614546c9cf111123a004058005b14f775`. |
-| Current Vercel Preview deployment | PASS / auth pending | GitHub deployment API reports Preview success for exact head `8eefcd0` at `https://brandex-workflow-lbcvcrjpo-projectsb.vercel.app`. Anonymous HEAD redirects to Vercel SSO. Authenticated app and data-flow acceptance is PENDING. |
-| Production deployment baseline | PASS / live recheck pending | Latest GitHub-reported Production deployment is `6ec9f6b` at `https://brandex-workflow-irkyvboie-projectsb.vercel.app`, completed 2026-11-23. Current production UI/config was not inspected in this turn. |
+| PR #10 | PASS — review pending | GitHub REST API reports open draft, base `main`, head `audit-baseline-2026-11-24` at exact commit `b7633a6`. It is the single consolidated review PR and remains unmerged. |
+| Consolidated branch pushed | PASS | Both `audit/consolidated-implementation-2026-11-24` and PR #10's source ref point to `b7633a6a8a5ada36768c90a014e7a2ecce79d4a2`. |
+| Current Vercel Preview deployment | PASS / app acceptance partial | GitHub deployment API reports success for exact head `b7633a6` at `https://brandex-workflow-mzfy8js7j-projectsb.vercel.app`. Authenticated UI verified Records, Clients, Create Case and navigation. Preview explicitly locks changes until an approved test DB is configured; it has zero cases/clients and shared series remains loading. No hosted writes were attempted. Drive Picker code is present on existing-client/case edit surfaces, but Picker OAuth and test-Drive generation remain PENDING. |
+| Production deployment baseline | PASS / live recheck pending | Latest GitHub-reported Production deployment remains `6ec9f6b` at `https://brandex-workflow-irkyvboie-projectsb.vercel.app`, completed 2026-11-23. No current production UI, database, or config change was made. |
 | Production atomic RPC parity | FAIL — last observed 2026-11-24 | Prior read-only query on `pjthtvkzuthxwpvcdqxy` found no `apply_case_%` functions although `lib/supabase-db.ts` calls workflow and metadata RPCs. Current recheck is PENDING because Supabase connection/token is unavailable. Treat production save/transition as unverified and do not migrate without fresh preflight. |
 | Test Supabase schema/RPCs | PENDING — last observed 2026-11-24 | Prior isolated project `clviaughxebohniopzyg` had the tracked chain applied with rollback fixtures; the new optional-proof migration has only been applied in local disposable databases. Hosted schema/parity recheck is PENDING. |
 | Production/test RLS and security advisors | PENDING — last observed 2026-11-23/24 | Earlier observations found RLS enabled and no public policies, plus informational advisor notices. This does not prove current authorization; fresh read-only inspection is pending. |
-| Local exact-head verification | PASS | At `8eefcd0`: `npm test` 123/123, lint, TypeScript, production build, `git diff --check`; PostgreSQL 17 applied 22 migrations and passed 3 rollback fixtures and recovery ACL check. |
-| GitHub CI exact-head verification | PENDING | No CI run is associated with the implementation branch yet. The Supabase Preview check for its Vercel deployment is skipped. Update PR #10 to this branch after cleanup to trigger PR checks. |
-| Clean-clone exact-head verification | PENDING | Clean clone passed at `2f79405`; rerun after final cleanup and current head. |
-| Authenticated Preview, real test Drive, and production parity | PENDING | Preview is behind Vercel SSO; no authenticated session or Drive test target is available in this execution context. Production data/deployment has not been changed. |
+| Local exact-head verification | PASS | At `b7633a6`: `npm test` 123/123, lint, TypeScript, production build, `git diff --check`; PostgreSQL 17 applied 22 migrations and passed 3 rollback fixtures and recovery ACL check. |
+| GitHub CI exact-head verification | PASS / Supabase Preview skipped | Both `CI` and `PR #10` Actions runs succeeded on exact head `b7633a6`. The Supabase Preview check is skipped; this does not prove hosted DB parity. [CI](https://github.com/0utLawzz/Brandex-Workflow/actions/runs/45512361122), [PR #10](https://github.com/0utLawzz/Brandex-Workflow/actions/runs/45512352138). |
+| Clean-clone exact-head verification | PASS | A fresh clone at `b7633a6` passed `npm ci`, tests (123/123), lint, TypeScript, audit (0 vulnerabilities), contract sync, Apps Script syntax, and production build. |
+| Authenticated Preview, real test Drive, and production parity | PARTIAL / PENDING | Exact-head Preview authentication succeeded. Runtime UI confirms safe mutation lock and empty test data. No test Supabase/Drive credentials or approved target were available; production schema/RLS preflight remains pending. Production data/deployment has not been changed. |
 
-Next: rerun clean-clone checks on the cleanup commit, fast-forward PR #10's head to the consolidated branch, collect CI evidence, and present final evidence plus the production approval gate. Preserve production restrictions and this single log.
+Next: obtain an explicitly approved Preview test DB and non-production Drive target, then complete authenticated persistence, Picker, generation, restore and workflow acceptance. Recheck production schema/RLS read-only before preparing any additive migration. Keep PR #10 open and draft; production migration, merge and deployment still require separate explicit confirmation.
 
 ### Current acceptance map
 
@@ -243,7 +243,7 @@ The user supplied findings over successive voice recordings. #1–#8 appear in t
 
 - **2026-11-25:** User authorized the consolidated audit and implementation in one go on `audit/consolidated-implementation-2026-11-24`. Push review checkpoints in small batches for backup. Do not merge the final PR, apply production migrations, or deploy without separate explicit confirmation.
 - This ADR is the evidence and task log for the review branch, not a production release or final audit sign-off.
-- **Pending audit evidence:** PR line-by-line patches, full app UI click testing, complete current source-to-schema field mapping, actual Drive Picker/OAuth connectivity, production RPC recheck before migration, security review and clean-clone install.
+- **Pending audit evidence:** complete data-backed Preview E2E and full visual/responsive acceptance (Preview safe-locks all writes and has no seeded clients/cases); approved disposable Preview DB and test Drive target; Google Picker/OAuth flow; complete current source-to-hosted-schema mapping; production RPC/RLS/security recheck; and deeper per-file PR patch audit. Exact-head CI, clean-clone install/build, and authenticated read-only Preview navigation are PASS.
 
 ### 2026-11-24 dispatch proof placement checkpoint
 
