@@ -17,6 +17,7 @@ import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import { validateWorkflowTransition } from '@/lib/case-workflow';
 import { buildCaseEditUpdates, getInlineAssetBytes, MAX_INLINE_ASSET_BYTES } from '@/lib/case-edit-payload';
 import { readWorkspacePreferences } from '@/lib/workspace-preferences';
+import { isDisplayableCase } from '@/lib/record-visibility';
 import {
   CheckSquare,
   Square,
@@ -105,6 +106,7 @@ function formatClassPure(c?: string | number) {
 
 export default function RecordsPage() {
   const [allRecords, setAllRecords] = useState<RecordItem[]>([]);
+  const [showIncompleteRecords, setShowIncompleteRecords] = useState(false);
   const [savedClients, setSavedClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -260,24 +262,27 @@ export default function RecordsPage() {
     return value ? Date.parse(`${value}T00:00:00Z`) : 0;
   };
 
+  const displayRecords = useMemo(() => showIncompleteRecords ? allRecords : allRecords.filter(isDisplayableCase), [allRecords, showIncompleteRecords]);
+  const incompleteRecordCount = allRecords.length - displayRecords.filter(isDisplayableCase).length;
+
   // List of all unique consultants for multi-select filter
   const allConsultantsList = useMemo(() => {
     const set = new Set<string>();
-    allRecords.forEach(r => {
+    displayRecords.forEach(r => {
       const c = (r.lawFirm || r.conName || '').trim();
       if (c) set.add(c);
     });
     return Array.from(set).sort();
-  }, [allRecords]);
+  }, [displayRecords]);
 
   // List of unique years
   const yearsList = useMemo(() => {
     const set = new Set<string>();
-    allRecords.forEach(r => {
+    displayRecords.forEach(r => {
       if (r.year) set.add(String(r.year).trim());
     });
     return Array.from(set).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
-  }, [allRecords]);
+  }, [displayRecords]);
 
   // Filtered & Sorted records
   const filteredAndSortedRecords = useMemo(() => {
@@ -285,7 +290,7 @@ export default function RecordsPage() {
     const st = filterStatus.toUpperCase();
     const y = filterYear.trim();
 
-    const filtered = allRecords.filter(r => {
+    const filtered = displayRecords.filter(r => {
       if (Object.entries(columnFilters).some(([column, value]) => !columnValue(r, column as TableColumn).toLowerCase().includes((value || '').trim().toLowerCase()))) return false;
       const recordStatus = String(r.status || '').toUpperCase();
 
@@ -343,14 +348,14 @@ export default function RecordsPage() {
       if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '');
       return 0;
     });
-  }, [allRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy, columnFilters, columnSort]);
+  }, [displayRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy, columnFilters, columnSort]);
 
   const columnControl = (column: TableColumn, label: string) => <ColumnControl label={label} value={columnFilters[column] || ''}
     direction={columnSort?.column === column ? columnSort.direction : undefined}
     onSort={() => { setColumnSort(current => ({ column, direction: current?.column === column && current.direction === 'asc' ? 'desc' : 'asc' })); setCurrentPage(1); }}
     onFilter={value => { setColumnFilters(current => ({ ...current, [column]: value })); setCurrentPage(1); }} />;
 
-  const caseSummary = useMemo(() => allRecords.reduce((summary, record) => {
+  const caseSummary = useMemo(() => displayRecords.reduce((summary, record) => {
     const status = String(record.status || '').toUpperCase();
     summary.total++;
     if (status.includes('DELIVERED')) summary.delivered++;
@@ -359,7 +364,7 @@ export default function RecordsPage() {
     else if (status.includes('REJECT')) summary.rejected++;
     else summary.review++;
     return summary;
-  }, { total: 0, review: 0, approved: 0, rejected: 0, dispatched: 0, delivered: 0 }), [allRecords]);
+  }, { total: 0, review: 0, approved: 0, rejected: 0, dispatched: 0, delivered: 0 }), [displayRecords]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedRecords.length / pageSize));
@@ -744,6 +749,13 @@ export default function RecordsPage() {
           </div>
         )}
 
+        {incompleteRecordCount > 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded border border-[#9a6700]/40 bg-[#fff8c5] px-3 py-2 text-xs text-[#594300]">
+          <span>{incompleteRecordCount} incomplete {incompleteRecordCount === 1 ? 'record is' : 'records are'} hidden from the case list. Nothing was deleted.</span>
+          <button type="button" onClick={() => { setShowIncompleteRecords(value => !value); setCurrentPage(1); }} className="font-bold underline">
+            {showIncompleteRecords ? 'Hide incomplete records' : 'Show incomplete records'}
+          </button>
+        </div>}
+
         <section aria-label="Case summary" className="mb-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-[#0C0C0C]/20 py-3 text-xs text-[#444]">
           <span><strong className="text-[#0C0C0C]">{caseSummary.total}</strong> total cases</span>
           <span><strong className="text-[#0C0C0C]">{caseSummary.review}</strong> pending or in review</span>
@@ -753,7 +765,7 @@ export default function RecordsPage() {
           <span><strong className="text-[#0D9970]">{caseSummary.delivered}</strong> delivered</span>
         </section>
 
-        <MonthlyCaseChart records={allRecords} />
+        <MonthlyCaseChart records={displayRecords} />
 
         {/* =========================================================================
             CONTROLS, SHORT FILTER BUTTONS & MULTI-SELECT CONSULTANT
