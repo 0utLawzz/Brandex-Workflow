@@ -23,6 +23,16 @@ This guide describes the guarded release sequence. It is not authorization to ch
 
 Before the app can write in Preview, configure Preview-only environment values to point at the test project, including `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, and `PREVIEW_WRITE_PROJECT_REF=clviaughxebohniopzyg`. Configure a distinct non-production `PREVIEW_APPS_SCRIPT_URL` and matching `APPS_SCRIPT_RECORDS_TOKEN`; it must differ from `PRODUCTION_APPS_SCRIPT_URL`. Configure the restricted Google Picker client, API key, and project number. Keep service-role keys and Apps Script tokens server-side; never put them in browser-visible variables, Git, or logs. Until both test database and test Apps Script targets are independently confirmed, leave the Preview write/file guard enabled.
 
+### Authentication rate limiting
+
+The Vercel login handler and protected HTTP Basic requests use `@vercel/firewall` with the configured `VERCEL_AUTH_RATE_LIMIT_ID`. Configure the Vercel Firewall in the project before enabling protected Vercel authentication:
+
+1. Add a custom rule with the `@vercel/firewall` condition and rate-limit ID `brandex-auth-attempts` (or the exact ID placed in `VERCEL_AUTH_RATE_LIMIT_ID`).
+2. Set a fixed window of 10 minutes, a limit of 10 attempts per client IP, and the Too Many Requests/429 action. This shared bucket counts each login POST and each protected HTTP Basic request. The normal browser session-cookie flow does not submit Basic credentials.
+3. Set `VERCEL_AUTH_RATE_LIMIT_ID` in the appropriate Vercel environment. In Vercel, a missing ID, missing rule, WAF error, or timeout returns 503 and prevents authentication. Local non-Vercel development skips this platform check.
+4. On Preview, enable Protection Bypass for Automation and automatic exposure of Vercel system environment variables as required by the [Vercel Firewall SDK preview setup](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting-sdk#test-in-a-preview-deployment). Verify successful sign-in, repeated failures, and 429 on the isolated Preview before relying on this control.
+5. Review the project's current Firewall plan and rules before changing Production. Vercel tracks counters per region, so traffic spread across regions can exceed a single-region threshold. Review [rate-limit behavior and limits](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting) and [SDK configuration](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting-sdk). Production Firewall changes remain subject to separate explicit approval.
+
 ## Review release
 
 1. Review the consolidated implementation PR, its evidence in ADR 0008, and all required GitHub checks.

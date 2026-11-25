@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthSession } from '@/lib/auth-session';
 import { allowUnauthenticatedLocalDemo } from '@/lib/access-configuration';
+import { checkAuthAttemptRateLimit } from '@/lib/auth-rate-limit';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -50,6 +51,13 @@ export async function middleware(request: NextRequest) {
     const match = authorization.match(/^Basic\s+(.+)$/i);
 
     if (match) {
+        const rateLimit = await checkAuthAttemptRateLimit(request);
+        if (!rateLimit.allowed) {
+            return NextResponse.json(
+                { ok: false, error: rateLimit.status === 429 ? 'Too many authentication attempts. Try again later.' : 'Authentication is temporarily unavailable.' },
+                { status: rateLimit.status, headers: { 'Cache-Control': 'no-store', ...(rateLimit.status === 429 ? { 'Retry-After': '600' } : {}) } },
+            );
+        }
         try {
             const credentials = atob(match[1]);
             const separator = credentials.indexOf(':');

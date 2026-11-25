@@ -16,6 +16,7 @@
   "dependencies": {
     "@supabase/supabase-js": "2.119.0",
     "@tailwindcss/postcss": "^4.0.9",
+    "@vercel/firewall": "1.2.6",
     "lucide-react": "^0.475.0",
     "motion": "^12.4.7",
     "next": "^15.2.0",

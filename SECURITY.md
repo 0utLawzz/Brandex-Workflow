@@ -15,7 +15,7 @@ These are source-level controls; they do not prove the current hosted configurat
 
 ## Operational risks and required handling
 
-- Shared Basic Auth credentials provide no individual attribution and may need hosting-layer rate limits. Keep credentials strong, rotate them when exposed, and use HTTPS.
+- Shared access provides no individual attribution. On Vercel, every login POST and protected Basic Auth request requires the configured distributed Firewall rate-limit rule; a missing rule or failed check rejects the request. Configure and verify the rule in each deployment environment as described in [DEPLOY-GUIDE.md](DEPLOY-GUIDE.md). Keep credentials strong, rotate them when exposed, and use HTTPS.
 - Vercel Preview, Production, Supabase projects, Apps Script deployments, and Drive destinations must be verified independently. A successful build or Ready deployment is not proof of safe isolation.
 - Never paste credentials, private client data, CNICs, production row values, or private document URLs into issues, logs, pull requests, or screenshots.
 - Never introduce permissive RLS policies, client-side service keys, unbounded uploads, arbitrary URL fetches, or cross-case document references.
