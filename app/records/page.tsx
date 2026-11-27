@@ -1104,10 +1104,10 @@ export default function RecordsPage() {
                           {shortDate}
                         </td>
 
-                        {/* Col 3: Case Ref in box of 3 col */}
+                        {/* Col 3: one reference group with three separately readable segments */}
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
-                            {formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '').split('-').map((segment, index) => <React.Fragment key={index}>{index > 0 && <span className="mx-1 text-[#666]">-</span>}<span>{segment}</span></React.Fragment>)}
+                          <span role="group" aria-label={`Case reference ${formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '') || 'unassigned'}`} className="inline-flex items-center gap-1 font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
+                            {formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '').split('-').map((segment, index) => <React.Fragment key={index}>{index > 0 && <span aria-hidden="true" className="text-[#666]">-</span>}<span className="min-w-[1ch]">{segment}</span></React.Fragment>)}
                           </span>
                         </td>
 

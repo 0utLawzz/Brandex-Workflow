@@ -23,3 +23,10 @@ test('incomplete records remain recoverable from the records page', () => {
   assert.match(recordsPage, /Nothing was deleted/);
   assert.match(recordsPage, /setShowIncompleteRecords/);
 });
+
+test('case reference keeps one group while exposing three unboxed segments', () => {
+  assert.match(recordsPage, /role="group" aria-label=\{`Case reference/);
+  assert.match(recordsPage, /inline-flex items-center gap-1/);
+  assert.match(recordsPage, /aria-hidden="true" className="text-\[#666\]">-<\/span>/);
+  assert.doesNotMatch(recordsPage, /inline-flex px-2 py-1 border border-\[#0C0C0C\] rounded bg-white/);
+});
