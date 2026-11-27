@@ -2,8 +2,8 @@ import type { RecordItem } from './standalone-db';
 
 const CASE_CONTENT_FIELDS: Array<keyof RecordItem> = [
   'clientId', 'dispatchDocumentId', 'serialNo', 'category', 'date', 'issueDate', 'folder', 'tm',
-  'classNo', 'classDesc', 'appType', 'appName', 'appTrade', 'year', 'expiryDate', 'filingDate',
-  'conName', 'conAddr', 'lawFirm', 'img', 'noImg', 'trackingId', 'selectionMenu', 'clientCode',
+  'classNo', 'classDesc', 'appType', 'appName', 'appTrade', 'expiryDate', 'filingDate',
+  'conAddr', 'img', 'noImg', 'trackingId', 'clientCode',
   'caseNo', 'address', 'cnic', 'fatherName', 'notes', 'dispatchedDate', 'dispatchedNote',
   'dispatchedImage', 'dispatchedDocName', 'dispatchedDocType', 'deliveredDate', 'receiverName', 'receiptImage',
 ];

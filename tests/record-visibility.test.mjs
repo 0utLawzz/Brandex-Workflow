@@ -12,6 +12,7 @@ const blankPendingRecord = {
 
 test('status-only legacy placeholders are hidden while case details stay visible', () => {
   assert.equal(isDisplayableCase(blankPendingRecord), false);
+  assert.equal(isDisplayableCase({ ...blankPendingRecord, conName: 'BRANDEX LAW ASSOCIATES', lawFirm: 'BRANDEX LAW ASSOCIATES' }), false);
   assert.equal(isDisplayableCase({ ...blankPendingRecord, folder: 'Sample Applicant' }), true);
   assert.equal(isDisplayableCase({ ...blankPendingRecord, caseNo: '011' }), true);
   assert.equal(isDisplayableCase({ ...blankPendingRecord, notes: 'Needs review' }), true);
