@@ -312,3 +312,7 @@ No-code handoff: `DEPLOY-GUIDE.md` now includes the exact Google Cloud/Vercel Pr
 ### 2026-11-28 Preview Apps Script token alignment checkpoint
 
 **PASS — Preview token alignment.** The supplied QA execution URL was verified against the logged-in Apps Script `Mail Merge` project and its `final audit` deployment. The non-production `RECORDS_ACCESS_TOKEN` script property was copied privately into Vercel's `APPS_SCRIPT_RECORDS_TOKEN` variable for the `audit-baseline-2026-11-24` Preview branch only. Vercel confirmed the variable was updated; Production and Development scopes were not selected. The token value is intentionally not recorded here. A new Preview deployment is required before the running deployment can consume the updated secret; a small review-branch commit will trigger that deployment. Picker public variables, QA-folder Editor access and real Drive generation remain PENDING. No Production data, schema, deployment, Apps Script deployment or Drive file was changed.
+
+### 2026-11-28 Records loading copy cleanup checkpoint
+
+**PASS — UI terminology cleanup.** The Records loading state now says `Loading case records...` instead of the inaccurate `Loading standalone cases...`, matching the Supabase-backed runtime. Commit `af62405` is pushed to both review refs. Focused verification passed: full test suite 132/132, lint, TypeScript and `git diff --check`; the change is application-only and does not affect data or deployment configuration.
