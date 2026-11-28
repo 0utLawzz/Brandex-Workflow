@@ -31,6 +31,12 @@ Review branch: `audit/consolidated-implementation-2026-11-24`; PR #10 source bra
 
 Next queue: complete authenticated browser acceptance on the current stable audit Preview: launch the real folder-only Picker, select only the approved QA folder, verify server-side destination persistence, and run one non-production generation/write. Then finish the remaining client search/sort/CSV, full-field Edit Case, workflow/history, create and responsive acceptance checks, plus the hosted negative-path/rate-limit check. The isolated test DB has two synthetic cases, one synthetic client, and eight original blank regression rows; preserve those rows. Production migration, merge and deployment require separate explicit confirmation.
 
+### 2026-11-28 exact-head CI and environment revalidation
+
+**PASS — source and deployment gates.** GitHub CI run `#218` for exact source head `f364786111e617895623769df9038cfa3cd1f275` completed successfully. The PostgreSQL 17 migration/rollback fixture job and the Lint/Build Next.js job both passed; the latter included dependency audit, Apps Script syntax check, lint, full test suite, canonical merge-contract check, build, and required-documentation check. GitHub combined status reports Vercel success. Vercel reports the exact-head Preview deployment READY at `brandex-workflow-ih55asgpa-projectsb.vercel.app`.
+
+**PASS — Preview-only configuration boundary.** A non-decrypting Vercel environment inventory confirms the Google Picker client/project settings, isolated Apps Script URL, approved test-project guard, and Preview auth rate-limit setting are scoped to Preview and git branch `audit-baseline-2026-11-24`; no Production environment entries were exposed by the inventory. The Apps Script execution endpoint returned HTTP 200 with its backend health response. Secret values were not read or recorded. This still does not prove authenticated Picker consent, execution-identity folder access, or a real Drive write; those remain PENDING until the manual Google step is completed.
+
 ### Current acceptance map
 
 The matrix separates local automated/source evidence from hosted runtime acceptance. A local PASS does not imply authenticated UI, current schema, Drive, or production behavior. Hosted acceptance stays PENDING until isolated Preview and test Drive flows are exercised.
