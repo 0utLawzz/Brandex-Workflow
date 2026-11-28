@@ -9,6 +9,8 @@ import DataBackupModal from '@/app/components/DataBackupModal';
 import ClientCsvTools from '@/app/components/ClientCsvTools';
 import CaseCsvTools from '@/app/components/CaseCsvTools';
 import SeriesManagement from '@/app/components/SeriesManagement';
+import SharedBrandSettings from '@/app/components/SharedBrandSettings';
+import { CASE_MERGE_FIELDS } from '@/lib/merge-contract';
 import { DEFAULT_WORKSPACE_PREFERENCES, readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
 import type { WorkspacePreferences } from '@/lib/workspace-preferences';
 
@@ -68,10 +70,6 @@ export default function SettingsPage() {
               <option value={10}>10 records</option><option value={25}>25 records</option><option value={50}>50 records</option><option value={100}>100 records</option>
             </select>
           </label>
-          <label className="flex cursor-pointer items-center justify-between gap-3 border-t border-[#0C0C0C]/10 pt-4 text-sm">
-            <span><strong className="block">Law firm summary</strong><span className="text-xs text-[#666]">Show or hide the consultant summary above the records.</span></span>
-            <input type="checkbox" checked={preferences.showLawFirmWidget} onChange={event => update({ showLawFirmWidget: event.target.checked })} className="h-5 w-5 accent-[#C94A00]" />
-          </label>
         </section>
 
         <section className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4 shadow-[3px_3px_0_#0C0C0C] sm:p-5">
@@ -86,6 +84,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <SharedBrandSettings />
+        <section className="mb-5 rounded border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4"><h2 className="mb-3 font-bold">Personal feedback</h2><label className="mb-2 flex gap-2 text-sm"><input type="checkbox" checked={preferences.enableSounds} onChange={event => update({ enableSounds: event.target.checked })} />Enable completion/error sounds</label><label className="flex gap-2 text-sm"><input type="checkbox" checked={preferences.enableNotifications} onChange={event => update({ enableNotifications: event.target.checked })} />Enable browser notifications</label><button type="button" onClick={async () => { if (!('Notification' in window)) { setError('Browser notifications are unavailable.'); return; } const permission = await Notification.requestPermission(); if (permission !== 'granted') setError('Notifications were not enabled by your browser. In-app messages remain available.'); }} className="mt-2 text-xs underline">Request browser notification permission</button><p className="mt-2 text-xs text-[#666]">Use Save settings below to keep these choices in this browser.</p></section>
+        <details className="mb-5 rounded-lg border-2 border-[#0C0C0C] bg-[#FAF6EE] p-4"><summary className="cursor-pointer font-bold">Mail merge &amp; API field map</summary><p className="my-3 text-xs">Permanent text tags use double braces. {'{{IMAGE}}'} inserts the logo; URL tags insert text only. YEAR means Using Since; DATE is document generation date.</p><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr><th className="p-2">Tag</th><th className="p-2">API field</th><th className="p-2">Case field</th><th className="p-2">Storage</th></tr></thead><tbody>{CASE_MERGE_FIELDS.map(field => <tr key={field.tag} className="border-t"><td className="p-2 font-mono">{'{{' + field.tag + '}}'}</td><td className="p-2">{field.api}</td><td className="p-2">{field.record}</td><td className="p-2">{field.storage}</td></tr>)}</tbody></table></div></details>
         <SeriesManagement />
 
         <ClientCsvTools />

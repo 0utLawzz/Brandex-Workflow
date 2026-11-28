@@ -1,10 +1,12 @@
 const CASE_FIELD_COLUMNS = {
   clientId: 'client_id',
+  dispatchDocumentId: 'dispatch_document_id',
   serialNo: 'serial_no',
   category: 'category',
   classDesc: 'class_desc',
   appType: 'app_type',
   expiryDate: 'expiry_date',
+  filingDate: 'filing_date',
   conAddr: 'consultant_addr',
 } as const;
 
@@ -34,18 +36,20 @@ export function encodeCaseNotesAndNoImage(notes: string | undefined, noImg: stri
 type CaseField = keyof typeof CASE_FIELD_COLUMNS;
 export type CaseFields = {
   clientId?: number | null;
+  dispatchDocumentId?: number | null;
   serialNo?: string | null;
   category?: string | null;
   classDesc?: string | null;
   appType?: string | null;
   expiryDate?: string | null;
+  filingDate?: string | null;
   conAddr?: string | null;
 };
 
 export function mapCaseFieldsToRow(fields: CaseFields): Record<string, string | number | null> {
   const row: Record<string, string | number | null> = {};
   for (const [field, column] of Object.entries(CASE_FIELD_COLUMNS) as [CaseField, string][]) {
-    if (fields[field] !== undefined) row[column] = fields[field]!;
+    if (fields[field] !== undefined) row[column] = field === 'filingDate' && fields[field] === '' ? null : fields[field]!;
   }
   return row;
 }
@@ -55,8 +59,18 @@ export function mapCaseFieldsFromRow(row: Record<string, unknown>): CaseFields {
   for (const [field, column] of Object.entries(CASE_FIELD_COLUMNS) as [CaseField, string][]) {
     const value = row[column];
     if (value !== undefined && value !== null) {
-      (fields as Record<string, string | number | null>)[field] = field === 'clientId' ? Number(value) : String(value);
+      (fields as Record<string, string | number | null>)[field] = field === 'clientId' || field === 'dispatchDocumentId' ? Number(value) : String(value);
     }
   }
   return fields;
+}
+
+export const CASE_SELECT_WITH_PROOF = '*,dispatch_document:trademark_documents!fk_case_dispatch_document(id,file_name,file_type,file_url)';
+export function mapDispatchProofFromRow(row: Record<string, any>) {
+  const proof = row.dispatch_document;
+  return {
+    dispatchedImage: proof?.file_url || row.dispatched_image || row.dispatch_receipt || row.dispatchedImage || '',
+    dispatchedDocName: proof?.file_name || row.dispatched_doc_name || row.dispatchedDocName || '',
+    dispatchedDocType: proof?.file_type || row.dispatched_doc_type || row.dispatchedDocType || '',
+  };
 }

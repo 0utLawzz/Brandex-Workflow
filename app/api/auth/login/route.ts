@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AUTH_SESSION_MAX_AGE, createAuthSession, verifyAuthSession } from '@/lib/auth-session';
+import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { hasSameOrigin } from '@/lib/request-origin';
+import { allowUnauthenticatedLocalDemo } from '@/lib/access-configuration';
+import { checkAuthAttemptRateLimit } from '@/lib/auth-rate-limit';
 
 function constantTimeEqual(left: string, right: string) {
     let difference = left.length ^ right.length;
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
     const expectedPass = process.env.APP_ACCESS_PASSWORD;
     if (!expectedUser || !expectedPass) {
         return NextResponse.json(
-            { ok: true, authenticated: process.env.NODE_ENV !== 'production' },
+            { ok: true, authenticated: allowUnauthenticatedLocalDemo(process.env) },
             { headers: { 'Cache-Control': 'no-store' } },
         );
     }
@@ -43,9 +47,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: Request) {
+    if (!hasSameOrigin(request)) return NextResponse.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
+    const rateLimit = await checkAuthAttemptRateLimit(request);
+    if (!rateLimit.allowed) {
+        return NextResponse.json(
+            { ok: false, error: rateLimit.status === 429 ? 'Too many login attempts. Try again later.' : 'Authentication is temporarily unavailable.' },
+            { status: rateLimit.status, headers: { 'Cache-Control': 'no-store', ...(rateLimit.status === 429 ? { 'Retry-After': '600' } : {}) } },
+        );
+    }
     try {
-        const body = await request.json();
-        const { username, password } = body || {};
+        const body = await readBoundedJson(request, 8192);
+        const { username, password } = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
 
         const expectedUser = process.env.APP_ACCESS_USER;
         const expectedPass = process.env.APP_ACCESS_PASSWORD;
@@ -81,10 +93,10 @@ export async function POST(request: Request) {
             { ok: false, error: 'Invalid username or password' },
             { status: 401 }
         );
-    } catch {
+    } catch (error) {
         return NextResponse.json(
             { ok: false, error: 'Invalid request payload' },
-            { status: 400 }
+            { status: error instanceof RequestPayloadError ? error.status : 400 }
         );
     }
 }

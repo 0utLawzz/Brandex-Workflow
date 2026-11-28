@@ -1,31 +1,27 @@
+import { hasSameOrigin } from '@/lib/request-origin';
 import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
 import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
-import { standaloneDB } from '@/lib/standalone-db';
+import { resolveGenerationDestination } from '@/lib/generation-destination';
+import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
+import { uploadDispatchProof } from '@/lib/dispatch-upload';
 
 export const dynamic = 'force-dynamic';
 
-function hasSameOrigin(request: Request): boolean {
-  const origin = request.headers.get('origin');
-  if (!origin) return false;
-  try {
-    const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-    const host = forwardedHost || request.headers.get('host');
-    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-    const originUrl = new URL(origin);
-    return Boolean(
-      host &&
-      originUrl.host === host &&
-      (originUrl.protocol === `${proto}:` || originUrl.protocol === 'https:')
-    );
-  } catch {
-    return false;
-  }
-}
-
 function invalidPayload(message: string, status = 400) {
   return Response.json({ ok: false, error: message }, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
+async function assertDispatchableCases(ids: number[]) {
+  if (ids.length < 1 || ids.length > 10 || new Set(ids).size !== ids.length || ids.some(id => !Number.isSafeInteger(id) || id < 1)) {
+    throw new Error('Choose 1 to 10 distinct valid cases for dispatch.');
+  }
+  const { data, error } = await getSupabaseClient().from('trademark_records').select('id,status').in('id', ids);
+  if (error) throw new Error(`Could not validate the selected cases: ${error.message}`);
+  if ((data || []).length !== ids.length || (data || []).some(row => String(row.status || '').trim().toUpperCase() !== 'APPROVED')) {
+    throw new Error('Every selected case must be APPROVED before its proof can be saved.');
+  }
 }
 
 export async function POST(request: Request) {
@@ -38,17 +34,18 @@ export async function POST(request: Request) {
 
   let body: Record<string, any>;
   try {
-    const length = Number(request.headers.get('content-length') || 0);
-    if (length > 12 * 1024 * 1024) return invalidPayload('Database request is too large.', 413);
-    const value: unknown = await request.json();
+    const value = await readBoundedJson(request, 12 * 1024 * 1024);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidPayload('Invalid database request.');
     body = value as Record<string, any>;
-  } catch {
-    return invalidPayload('Invalid database request.');
+  } catch (error) {
+    return invalidPayload(error instanceof Error ? error.message : 'Invalid database request.', error instanceof RequestPayloadError ? error.status : 400);
   }
 
   try {
     let result: unknown;
+    const readOnlyOperations = new Set(['checkConnection','getRecords','getClients','getSeries','getHistory','getDocumentReferences']);
+    const isolationError = readOnlyOperations.has(body.operation) ? null : previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return invalidPayload(isolationError, 503);
     switch (body.operation) {
       case 'checkConnection':
         result = await supabaseDB.checkConnection();
@@ -70,7 +67,10 @@ export async function POST(request: Request) {
           const record = mapRowToRecord(row);
           const missing = [!record.folder && 'mark/folder', !record.classNo && 'class', !record.appType && 'application type', !record.appName && 'applicant', !record.appTrade && 'trading name', !record.year && 'year', !record.address && 'applicant address', !record.fatherName && 'father name', !record.cnic && 'CNIC', !record.date && 'issue date', !/^\d{1,3}$/.test(record.clientCode || '') && 'client code', !/^[A-Z][A-Z0-9]{0,7}$/.test((record.selectionMenu || '').toUpperCase()) && 'case series', !/^\d{1,3}$/.test(record.caseNo || '') && 'case number'].filter(Boolean);
           if (missing.length) { results.push({ id, ok: false, error: `Missing required Supabase fields: ${missing.join(', ')}.` }); continue; }
-          const response = await proxyAppsScript({ action: 'generateFromForm', category: record.category, selectionMenu: record.selectionMenu, clientCode: record.clientCode, caseNo: record.caseNo, serialNo: record.serialNo || '',
+          let destination;
+          try { destination = await resolveGenerationDestination(id); }
+          catch (error) { results.push({ id, ok: false, error: error instanceof Error ? error.message : 'Destination unavailable.' }); continue; }
+          const response = await proxyAppsScript({ ...destination, action: 'generateFromForm', category: record.category, selectionMenu: record.selectionMenu, clientCode: record.clientCode, caseNo: record.caseNo, serialNo: record.serialNo || '',
               folder: record.folder, tm: record.tm, classNo: record.classNo, classDesc: record.classDesc, appType: record.appType, appName: record.appName,
               appSo: record.fatherName, appCnic: record.cnic, issueDate: record.issueDate || record.date, expiryDate: record.expiryDate,
               appTrade: record.appTrade, appAdd: record.address, year: record.year, conName: record.conName, conAdd: record.conAddr, noImg: record.noImg || '[NO IMAGE PROVIDED]',
@@ -80,11 +80,12 @@ export async function POST(request: Request) {
           const generated = await response.json().catch(() => null);
           if (!response.ok || generated?.ok !== true) { results.push({ id, ok: false, error: generated?.error || `Document generation failed (${response.status}).` }); continue; }
           const updates: Record<string, unknown> = { serialNo: generated.serialNo };
+          if (typeof generated.imageId === 'string' && generated.imageId) updates.img = generated.imageId;
           try {
             await supabaseDB.updateRecord(id, updates as any);
             const documentReferences = [
-              ...(generated.tm1Url ? [{ name: `${record.folder} - TM-1`, type: 'application/vnd.google-apps.document', url: generated.tm1Url }] : []),
-              ...(generated.tm48Url ? [{ name: `${record.folder} - TM-48`, type: 'application/vnd.google-apps.document', url: generated.tm48Url }] : []),
+              ...(generated.tm1Url ? [{ name: generated.tm1Name || `${record.folder} - TM-1`, type: 'application/vnd.google-apps.document', url: generated.tm1Url }] : []),
+              ...(generated.tm48Url ? [{ name: generated.tm48Name || `${record.folder} - TM-48`, type: 'application/vnd.google-apps.document', url: generated.tm48Url }] : []),
             ].map(document => ({ record_id: id, file_name: document.name, file_type: document.type, file_url: document.url }));
             documentReferences.push(...(generated.attachments || []).map((attachment: any) => ({ record_id: id, file_name: attachment.name, file_size: attachment.size, file_type: attachment.mimeType, file_url: attachment.url })));
             await supabaseDB.saveDocumentReferences(documentReferences);
@@ -120,10 +121,17 @@ export async function POST(request: Request) {
         break;
       case 'updateRecord':
         if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object') return invalidPayload('A valid case ID and updates are required.');
+        if (body.updates.status === 'DISPATCHED' && typeof body.updates.dispatchedImage === 'string' && body.updates.dispatchedImage.startsWith('data:')) {
+          await assertDispatchableCases([Number(body.id)]);
+          body.updates = { ...body.updates, ...await uploadDispatchProof(Number(body.id), body.updates, resolveGenerationDestination, proxyAppsScript) };
+        }
         result = await supabaseDB.updateRecord(Number(body.id), body.updates);
         break;
       case 'updateRecordWithHistory':
         if (!Number.isSafeInteger(Number(body.id)) || !body.updates || typeof body.updates !== 'object' || typeof body.auditNote !== 'string') return invalidPayload('A valid case ID, updates, and audit note are required.');
+        if (typeof body.updates.dispatchedImage === 'string' && body.updates.dispatchedImage.startsWith('data:')) {
+          body.updates = { ...body.updates, ...await uploadDispatchProof(Number(body.id), body.updates, resolveGenerationDestination, proxyAppsScript) };
+        }
         result = await supabaseDB.updateRecordWithHistory(Number(body.id), body.updates, body.auditNote);
         break;
       case 'deleteRecord':
@@ -131,12 +139,18 @@ export async function POST(request: Request) {
         result = await supabaseDB.deleteRecord(Number(body.id));
         break;
       case 'bulkUpdateStatus':
-        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id))) || typeof body.newStatus !== 'string') return invalidPayload('A valid case selection and workflow status are required.');
-        result = await supabaseDB.bulkUpdateStatus(body.ids.map(Number), body.newStatus, body.auditNote, body.meta);
+        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id)) && Number(id) > 0) || typeof body.newStatus !== 'string') return invalidPayload('A valid case selection and workflow status are required.');
+        if (body.newStatus === 'DISPATCHED' && typeof body.meta?.dispatchedImage === 'string' && body.meta.dispatchedImage.startsWith('data:')) {
+          const ids = body.ids.map(Number);
+          await assertDispatchableCases(ids);
+          const proofByCase: Record<string, { dispatchedImage: string; dispatchedDocName: string; dispatchedDocType: string }> = {};
+          for (const id of ids) proofByCase[String(id)] = await uploadDispatchProof(id, body.meta, resolveGenerationDestination, proxyAppsScript);
+          result = await supabaseDB.bulkUpdateStatus(ids, body.newStatus, body.auditNote, { ...body.meta, ...proofByCase[String(ids[0])], proofByCase });
+        } else result = await supabaseDB.bulkUpdateStatus(body.ids.map(Number), body.newStatus, body.auditNote, body.meta);
         break;
       case 'bulkAssignClient':
-        if (!Array.isArray(body.ids) || !body.ids.every((id: unknown) => Number.isSafeInteger(Number(id))) || !body.clientProfile || typeof body.clientProfile !== 'object') return invalidPayload('A valid case selection and client are required.');
-        result = await supabaseDB.bulkAssignClient(body.ids.map(Number), body.clientProfile);
+        if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500 || !body.ids.every((id: unknown) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) || !body.clientProfile || typeof body.clientProfile !== 'object' || !Number.isSafeInteger(body.clientProfile.id) || body.clientProfile.id < 1) return invalidPayload('A valid case selection and saved client are required.');
+        result = await supabaseDB.bulkAssignClient(body.ids, body.clientProfile);
         break;
       case 'addClient':
         if (!body.client || typeof body.client !== 'object') return invalidPayload('A client profile is required.');
@@ -171,12 +185,8 @@ export async function POST(request: Request) {
         result = await supabaseDB.saveDocumentReferences(body.documents);
         break;
       case 'getBackupSnapshot':
-        result = await supabaseDB.getBackupSnapshot();
-        break;
       case 'restoreBackupJSON':
-        if (typeof body.json !== 'string' || body.json.length > 10 * 1024 * 1024) return invalidPayload('A valid backup file is required.', 413);
-        result = await supabaseDB.restoreBackupJSON(body.json);
-        break;
+        return invalidPayload('Reload the workspace to use the verified backup transfer.', 409);
       default:
         return invalidPayload('Unknown database operation.');
     }

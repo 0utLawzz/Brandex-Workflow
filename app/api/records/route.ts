@@ -1,5 +1,5 @@
-import { getSupabaseClient, getSupabaseCredentials } from '@/lib/supabase';
-import { mapRowToRecord } from '@/lib/supabase-db';
+import { getSupabaseCredentials } from '@/lib/supabase';
+import { supabaseDB } from '@/lib/supabase-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,15 +20,9 @@ export async function GET() {
     });
   }
   try {
-    const client = getSupabaseClient();
-    const { data, error } = await client
-      .from('trademark_records')
-      .select('*')
-      .order('id', { ascending: false });
-
-    if (error) throw error;
-    if (!Array.isArray(data)) throw new Error('Supabase returned an invalid records response.');
-    const supabaseRecords = data.map(mapRowToRecord);
+    const result = await supabaseDB.getRecords();
+    if (result.error) throw new Error(result.error);
+    const supabaseRecords = result.records;
     return Response.json({
       ok: true,
       records: supabaseRecords,

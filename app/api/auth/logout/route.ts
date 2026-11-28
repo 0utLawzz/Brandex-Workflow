@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { hasSameOrigin } from '@/lib/request-origin';
 
 export async function POST(request: Request) {
+    if (!hasSameOrigin(request)) return NextResponse.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
     const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
     const origin = request.headers.get('origin') || '';
     const referer = request.headers.get('referer') || '';

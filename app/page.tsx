@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import RecordsPage from './records/page';
 
 export default function HomePage() {
-  redirect('/records');
+  return <RecordsPage />;
 }

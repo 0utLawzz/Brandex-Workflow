@@ -5,13 +5,19 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
+import DriveFolderPicker from '@/app/components/DriveFolderPicker';
+import MonthlyCaseChart from '@/app/components/MonthlyCaseChart';
+import CaseLogo from '@/app/components/CaseLogo';
+import { safeAssetHref } from '@/lib/asset-url';
+import { validProofFile, DISPATCH_PROOF_TYPES, DELIVERY_RECEIPT_TYPES } from '@/lib/proof-policy';
 import { RecordItem, ClientProfile, DocumentAttachment } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { CASE_STAGE_OPTIONS } from '@/lib/data';
 import { formatCaseReference, toDateInputValue } from '@/lib/case-reference';
 import { validateWorkflowTransition } from '@/lib/case-workflow';
 import { buildCaseEditUpdates, getInlineAssetBytes, MAX_INLINE_ASSET_BYTES } from '@/lib/case-edit-payload';
-import { readWorkspacePreferences, saveWorkspacePreferences } from '@/lib/workspace-preferences';
+import { readWorkspacePreferences } from '@/lib/workspace-preferences';
+import { isDisplayableCase } from '@/lib/record-visibility';
 import {
   CheckSquare,
   Square,
@@ -30,8 +36,6 @@ import {
   PackageCheck,
   FileText,
   UserCheck,
-  Building2,
-  Calendar,
   Pencil,
   Trash2,
   Database,
@@ -69,14 +73,28 @@ function HighlightText({ text, query }: { text?: string | number | null; query: 
 
 // Format short date
 function formatShortDate(d?: string) {
-  if (!d) return '—';
-  const str = String(d).trim();
-  // If in format "Wednesday, 15 October 2026", take last 3 tokens
-  if (str.includes(',')) {
-    const afterComma = str.split(',')[1]?.trim();
-    if (afterComma) return afterComma;
-  }
-  return str;
+  const value = toDateInputValue(d || '');
+  if (!value) return d || '—';
+  const [year, month, day] = value.split('-');
+  return `${day}-${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(month) - 1]}-${year.slice(-2)}`;
+}
+
+type TableColumn = 'date' | 'reference' | 'folder' | 'classNo' | 'status' | 'filingProcess' | 'appName';
+function columnValue(record: RecordItem, column: TableColumn): string {
+  if (column === 'reference') return formatCaseReference(record.selectionMenu || '', record.clientCode || '', record.caseNo || '');
+  return String(record[column] || '');
+}
+
+function ColumnControl({ label, value, direction, onSort, onFilter }: {
+  label: string; value: string; direction?: 'asc' | 'desc'; onSort: () => void; onFilter: (value: string) => void;
+}) {
+  return <div className="min-w-20">
+    <button type="button" onClick={onSort} className="whitespace-nowrap" aria-label={`Sort by ${label}`}>{label} {direction === 'asc' ? '↑' : direction === 'desc' ? '↓' : '↕'}</button>
+    <details className="mt-1 text-[10px] font-normal normal-case tracking-normal">
+      <summary className="cursor-pointer">{value ? 'Filtered' : 'Filter'}</summary>
+      <input aria-label={`Filter ${label}`} value={value} onChange={event => onFilter(event.target.value)} className="mt-1 w-24 rounded border px-1 py-1 text-black" placeholder="Contains…" />
+    </details>
+  </div>;
 }
 
 // Format class number purely as number (1-45)
@@ -88,6 +106,7 @@ function formatClassPure(c?: string | number) {
 
 export default function RecordsPage() {
   const [allRecords, setAllRecords] = useState<RecordItem[]>([]);
+  const [showIncompleteRecords, setShowIncompleteRecords] = useState(false);
   const [savedClients, setSavedClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -99,9 +118,10 @@ export default function RecordsPage() {
   const [filterYear, setFilterYear] = useState('');
   const [selectedConsultants, setSelectedConsultants] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'mark' | 'status'>('date-desc');
-  const [pageSize, setPageSize] = useState<number>(25);
+  const [pageSize, setPageSize] = useState<number>(50);
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<TableColumn, string>>>({});
+  const [columnSort, setColumnSort] = useState<{ column: TableColumn; direction: 'asc' | 'desc' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showCharts, setShowCharts] = useState(true);
 
   // Bulk Selection
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -186,6 +206,16 @@ export default function RecordsPage() {
   const [newDocumentUrl, setNewDocumentUrl] = useState('');
 
   // File input refs
+  useEffect(() => {
+    try {
+      const value = sessionStorage.getItem('brandex_generation_receipt');
+      sessionStorage.removeItem('brandex_generation_receipt');
+      if (!value) return;
+      const receipt = JSON.parse(value);
+      if (Number.isSafeInteger(receipt.id) && receipt.id > 0 && Number.isFinite(receipt.completedAt) && Date.now() - receipt.completedAt >= 0 && Date.now() - receipt.completedAt < 300000) setBulkNotice(`Documents generated and references saved for case #${receipt.id}${Number.isFinite(receipt.seconds) ? ` in ${receipt.seconds} seconds` : ''}.`);
+    } catch { /* A missing browser receipt must not prevent loading real records. */ }
+  }, []);
+
   const receiptImgInputRef = useRef<HTMLInputElement>(null);
   const dispatchDocInputRef = useRef<HTMLInputElement>(null);
 
@@ -205,7 +235,6 @@ export default function RecordsPage() {
   useEffect(() => {
     const preferences = readWorkspacePreferences();
     setPageSize(preferences.pageSize);
-    setShowCharts(preferences.showLawFirmWidget);
     loadAllRecords();
   }, []);
 
@@ -229,39 +258,31 @@ export default function RecordsPage() {
 
   // Helper date parser
   const parseDateForSort = (d: string) => {
-    if (!d) return 0;
-    const months: Record<string, number> = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11 };
-    const parts = String(d).toUpperCase().trim().split(/[-\/\s,]+/);
-    if (parts.length < 3) return 0;
-    let day = 0;
-    let mon = 0;
-    let year = 0;
-    for (const p of parts) {
-      if (/^\d{4}$/.test(p)) year = parseInt(p, 10);
-      else if (/^\d{1,2}$/.test(p) && !day) day = parseInt(p, 10);
-      else if (months[p.substring(0, 3)] !== undefined) mon = months[p.substring(0, 3)];
-    }
-    return new Date(year || 2026, mon, day || 1).getTime();
+    const value = toDateInputValue(d || '');
+    return value ? Date.parse(`${value}T00:00:00Z`) : 0;
   };
+
+  const displayRecords = useMemo(() => showIncompleteRecords ? allRecords : allRecords.filter(isDisplayableCase), [allRecords, showIncompleteRecords]);
+  const incompleteRecordCount = allRecords.length - displayRecords.filter(isDisplayableCase).length;
 
   // List of all unique consultants for multi-select filter
   const allConsultantsList = useMemo(() => {
     const set = new Set<string>();
-    allRecords.forEach(r => {
+    displayRecords.forEach(r => {
       const c = (r.lawFirm || r.conName || '').trim();
       if (c) set.add(c);
     });
     return Array.from(set).sort();
-  }, [allRecords]);
+  }, [displayRecords]);
 
   // List of unique years
   const yearsList = useMemo(() => {
     const set = new Set<string>();
-    allRecords.forEach(r => {
+    displayRecords.forEach(r => {
       if (r.year) set.add(String(r.year).trim());
     });
     return Array.from(set).sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
-  }, [allRecords]);
+  }, [displayRecords]);
 
   // Filtered & Sorted records
   const filteredAndSortedRecords = useMemo(() => {
@@ -269,7 +290,8 @@ export default function RecordsPage() {
     const st = filterStatus.toUpperCase();
     const y = filterYear.trim();
 
-    const filtered = allRecords.filter(r => {
+    const filtered = displayRecords.filter(r => {
+      if (Object.entries(columnFilters).some(([column, value]) => !columnValue(r, column as TableColumn).toLowerCase().includes((value || '').trim().toLowerCase()))) return false;
       const recordStatus = String(r.status || '').toUpperCase();
 
       // Default Status Filter: PENDING & IN REVIEW
@@ -312,53 +334,37 @@ export default function RecordsPage() {
     });
 
     return filtered.sort((a, b) => {
+      if (columnSort) {
+        const left = columnValue(a, columnSort.column);
+        const right = columnValue(b, columnSort.column);
+        const comparison = columnSort.column === 'date'
+          ? toDateInputValue(left).localeCompare(toDateInputValue(right))
+          : left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' });
+        return comparison * (columnSort.direction === 'asc' ? 1 : -1);
+      }
       if (sortBy === 'date-desc') return parseDateForSort(b.date) - parseDateForSort(a.date);
       if (sortBy === 'date-asc') return parseDateForSort(a.date) - parseDateForSort(b.date);
       if (sortBy === 'mark') return (a.folder || '').localeCompare(b.folder || '');
       if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '');
       return 0;
     });
-  }, [allRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy]);
+  }, [displayRecords, searchQuery, filterStatus, filterYear, selectedConsultants, sortBy, columnFilters, columnSort]);
 
-  // 4 BOX STATISTICS & LAW FIRM WIDGET DATA
-  const stats = useMemo(() => {
-    let pending = 0;
-    let inReview = 0;
-    let approved = 0;
-    let rejected = 0;
-    let dispatched = 0;
-    let delivered = 0;
-    const byFirm: Record<string, number> = {};
+  const columnControl = (column: TableColumn, label: string) => <ColumnControl label={label} value={columnFilters[column] || ''}
+    direction={columnSort?.column === column ? columnSort.direction : undefined}
+    onSort={() => { setColumnSort(current => ({ column, direction: current?.column === column && current.direction === 'asc' ? 'desc' : 'asc' })); setCurrentPage(1); }}
+    onFilter={value => { setColumnFilters(current => ({ ...current, [column]: value })); setCurrentPage(1); }} />;
 
-    allRecords.forEach(r => {
-      const st = String(r.status || '').toUpperCase();
-      if (st.includes('DELIVERED')) delivered++;
-      else if (st.includes('DISPATCHED')) dispatched++;
-      else if (st.includes('APPROVED')) approved++;
-      else if (st.includes('REJECT')) rejected++;
-      else if (st.includes('REVIEW')) inReview++;
-      else if (st.includes('PENDING')) pending++;
-
-      const firm = (r.lawFirm || r.conName || 'BRANDEX LAW ASSOCIATES').trim().toUpperCase();
-      byFirm[firm] = (byFirm[firm] || 0) + 1;
-    });
-
-    const firmsSorted = Object.entries(byFirm).sort((a, b) => b[1] - a[1]);
-
-    return {
-      total: allRecords.length,
-      pending,
-      inReview,
-      pendingInReview: pending + inReview,
-      approved,
-      rejected,
-      approvedRejected: approved + rejected,
-      dispatched,
-      delivered,
-      dispatchedDelivered: dispatched + delivered,
-      byFirm: firmsSorted
-    };
-  }, [allRecords]);
+  const caseSummary = useMemo(() => displayRecords.reduce((summary, record) => {
+    const status = String(record.status || '').toUpperCase();
+    summary.total++;
+    if (status.includes('DELIVERED')) summary.delivered++;
+    else if (status.includes('DISPATCHED')) summary.dispatched++;
+    else if (status.includes('APPROVED')) summary.approved++;
+    else if (status.includes('REJECT')) summary.rejected++;
+    else summary.review++;
+    return summary;
+  }, { total: 0, review: 0, approved: 0, rejected: 0, dispatched: 0, delivered: 0 }), [displayRecords]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedRecords.length / pageSize));
@@ -562,7 +568,7 @@ export default function RecordsPage() {
   const handleReceiptImgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/') || file.size > MAX_INLINE_ASSET_BYTES) { setErrorMsg('Delivery receipt must be an image no larger than 8 MB.'); e.target.value = ''; return; }
+    if (!validProofFile(file, true)) { setErrorMsg('Delivery receipt must be a PNG or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setDeliveredModal(prev => ({ ...prev, receiptImage: ev.target?.result as string }));
@@ -576,10 +582,7 @@ export default function RecordsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_INLINE_ASSET_BYTES) {
-      alert('Proof file size exceeds 8 MB limit.');
-      return;
-    }
+    if (!validProofFile(file)) { setErrorMsg('Dispatch proof must be a PDF, PNG, or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -588,7 +591,7 @@ export default function RecordsPage() {
         ...prev,
         dispatchedImage: result,
         dispatchedDocName: file.name,
-        dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+        dispatchedDocType: file.type
       }));
     };
     reader.readAsDataURL(file);
@@ -611,6 +614,22 @@ export default function RecordsPage() {
       setBulkNotice('Attachment link saved. Existing documents were preserved.');
       setTimeout(() => setBulkNotice(null), 4000);
     } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Attachment link could not be saved.'); }
+  };
+
+  const handleSelectDispatchProof = async (document: DocumentAttachment) => {
+    if (!editingRecord || savingRecord) return;
+    const caseId = editingRecord.id;
+    setSavingRecord(true);
+    try {
+      const updated = await supabaseDB.updateRecordWithHistory(caseId, { dispatchDocumentId: document.id }, 'Existing attachment selected as current dispatch proof');
+      if (!updated) throw new Error('Proof selection was not confirmed. Reload before retrying.');
+      const proof = { dispatchDocumentId: updated.dispatchDocumentId, dispatchedImage: updated.dispatchedImage, dispatchedDocName: updated.dispatchedDocName, dispatchedDocType: updated.dispatchedDocType };
+      setEditingRecord(current => current?.id === caseId ? { ...current, ...proof } : current);
+      setOriginalEditingRecord(current => current?.id === caseId ? { ...current, ...proof } : current);
+      setBulkNotice('Current dispatch proof saved. Document history was preserved.');
+      await loadAllRecords();
+    } catch (error) { setErrorMsg(error instanceof Error ? error.message : 'Proof selection failed.'); }
+    finally { setSavingRecord(false); }
   };
 
   // Handle single record edit save
@@ -674,7 +693,7 @@ export default function RecordsPage() {
       <input
         type="file"
         ref={receiptImgInputRef}
-        accept="image/*"
+        accept={DELIVERY_RECEIPT_TYPES.join(',')}
         onChange={handleReceiptImgUpload}
         className="hidden"
       />
@@ -683,7 +702,7 @@ export default function RecordsPage() {
       <input
         type="file"
         ref={dispatchDocInputRef}
-        accept="image/*,application/pdf"
+        accept={DISPATCH_PROOF_TYPES.join(',')}
         onChange={handleDispatchFileUpload}
         className="hidden"
       />
@@ -701,7 +720,7 @@ export default function RecordsPage() {
               </span>
             </div>
             <h1 className="font-['Bebas_Neue'] text-[2.2rem] tracking-[1.5px] leading-tight">
-              Case Records &amp; Workflow Timeline
+              Case Record
             </h1>
           </div>
 
@@ -730,142 +749,29 @@ export default function RecordsPage() {
           </div>
         )}
 
-        {/* =========================================================================
-            4 BOX STATISTICS ROW (TOTAL, PENDING/REVIEW, APPROVED/REJECTED, DISPATCHED/DELIVERED)
-           ========================================================================= */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Box 1: Total */}
-          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C]">
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 01 · TOTAL CASES
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.total}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#0D9970] mt-1 font-bold">
-              ✓ Full Case Sovereignty
-            </div>
-          </div>
+        {incompleteRecordCount > 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded border border-[#9a6700]/40 bg-[#fff8c5] px-3 py-2 text-xs text-[#594300]">
+          <span>{incompleteRecordCount} incomplete {incompleteRecordCount === 1 ? 'record is' : 'records are'} hidden from the case list. Nothing was deleted.</span>
+          <button type="button" onClick={() => { setShowIncompleteRecords(value => !value); setCurrentPage(1); }} className="font-bold underline">
+            {showIncompleteRecords ? 'Hide incomplete records' : 'Show incomplete records'}
+          </button>
+        </div>}
 
-          {/* Box 2: Pending & In Review (Default) */}
-          <div
-            onClick={() => setFilterStatus('PENDING_IN_REVIEW')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'PENDING_IN_REVIEW' ? 'bg-[#FFE066]' : 'bg-[#FAF6EE] hover:bg-[#fff9db]'
-              }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#0C0C0C] uppercase">
-                BOX 02 · PENDING / IN REVIEW
-              </span>
-              <span className="font-['DM_Mono',monospace] text-[0.65rem] bg-[#0C0C0C] text-[#FAF6EE] px-1.5 py-0.2 rounded font-bold">
-                DEFAULT
-              </span>
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.pendingInReview}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              {stats.pending} Pending · {stats.inReview} In Review
-            </div>
-          </div>
+        <section aria-label="Case summary" className="mb-4 flex flex-wrap gap-x-5 gap-y-2 border-y border-[#0C0C0C]/20 py-3 text-xs text-[#444]">
+          <span><strong className="text-[#0C0C0C]">{caseSummary.total}</strong> total cases</span>
+          <span><strong className="text-[#0C0C0C]">{caseSummary.review}</strong> pending or in review</span>
+          <span><strong className="text-[#0D9970]">{caseSummary.approved}</strong> approved</span>
+          <span><strong className="text-[#DC2626]">{caseSummary.rejected}</strong> rejected</span>
+          <span><strong className="text-[#0284c7]">{caseSummary.dispatched}</strong> dispatched</span>
+          <span><strong className="text-[#0D9970]">{caseSummary.delivered}</strong> delivered</span>
+        </section>
 
-          {/* Box 3: Approved / Rejected */}
-          <div
-            onClick={() => setFilterStatus('APPROVED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'APPROVED' ? 'bg-[#EBF7F2]' : 'bg-[#FAF6EE] hover:bg-[#f0fbf6]'
-              }`}
-          >
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 03 · APPROVED / REJECTED
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.approvedRejected}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              <span className="text-[#0D9970]">{stats.approved} Approved</span> ·{' '}
-              <span className="text-[#dc2626]">{stats.rejected} Rejected</span>
-            </div>
-          </div>
-
-          {/* Box 4: Dispatched / Delivered */}
-          <div
-            onClick={() => setFilterStatus('DISPATCHED')}
-            className={`border-[3px] border-[#0C0C0C] p-4 rounded-[6px] shadow-[4px_4px_0_#0C0C0C] cursor-pointer transition-all ${filterStatus === 'DISPATCHED' ? 'bg-[#e0f2fe]' : 'bg-[#FAF6EE] hover:bg-[#f0f9ff]'
-              }`}
-          >
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] text-[#666] uppercase mb-1">
-              BOX 04 · DISPATCHED / DELIVERED
-            </div>
-            <div className="font-['Bebas_Neue'] text-[2.4rem] tracking-[1px] leading-none text-[#0C0C0C]">
-              {stats.dispatchedDelivered}
-            </div>
-            <div className="font-['DM_Mono',monospace] text-[0.7rem] text-[#333] mt-1 font-bold">
-              <span className="text-[#0284c7]">{stats.dispatched} Dispatched</span> ·{' '}
-              <span className="text-[#0D9970]">{stats.delivered} Delivered</span>
-            </div>
-          </div>
-        </div>
-
-        {/* =========================================================================
-            LAW FIRM WIDGET (Replaced Workflow Stage Distribution)
-           ========================================================================= */}
-        {showCharts && (
-          <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-5 rounded-[6px] mb-6">
-            <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-[#C94A00]" />
-                <h2 className="font-['Bebas_Neue'] text-[1.4rem] tracking-[1px]">
-                  Cases by Law Firm / Legal Consultant
-                </h2>
-              </div>
-              <span className="font-['DM_Mono',monospace] text-[0.7rem] text-[#666] font-bold">
-                Top Practice Portfolios
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {stats.byFirm.slice(0, 6).map(([firmName, count]) => {
-                const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
-                return (
-                  <div
-                    key={firmName}
-                    onClick={() => {
-                      if (selectedConsultants.includes(firmName)) {
-                        setSelectedConsultants(prev => prev.filter(f => f !== firmName));
-                      } else {
-                        setSelectedConsultants(prev => [...prev, firmName]);
-                      }
-                    }}
-                    className={`p-3 border-2 border-[#0C0C0C] rounded-[4px] cursor-pointer transition-all ${selectedConsultants.includes(firmName)
-                        ? 'bg-[#C94A00] text-white shadow-[2px_2px_0_#0C0C0C]'
-                        : 'bg-white hover:bg-[#F0E8D0]'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold truncate max-w-[200px]" title={firmName}>
-                        {firmName}
-                      </span>
-                      <span className="font-['DM_Mono',monospace] text-[0.75rem] font-bold ml-2">
-                        {count} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2 bg-[#ddd] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${selectedConsultants.includes(firmName) ? 'bg-[#FFE066]' : 'bg-[#0D9970]'}`}
-                        style={{ width: `${Math.max(8, pct)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <MonthlyCaseChart records={displayRecords} />
 
         {/* =========================================================================
             CONTROLS, SHORT FILTER BUTTONS & MULTI-SELECT CONSULTANT
            ========================================================================= */}
-        <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-4 rounded-[6px] mb-6">
+        <details className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-4 rounded-[6px] mb-6">
+          <summary className="cursor-pointer text-right font-bold">Filters</summary>
           <div className="flex flex-col gap-3">
             {/* Short Filter Buttons */}
             <div className="flex items-center gap-2 flex-wrap">
@@ -904,7 +810,7 @@ export default function RecordsPage() {
               <span className="font-['DM_Mono',monospace] text-[0.7rem] font-bold tracking-[1px] uppercase text-[#666]">
                 Consultant Filter:
               </span>
-              {allConsultantsList.slice(0, 5).map(cName => {
+              {allConsultantsList.map(cName => {
                 const isSelected = selectedConsultants.includes(cName);
                 return (
                   <button
@@ -968,7 +874,7 @@ export default function RecordsPage() {
               {/* Sort By */}
               <select
                 value={sortBy}
-                onChange={e => setSortBy(e.target.value as any)}
+                onChange={e => { setSortBy(e.target.value as typeof sortBy); setColumnSort(null); setCurrentPage(1); }}
                 className="p-2.5 border-2 border-[#0C0C0C] bg-white font-['Space_Grotesk'] text-[0.8rem] rounded-[4px] cursor-pointer font-bold"
               >
                 <option value="date-desc">Recent Date (Newest)</option>
@@ -977,20 +883,9 @@ export default function RecordsPage() {
                 <option value="status">Workflow Stage</option>
               </select>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const nextValue = !showCharts;
-                  setShowCharts(nextValue);
-                  saveWorkspacePreferences({ ...readWorkspacePreferences(), showLawFirmWidget: nextValue });
-                }}
-                className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2.5 px-3 border-2 border-[#0C0C0C] bg-[#E8DFC7] hover:bg-white rounded-[4px] cursor-pointer"
-              >
-                {showCharts ? 'Hide Firm Widget' : 'Show Firm Widget'}
-              </button>
             </div>
           </div>
-        </div>
+        </details>
 
         {/* =========================================================================
             BULK ACTIONS TOOLBAR (WHEN ROWS ARE CHECKED)
@@ -1110,32 +1005,34 @@ export default function RecordsPage() {
 
                   {/* Col 2: Date (Short, sorted by recent date) */}
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Date
+                    {columnControl('date', 'Date')}
                   </th>
 
                   {/* Col 3: Case Ref in box of 3 col */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase whitespace-nowrap">
-                    Case Reference
+                    {columnControl('reference', 'Case Reference')}
                   </th>
 
                   {/* Col 5: Case Name */}
+                  <th className="p-2 text-center text-[0.68rem]">Image</th>
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Case Name
+                    {columnControl('folder', 'Case Name')}
                   </th>
 
                   {/* Col 6: Class (1-45) Just Numbers */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Class
+                    {columnControl('classNo', 'Class')}
                   </th>
 
                   {/* Col 7: Workflow Stage */}
                   <th className="p-3 text-center font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Workflow Stage
+                    {columnControl('status', 'Workflow Status')}
                   </th>
 
                   {/* Col 8: Applicant */}
+                  <th className="p-2 text-left text-[0.68rem]">{columnControl('filingProcess', 'Legal Case Stage')}</th>
                   <th className="p-3 text-left font-['DM_Mono',monospace] text-[0.68rem] tracking-[1px] uppercase">
-                    Applicant
+                    {columnControl('appName', 'Applicant')}
                   </th>
 
                   {/* Actions */}
@@ -1148,14 +1045,14 @@ export default function RecordsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace]">
+                    <td colSpan={10} className="p-12 text-center font-['DM_Mono',monospace]">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C94A00]" />
-                      Loading standalone cases...
+                      Loading case records...
                     </td>
                   </tr>
                 ) : pageRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
+                    <td colSpan={10} className="p-12 text-center font-['DM_Mono',monospace] text-[#666]">
                       No cases match current filter.
                       <div className="mt-2">
                         <button
@@ -1164,6 +1061,9 @@ export default function RecordsPage() {
                             setFilterStatus('ALL');
                             setSearchQuery('');
                             setSelectedConsultants([]);
+                            setColumnFilters({});
+                            setFilterYear('');
+                            setCurrentPage(1);
                           }}
                           className="font-bold underline text-[#C94A00] cursor-pointer"
                         >
@@ -1204,21 +1104,26 @@ export default function RecordsPage() {
                           {shortDate}
                         </td>
 
-                        {/* Col 3: Case Ref in box of 3 col */}
+                        {/* Col 3: one reference group with three separately readable segments */}
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <span className="inline-flex px-2 py-1 border border-[#0C0C0C] rounded bg-white font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
-                            {formatCaseReference(r.selectionMenu || 'A', r.clientCode || '', r.caseNo || String(idx + 1).padStart(3, '0'))}
+                          <span role="group" aria-label={`Case reference ${formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '') || 'unassigned'}`} className="inline-flex items-center gap-1 font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#C94A00]">
+                            {formatCaseReference(r.selectionMenu || '', r.clientCode || '', r.caseNo || '').split('-').map((segment, index) => <React.Fragment key={index}>{index > 0 && <span aria-hidden="true" className="text-[#666]">-</span>}<span className="min-w-[1ch]">{segment}</span></React.Fragment>)}
                           </span>
                         </td>
 
                         {/* Col 5: Case Name */}
-                        <td className="p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
+                        <td className="p-2 text-center"><CaseLogo id={r.id} value={r.img} name={r.folder} /></td>
+                        <td className="min-w-[240px] w-[30%] p-2.5 font-bold font-['Space_Grotesk'] text-[0.85rem] text-[#0C0C0C]">
                           <HighlightText text={r.folder} query={searchQuery} />
                           {r.tm && (
                             <div className="text-[0.68rem] text-[#666] font-normal font-['DM_Mono',monospace]">
                               TM #{r.tm}
                             </div>
                           )}
+                          {(r.dispatchedImage || r.receiptImage) && <div className="mt-1 flex gap-1" aria-label="Case evidence">
+                            {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label={`View dispatch proof for ${r.folder}`}><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
+                            {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label={`View delivery receipt for ${r.folder}`}><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
+                          </div>}
                         </td>
 
                         {/* Col 6: Class (1-45) Just Numbers */}
@@ -1232,11 +1137,11 @@ export default function RecordsPage() {
                             <span className={`inline-block font-['DM_Mono',monospace] text-[0.68rem] font-bold py-1 px-2.5 rounded-[3px] border border-[#0C0C0C] shadow-[1px_1px_0_#0C0C0C] uppercase ${statusBadge(r.status)}`}>
                               {r.status || 'PENDING'}
                             </span>
-                            {r.filingProcess && <span className="text-[0.58rem] leading-tight text-[#666] max-w-[130px] text-center">{r.filingProcess}</span>}
                           </div>
                         </td>
 
                         {/* Col 8: Applicant */}
+                        <td className="p-2.5 text-center"><span className="inline-block rounded border border-[#0C0C0C] bg-white px-2 py-1 text-[0.68rem] font-bold">{r.filingProcess || '—'}</span></td>
                         <td className="p-2.5 text-[0.78rem]">
                           <div className="font-bold">
                             <HighlightText text={r.appName} query={searchQuery} />
@@ -1250,10 +1155,7 @@ export default function RecordsPage() {
 
                         {/* Col 12: Actions */}
                         <td className="p-2.5 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            {r.dispatchedImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Dispatch Proof - ${r.folder}`, url: r.dispatchedImage!, docName: r.dispatchedDocName || `dispatch_receipt_${r.folder}`, docType: r.dispatchedDocType || (r.dispatchedImage?.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg') })} className="rounded border border-[#0C0C0C] bg-[#e0f2fe] p-1.5 hover:bg-[#bae6fd]" title="View dispatch proof" aria-label="View dispatch proof"><Receipt className="h-3.5 w-3.5 text-[#0284c7]" /></button>}
-                            {r.receiptImage && <button type="button" onClick={() => setProofModal({ open: true, title: `Delivery Receipt - ${r.folder}`, url: r.receiptImage!, docName: `delivery_receipt_${r.folder}`, docType: 'image/jpeg' })} className="rounded border border-[#0C0C0C] bg-[#dcfce7] p-1.5 hover:bg-[#bbf7d0]" title="View delivery receipt" aria-label="View delivery receipt"><FileText className="h-3.5 w-3.5 text-[#15803d]" /></button>}
-                            {((r.status || 'PENDING').toUpperCase().includes('PENDING') || (r.status || '').toUpperCase().includes('REVIEW')) && (
+                          <div className="grid grid-cols-3 items-center justify-items-center gap-1">
                               <Link
                                 href={`/trademark-application?retryId=${encodeURIComponent(String(r.id))}&retryFolder=${encodeURIComponent(r.folder || '')}&retryTm=${encodeURIComponent(r.tm || '')}`}
                                 className="p-1.5 border border-[#0C0C0C] bg-[#FAF6EE] hover:bg-[#d1fae5] rounded shadow-[1px_1px_0_#0C0C0C] cursor-pointer inline-flex"
@@ -1262,7 +1164,6 @@ export default function RecordsPage() {
                               >
                                 <RefreshCw className="w-3.5 h-3.5 text-[#0D9970]" />
                               </Link>
-                            )}
                             {/* Workflow Stage Advancers */}
                             <button
                               type="button"
@@ -1541,7 +1442,7 @@ export default function RecordsPage() {
                 <div className="flex items-center justify-between mb-1">
                   <label className="font-['DM_Mono',monospace] text-[0.7rem] font-bold flex items-center gap-1.5 text-[#0C0C0C]">
                     <Receipt className="w-3.5 h-3.5 text-[#0284c7]" />
-                    Proof of Sending (Courier Receipt / Waybill / Slip)
+                    Proof of Sending (Optional)
                   </label>
                   {dispatchModal.dispatchedImage && (
                     <button
@@ -1595,7 +1496,7 @@ export default function RecordsPage() {
                     <div className="py-2">
                       <Upload className="w-5 h-5 mx-auto mb-1 text-[#0284c7]" />
                       <p className="font-['DM_Mono',monospace] text-[0.72rem] font-bold text-[#0C0C0C]">
-                        Click to upload Courier Booking Receipt or Airway Bill
+                        Optionally upload a courier receipt, waybill, or slip
                       </p>
                       <p className="font-['Space_Grotesk'] text-[0.65rem] text-[#666] mt-0.5">
                         Accepts TCS, Leopard, Post booking receipts (Images or PDF documents up to 8 MB)
@@ -1617,7 +1518,7 @@ export default function RecordsPage() {
               <button
                 type="button"
                 onClick={handleSaveDispatch}
-                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim()) || !dispatchModal.dispatchedImage}
+                disabled={!dispatchModal.date.trim() || !(dispatchModal.trackingId.trim() || dispatchModal.note.trim())}
                 className="font-['DM_Mono',monospace] text-[0.75rem] font-bold py-2 px-5 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] cursor-pointer"
               >
                 Save Dispatch
@@ -1753,6 +1654,8 @@ export default function RecordsPage() {
             </div>
 
             <form onSubmit={handleSaveRecord} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="grid gap-3 sm:grid-cols-3"><label>Category<input value={editingRecord.category || ''} onChange={event => setEditingRecord({ ...editingRecord, category: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Serial number<input value={editingRecord.serialNo || ''} onChange={event => setEditingRecord({ ...editingRecord, serialNo: event.target.value })} className="mt-1 w-full rounded border-2 p-2" /></label><label>Client profile<select value={editingRecord.clientId || ''} onChange={event => { if (!event.target.value) { setEditingRecord({ ...editingRecord, clientId: null }); return; } const selected = savedClients.find(client => client.id === Number(event.target.value)); if (selected) setEditingRecord({ ...editingRecord, clientId: selected.id, clientCode: selected.client_code }); }} className="mt-1 w-full rounded border-2 p-2"><option value="">Unassigned / legacy</option>{savedClients.map(client => <option key={client.id} value={client.id}>{client.client_code} · {client.client_name}</option>)}</select></label></div>
+              <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Case Drive destination</p><DriveFolderPicker recordId={editingRecord.id} onSaved={() => { setBulkNotice('Case destination saved. Future generation will use this folder.'); }} /></div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Case Series</label>
@@ -1821,7 +1724,7 @@ export default function RecordsPage() {
 
               <div>
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Legal Case Stage</label>
-                <select value={editingRecord.filingProcess || 'APPLICATION FILED'}
+                <select value={editingRecord.filingProcess || 'PENDING'}
                   onChange={e => setEditingRecord({ ...editingRecord, filingProcess: e.target.value })}
                   className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded font-bold">
                   {!CASE_STAGE_OPTIONS.includes(editingRecord.filingProcess || '') && editingRecord.filingProcess && <option value={editingRecord.filingProcess}>{editingRecord.filingProcess} (Legacy)</option>}
@@ -1854,15 +1757,15 @@ export default function RecordsPage() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Filing Date</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">E-Stamp Issue Date</label>
                   <input type="date" value={toDateInputValue(editingRecord.date || editingRecord.issueDate)} onChange={e => setEditingRecord({ ...editingRecord, date: e.target.value, issueDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Expiry Date</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">E-Stamp Expiry Date</label>
                   <input type="date" value={toDateInputValue(editingRecord.expiryDate || '')} onChange={e => setEditingRecord({ ...editingRecord, expiryDate: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
-                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Year</label>
+                  <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Using Since</label>
                   <input type="text" value={editingRecord.year || ''} onChange={e => setEditingRecord({ ...editingRecord, year: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 </div>
                 <div>
@@ -1871,6 +1774,8 @@ export default function RecordsPage() {
                 </div>
               </div>
               <div>
+                <label htmlFor="edit-filing-date" className="block text-xs font-bold mb-1">Application Filing Date</label>
+                <input id="edit-filing-date" type="date" value={editingRecord.filingDate || ''} onChange={event => setEditingRecord({ ...editingRecord, filingDate: event.target.value })} className="mb-3 w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
                 <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Class Description</label>
                 <textarea rows={2} value={editingRecord.classDesc || ''} onChange={e => setEditingRecord({ ...editingRecord, classDesc: e.target.value })} className="w-full p-2 border-2 border-[#0C0C0C] bg-white rounded" />
               </div>
@@ -1881,7 +1786,7 @@ export default function RecordsPage() {
                 </div>
                 <div className="rounded border-2 border-[#0C0C0C] bg-white p-2">
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-2">Applicant / Mark Image</label>
-                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><Image src={editingRecord.img} alt="Applicant mark" width={56} height={56} className="h-14 w-14 rounded border object-contain" unoptimized /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
+                  {editingRecord.img ? <div className="mb-2 flex items-center gap-2"><CaseLogo id={editingRecord.id} value={editingRecord.img} name={editingRecord.folder} size={56} /><button type="button" onClick={() => setEditingRecord({ ...editingRecord, img: '' })} className="text-xs font-bold text-red-700 underline">Remove image</button></div> : <p className="mb-2 text-xs text-[#666]">No image attached.</p>}
                   <input type="file" accept="image/*" className="block w-full text-xs" onChange={e => { const file=e.target.files?.[0]; if(!file)return; if(!file.type.startsWith('image/') || file.size>MAX_INLINE_ASSET_BYTES){setErrorMsg('Applicant image must be an image no larger than 8 MB.');e.target.value='';return;} const reader=new FileReader(); reader.onload=ev=>setEditingRecord(prev=>prev?({...prev,img:ev.target?.result as string}):null); reader.readAsDataURL(file); e.target.value=''; }} />
                 </div>
               </div>
@@ -1927,10 +1832,10 @@ export default function RecordsPage() {
                   {editingRecord.dispatchedImage && (
                     <button
                       type="button"
-                      onClick={() => setEditingRecord({ ...editingRecord, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
+                      onClick={() => setEditingRecord({ ...editingRecord, dispatchDocumentId: null, dispatchedImage: '', dispatchedDocName: '', dispatchedDocType: '' })}
                       className="text-[0.65rem] text-[#dc2626] font-bold hover:underline cursor-pointer"
                     >
-                      Remove Slip
+                      Clear current proof
                     </button>
                   )}
                 </div>
@@ -1976,19 +1881,19 @@ export default function RecordsPage() {
                     <span>Upload Dispatch Receipt / Slip</span>
                     <input
                       type="file"
-                      accept="image/*,application/pdf"
+                      accept={DISPATCH_PROOF_TYPES.join(',')}
                       className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        if (file.size > MAX_INLINE_ASSET_BYTES || !(file.type.startsWith('image/') || file.type === 'application/pdf')) { setErrorMsg('Dispatch proof must be an image or PDF no larger than 8 MB.'); e.target.value = ''; return; }
+                        if (!validProofFile(file)) { setErrorMsg('Dispatch proof must be a PDF, PNG, or JPEG no larger than 8 MB.'); e.target.value = ''; return; }
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           setEditingRecord(prev => prev ? ({
                             ...prev,
                             dispatchedImage: ev.target?.result as string,
                             dispatchedDocName: file.name,
-                            dispatchedDocType: file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+                            dispatchedDocType: file.type
                           }) : null);
                         };
                         reader.readAsDataURL(file);
@@ -2022,7 +1927,7 @@ export default function RecordsPage() {
               <div className="rounded border-2 border-[#0C0C0C] bg-white p-3">
                 <div className="mb-2 flex items-center gap-2 font-['DM_Mono',monospace] text-[0.7rem] font-bold"><Paperclip className="h-4 w-4" /> LINKED CASE ATTACHMENTS</div>
                 {loadingEditingDocuments ? <p className="text-xs text-[#666]">Loading attachments…</p> : editingDocuments.length ? (
-                  <ul className="mb-3 space-y-1">{editingDocuments.map(document => <li key={document.id} className="flex items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><a href={document.file_url} target="_blank" rel="noreferrer" className="shrink-0 font-bold text-[#C94A00] underline">Open</a></li>)}</ul>
+                  <ul className="mb-3 space-y-2">{editingDocuments.map(document => <li key={document.id} className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="min-w-0 truncate">{document.file_name}</span><span className="flex items-center gap-2"><a href={safeAssetHref(document.file_url) || undefined} target="_blank" rel="noopener noreferrer" className="font-bold text-[#C94A00] underline">Open</a><button type="button" disabled={savingRecord || editingRecord.dispatchDocumentId === document.id} onClick={() => void handleSelectDispatchProof(document)} className="rounded border px-2 py-1 disabled:opacity-50">{editingRecord.dispatchDocumentId === document.id ? 'Current dispatch proof' : 'Use as dispatch proof'}</button></span></li>)}</ul>
                 ) : <p className="mb-3 text-xs text-[#666]">No linked attachments recorded.</p>}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                   <input value={newDocumentName} onChange={e=>setNewDocumentName(e.target.value)} placeholder="Attachment name" className="min-w-0 rounded border-2 border-[#0C0C0C] p-2 text-xs" />
@@ -2156,7 +2061,7 @@ export default function RecordsPage() {
                     <span className="text-[#666]">PDF Document</span>
                   </div>
                   <iframe
-                    src={proofModal.url}
+                    src={safeAssetHref(proofModal.url) || undefined}
                     className="w-full flex-1 border-none"
                     title="Proof PDF Viewer"
                   />
@@ -2165,7 +2070,7 @@ export default function RecordsPage() {
                 <div className="relative max-h-[550px] w-full flex items-center justify-center p-2 bg-white border-2 border-[#0C0C0C] rounded shadow-[3px_3px_0_#0C0C0C]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={proofModal.url}
+                    src={safeAssetHref(proofModal.url) || undefined}
                     alt={proofModal.title}
                     className="max-h-[500px] max-w-full object-contain rounded"
                   />
@@ -2179,7 +2084,7 @@ export default function RecordsPage() {
               </span>
               <div className="flex items-center gap-2">
                 <a
-                  href={proofModal.url}
+                  href={safeAssetHref(proofModal.url) || undefined}
                   download={proofModal.docName || 'Brandex_Dispatch_Proof'}
                   className="font-['DM_Mono',monospace] text-[0.72rem] font-bold py-2 px-4 border-2 border-[#0C0C0C] bg-[#0284c7] text-white rounded shadow-[2px_2px_0_#0C0C0C] flex items-center gap-1.5 hover:bg-[#0369a1] cursor-pointer"
                 >

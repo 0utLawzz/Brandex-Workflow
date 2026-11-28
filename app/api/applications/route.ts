@@ -1,42 +1,29 @@
+import { hasSameOrigin } from '@/lib/request-origin';
 import { proxyAppsScript } from '@/lib/apps-script-proxy';
 import { supabaseDB } from '@/lib/supabase-db';
+import { resolveGenerationDestination } from '@/lib/generation-destination';
+import { readBoundedJson, RequestPayloadError } from '@/lib/request-json';
+import { previewWriteError } from '@/lib/preview-isolation';
+import { getSupabaseCredentials } from '@/lib/supabase';
+import { CASE_ATTACHMENT_MIME_TYPES, CASE_ATTACHMENT_MAX_FILES, CASE_ATTACHMENT_MAX_FILE_BYTES, CASE_ATTACHMENT_MAX_TOTAL_BYTES } from '@/lib/attachment-policy';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-    const origin = request.headers.get('origin');
-    if (origin) {
-        try {
-            // Vercel and other reverse proxies may expose the public request
-            // origin through forwarded headers while the runtime sees an
-            // internal URL.
-            const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
-            const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
-            const requestHost = forwardedHost || request.headers.get('host');
-            const requestProto = forwardedProto || new URL(request.url).protocol.replace(':', '');
-            const originUrl = new URL(origin);
-            if (!requestHost || originUrl.host !== requestHost || (originUrl.protocol !== `${requestProto}:` && originUrl.protocol !== 'https:')) {
-                return Response.json({ ok: false, error: 'Cross-site requests are not allowed.' }, { status: 403 });
-            }
-        } catch {
-            return Response.json({ ok: false, error: 'Invalid request origin.' }, { status: 403 });
-        }
-    }
+    if (!hasSameOrigin(request)) return Response.json({ ok: false, error: 'Cross-site request rejected.' }, { status: 403 });
+    const isolationError = previewWriteError(process.env, getSupabaseCredentials().url);
+    if (isolationError) return Response.json({ ok: false, error: isolationError }, { status: 503 });
 
     let payload: Record<string, unknown>;
 
     try {
-        const contentLength = Number(request.headers.get('content-length') || 0);
-        if (contentLength > 16 * 1024 * 1024) {
-            return Response.json({ ok: false, error: 'Application payload is too large.' }, { status: 413 });
-        }
-        const body: unknown = await request.json();
+        const body = await readBoundedJson(request, 16 * 1024 * 1024);
         if (!body || typeof body !== 'object' || Array.isArray(body)) {
             return Response.json({ ok: false, error: 'Invalid application payload.' }, { status: 400 });
         }
         payload = body as Record<string, unknown>;
-    } catch {
-        return Response.json({ ok: false, error: 'Invalid application payload.' }, { status: 400 });
+    } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Invalid application payload.' }, { status: error instanceof RequestPayloadError ? error.status : 400 });
     }
 
     if (payload.action !== 'generateFromForm') {
@@ -72,6 +59,9 @@ export async function POST(request: Request) {
     }
 
     if (payload.imageBase64 !== undefined) {
+        if (payload.imageName !== undefined && (typeof payload.imageName !== 'string' || !payload.imageName.trim() || payload.imageName.length > 240 || /[\u0000-\u001f]/.test(payload.imageName))) {
+            return Response.json({ ok: false, error: 'Logo file name is invalid or too long.' }, { status: 400 });
+        }
         if (typeof payload.imageBase64 !== 'string' || payload.imageBase64.length > 3 * 1024 * 1024) {
             return Response.json({ ok: false, error: 'Logo image is too large.' }, { status: 413 });
         }
@@ -83,39 +73,42 @@ export async function POST(request: Request) {
         }
     }
 
-    if (payload.additionalFiles !== undefined && (!Array.isArray(payload.additionalFiles) || payload.additionalFiles.length > 10)) {
+    if (payload.additionalFiles !== undefined && (!Array.isArray(payload.additionalFiles) || payload.additionalFiles.length > CASE_ATTACHMENT_MAX_FILES)) {
         return Response.json({ ok: false, error: 'Attach no more than 10 files.' }, { status: 400 });
     }
 
     if (Array.isArray(payload.additionalFiles)) {
-        const allowedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+        const allowedTypes = new Set<string>(CASE_ATTACHMENT_MIME_TYPES);
         let totalBytes = 0;
         for (const item of payload.additionalFiles) {
             if (!item || typeof item !== 'object' || Array.isArray(item)) {
                 return Response.json({ ok: false, error: 'Invalid attachment.' }, { status: 400 });
             }
             const attachment = item as Record<string, unknown>;
-            if (typeof attachment.name !== 'string' || typeof attachment.mimeType !== 'string' ||
+            if (typeof attachment.name !== 'string' || !attachment.name.trim() || attachment.name.length > 240 || /[\u0000-\u001f]/.test(attachment.name) || typeof attachment.mimeType !== 'string' ||
                 typeof attachment.dataUrl !== 'string' || !allowedTypes.has(attachment.mimeType)) {
-                return Response.json({ ok: false, error: 'Attachments must be PDF, PNG, or JPEG files.' }, { status: 400 });
+                return Response.json({ ok: false, error: 'Attachments must be PDF, PNG, JPEG, XLS, or XLSX files.' }, { status: 400 });
             }
             const prefix = `data:${attachment.mimeType};base64,`;
             if (!attachment.dataUrl.startsWith(prefix) || !/^[A-Za-z0-9+/=]+$/.test(attachment.dataUrl.slice(prefix.length))) {
                 return Response.json({ ok: false, error: 'Invalid attachment data.' }, { status: 400 });
             }
             const byteLength = Math.floor((attachment.dataUrl.length - prefix.length) * 3 / 4);
-            if (byteLength > 4 * 1024 * 1024) {
+            if (byteLength > CASE_ATTACHMENT_MAX_FILE_BYTES) {
                 return Response.json({ ok: false, error: 'Each attachment must be 4 MB or smaller.' }, { status: 413 });
             }
             totalBytes += byteLength;
         }
-        if (totalBytes > 8 * 1024 * 1024) {
+        if (totalBytes > CASE_ATTACHMENT_MAX_TOTAL_BYTES) {
             return Response.json({ ok: false, error: 'Combined attachments must be 8 MB or smaller.' }, { status: 413 });
         }
     }
 
     const { recordId: _recordId, ...generationPayload } = payload;
-    const generatedResponse = await proxyAppsScript(generationPayload);
+    let destination;
+    try { destination = await resolveGenerationDestination(recordId); }
+    catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Destination unavailable.' }, { status: 409 }); }
+    const generatedResponse = await proxyAppsScript({ ...generationPayload, ...destination });
     if (!generatedResponse.ok) return generatedResponse;
 
     const generated = await generatedResponse.clone().json().catch(() => null);
@@ -127,8 +120,8 @@ export async function POST(request: Request) {
         if (Object.keys(updates).length) await supabaseDB.updateRecord(recordId, updates as any);
 
         const documents = [
-            generated.tm1Url && { record_id: recordId, file_name: `${payload.folder} - TM-1`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm1Url },
-            generated.tm48Url && { record_id: recordId, file_name: `${payload.folder} - TM-48`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm48Url },
+            generated.tm1Url && { record_id: recordId, file_name: generated.tm1Name || `${payload.folder} - TM-1`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm1Url },
+            generated.tm48Url && { record_id: recordId, file_name: generated.tm48Name || `${payload.folder} - TM-48`, file_type: 'application/vnd.google-apps.document', file_url: generated.tm48Url },
             ...(Array.isArray(generated.attachments) ? generated.attachments.map((attachment: any) => ({
                 record_id: recordId,
                 file_name: attachment.name,

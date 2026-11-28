@@ -63,14 +63,32 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "Authentication required" });
     }
 
+    if (body.action === "restoreBackupAsset") {
+      return jsonResponse(restoreBackupAsset(body));
+    }
+    if (body.action === "validateDriveFolder") {
+      return jsonResponse(validateDriveFolder(body.folderId));
+    }
+    if (body.action === "exportBackupAsset") {
+      return jsonResponse(exportBackupAsset(body.fileId));
+    }
+    if (body.action === "getImageThumbnail") {
+      return jsonResponse(getImageThumbnail(body.fileId));
+    }
+    if (body.action === "saveDispatchProof") {
+      return jsonResponse(saveDispatchProof(body));
+    }
     if (body.action === "generateFromForm") {
       var result = processFormSubmission(body);
       return jsonResponse({
         ok: true,
         serialNo: result.serialNo,
+        imageId: result.imageId || '',
         folderUrl: result.folderUrl,
         tm1Url: result.tm1Url,
         tm48Url: result.tm48Url,
+        tm1Name: result.tm1Name || '',
+        tm48Name: result.tm48Name || '',
         attachments: result.attachments || [],
         imageWarning: result.imageWarning || ""
       });
@@ -85,6 +103,84 @@ function doPost(e) {
 function isAuthorizedBackendRequest(body) {
   var expectedToken = PropertiesService.getScriptProperties().getProperty("RECORDS_ACCESS_TOKEN");
   return Boolean(expectedToken && body && body.accessToken && body.accessToken === expectedToken);
+}
+
+function restoreBackupAsset(input) {
+  validateDriveFolder(input.folderId);
+  var match = String(input.dataUrl || '').match(/^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!match || match[2].length > 12 * 1024 * 1024) throw new Error('Invalid recovery bytes');
+  var bytes = Utilities.base64Decode(match[2]);
+  if (bytes.length > 8 * 1024 * 1024) throw new Error('Recovery file exceeds byte limit');
+  var digest = function(value) { return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value).map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join(''); };
+  var hash = digest(bytes);
+  if (hash !== input.sha256) throw new Error('Recovery checksum mismatch');
+  var name = hash + '_' + String(input.name || 'recovered-file').replace(/[\\/:*?"<>|]/g, '_').slice(0,150);
+  var folder = DriveApp.getFolderById(input.folderId);
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    var existing = folder.getFilesByName(name);
+    var file;
+    if (existing.hasNext()) {
+      file = existing.next();
+      if (digest(file.getBlob().getBytes()) !== hash) throw new Error('Existing recovery file has different bytes');
+    } else file = folder.createFile(Utilities.newBlob(bytes, match[1], name));
+    return { ok:true, url:file.getUrl(), sha256:hash, mimeType:match[1], name:name };
+  } finally { lock.releaseLock(); }
+}
+
+function validateDriveFolder(folderId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(folderId || ''))) throw new Error('Invalid Drive folder ID');
+  // Capabilities reflect inherited/group/shared-drive permissions of the execution identity.
+  var response = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(folderId)
+    + '?fields=id,name,mimeType,trashed,capabilities(canAddChildren)&supportsAllDrives=true', {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+  var folder = JSON.parse(response.getContentText());
+  if (response.getResponseCode() !== 200 || folder.id !== folderId || folder.trashed
+    || folder.mimeType !== 'application/vnd.google-apps.folder' || !folder.capabilities || folder.capabilities.canAddChildren !== true) {
+    throw new Error('The generation account needs permission to add files to the selected folder');
+  }
+  return { ok: true, folderId: folder.id, name: folder.name, url: 'https://drive.google.com/drive/folders/' + folder.id };
+}
+
+function getImageThumbnail(fileId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(fileId || ''))) throw new Error('Invalid Drive file ID');
+  var file = DriveApp.getFileById(fileId);
+  if (file.isTrashed() || !/^image\/(png|jpeg|gif|webp)$/.test(file.getMimeType())) throw new Error('Image unavailable');
+  var blob = file.getThumbnail();
+  if (!blob && file.getSize() <= 1024 * 1024) blob = file.getBlob();
+  if (!blob || !/^image\/(png|jpeg|gif|webp)$/.test(blob.getContentType())) throw new Error('No supported thumbnail');
+  var bytes = blob.getBytes();
+  if (bytes.length > 1024 * 1024) throw new Error('Thumbnail exceeds size limit');
+  return { ok: true, dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(bytes) };
+}
+
+function exportBackupAsset(fileId) {
+  if (!/^[A-Za-z0-9_-]{10,200}$/.test(String(fileId || ''))) throw new Error('Invalid Drive file ID');
+  var file = DriveApp.getFileById(fileId);
+  if (file.isTrashed()) throw new Error('Drive file is in trash');
+  if (file.getSize() > 8 * 1024 * 1024) throw new Error('Drive file exceeds backup byte limit');
+  var mime = file.getMimeType();
+  var formats = {
+    'application/vnd.google-apps.document': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.google-apps.spreadsheet': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.google-apps.presentation': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  };
+  var blob;
+  if (formats[mime]) {
+    var response = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '/export?mimeType=' + encodeURIComponent(formats[mime]), {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) throw new Error('Google Workspace file export failed');
+    blob = response.getBlob().setContentType(formats[mime]);
+  } else {
+    if (mime.indexOf('application/vnd.google-apps.') === 0) throw new Error('Unsupported native Google file type');
+    blob = file.getBlob();
+  }
+  var bytes = blob.getBytes();
+  if (bytes.length > 8 * 1024 * 1024) throw new Error('Exported file exceeds backup byte limit');
+  var hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes).map(function(b) { return ('0' + ((b + 256) % 256).toString(16)).slice(-2); }).join('');
+  return { ok: true, name: file.getName(), originalMimeType: mime, dataUrl: 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(bytes), sha256: hash };
 }
 
 function jsonResponse(obj) {
@@ -195,27 +291,84 @@ function getOrCreateClientFolder(parentFolder, rawFolderName) {
 
   var existing = parentFolder.getFoldersByName(folderName);
   if (existing.hasNext()) {
-    return existing.next();
+    var folder = existing.next();
+    if (existing.hasNext()) throw new Error('Multiple folders share the name "' + folderName + '". Select an unambiguous destination.');
+    return folder;
   }
   return parentFolder.createFolder(folderName);
+}
+
+function findOrCreateCaseFolder(parentFolder, caseFolderName, legacyCaseFolderName) {
+  var names = [caseFolderName];
+  if (legacyCaseFolderName && legacyCaseFolderName !== caseFolderName) names.push(legacyCaseFolderName);
+  var matches = [];
+  names.forEach(function(name) {
+    var iterator = parentFolder.getFoldersByName(name);
+    while (iterator.hasNext()) matches.push(iterator.next());
+  });
+  if (matches.length > 1) throw new Error('Multiple current or legacy folders match this case identity. Review the client folder before generating.');
+  return matches.length === 1 ? matches[0] : parentFolder.createFolder(caseFolderName);
+}
+
+function resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, legacyCaseFolderName, destinationMode) {
+  // A case-level Picker choice already is the final case folder.
+  return destinationMode === 'case' ? parentFolder : findOrCreateCaseFolder(clientFolder, caseFolderName, legacyCaseFolderName);
+}
+
+function driveCaseIdentity(formData) {
+  var prefix = String(formData.clientPrefix || 'A').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 8) || 'A';
+  var clientCode = String(formData.clientCode || '').replace(/\D/g, '').padStart(3, '0');
+  var caseNo = String(formData.caseNo || '').replace(/\D/g, '').padStart(3, '0');
+  return prefix + '-' + clientCode + '-' + caseNo;
+}
+
+function driveDocumentName(formData, documentType) {
+  var appName = String(formData.folder || formData.appName || 'UNTITLED CASE').toUpperCase().replace(/[\\/:*?"<>|]/g, '_').trim();
+  var classNo = String(formData.classNo || '').replace(/\D/g, '');
+  return driveCaseIdentity(formData) + ' ' + appName + (classNo ? ' C' + classNo : '') + ' - ' + documentType;
+}
+
+function resolveCaseFolder(mainFolderId, formData) {
+  var selectedDestination = Boolean(formData.driveFolderId);
+  if (selectedDestination) validateDriveFolder(formData.driveFolderId);
+  var parentFolder = DriveApp.getFolderById(selectedDestination ? formData.driveFolderId : mainFolderId);
+  if (!formData.clientCode && !formData.caseNo) return { folder: getOrCreateClientFolder(parentFolder, formData.folder), selectedDestination: selectedDestination };
+  var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
+  var clientPrefix = String(formData.clientPrefix || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+  var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
+  var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
+  var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientCity = String(formData.clientCity || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
+  var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
+    + (clientCity ? " " + clientCity : "") + (clientReference ? " " + clientReference : "");
+  var caseFolderName = driveCaseIdentity(formData);
+  var legacyCaseIdentity = caseSeries + clientCode + "-" + caseNo;
+  var legacyCaseFolderName = legacyCaseIdentity + " " + String(formData.folder || "UNTITLED CASE").toUpperCase()
+    + (formData.tm && formData.tm !== "PENDING" ? " " + formData.tm : "")
+    + (formData.classNo ? " C" + String(formData.classNo).replace(/\D/g, "") : "");
+  var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
+  var clientRootFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(parentFolder, clientRootName);
+  var clientFolder = selectedDestination ? parentFolder : getOrCreateClientFolder(clientRootFolder, clientFolderName);
+  return { folder: resolveCaseOutputFolder(parentFolder, clientFolder, caseFolderName, legacyCaseFolderName, selectedDestination ? formData.destinationMode : 'configured-root'), selectedDestination: selectedDestination };
 }
 
 function saveAdditionalFiles(caseFolder, files, formData) {
   if (!files) return [];
   if (!Array.isArray(files) || files.length > 10) throw new Error("Attach no more than 10 files");
 
-  var allowedTypes = { "application/pdf": true, "image/jpeg": true, "image/png": true };
+  // BEGIN GENERATED ATTACHMENT TYPES
+  var allowedTypes = {"application/pdf":true,"image/jpeg":true,"image/png":true,"application/vnd.ms-excel":true,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":true};
+  // END GENERATED ATTACHMENT TYPES
   var totalBytes = 0;
   var saved = [];
-  var caseKey = [formData.clientCode || "UNASSIGNED", formData.selectionMenu || "A", formData.caseNo || "001"]
-    .map(function(value) { return String(value).replace(/[^A-Za-z0-9_-]/g, "_"); })
-    .join("-");
+  var caseKey = driveCaseIdentity(formData);
 
   files.forEach(function(item) {
     if (!item || !allowedTypes[item.mimeType] || typeof item.name !== "string" || typeof item.dataUrl !== "string") {
       throw new Error("An attachment has an unsupported type or invalid content");
     }
-    var match = item.dataUrl.match(/^data:(application\/pdf|image\/jpeg|image\/png);base64,([A-Za-z0-9+/=]+)$/);
+    var match = item.dataUrl.match(/^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/);
     if (!match || match[1] !== item.mimeType) throw new Error("An attachment could not be decoded");
 
     var bytes = Utilities.base64Decode(match[2]);
@@ -225,14 +378,28 @@ function saveAdditionalFiles(caseFolder, files, formData) {
 
     var safeOriginalName = item.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "attachment";
     var storedName = caseKey + "_" + safeOriginalName;
-    var existing = caseFolder.getFilesByName(storedName);
-    var file = existing.hasNext()
-      ? existing.next()
-      : caseFolder.createFile(Utilities.newBlob(bytes, item.mimeType, storedName));
+    var file = saveVersionedBlob(caseFolder, storedName, Utilities.newBlob(bytes, item.mimeType, storedName));
     saved.push({ name: item.name, mimeType: item.mimeType, size: bytes.length, fileId: file.getId(), url: file.getUrl() });
   });
 
   return saved;
+}
+
+function saveDispatchProof(input) {
+  var allowed = { 'application/pdf': true, 'image/png': true, 'image/jpeg': true };
+  if (!allowed[input.mimeType] || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 240) throw new Error('Invalid dispatch proof name or type');
+  var match = String(input.dataUrl || '').match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+  if (!match || match[1] !== input.mimeType || match[2].length > 12 * 1024 * 1024) throw new Error('Invalid dispatch proof bytes');
+  var bytes = Utilities.base64Decode(match[2]);
+  if (!bytes.length || bytes.length > 8 * 1024 * 1024) throw new Error('Dispatch proof exceeds 8 MB');
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    var caseFolder = resolveCaseFolder(MAIN_FOLDER_ID, input).folder;
+    var folder = getOrCreateClientFolder(caseFolder, 'Dispatch');
+    var name = String(input.name).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim();
+    var file = saveVersionedBlob(folder, name, Utilities.newBlob(bytes, input.mimeType, name));
+    return { ok: true, fileId: file.getId(), url: file.getUrl(), name: file.getName(), mimeType: file.getMimeType(), size: bytes.length, folderUrl: folder.getUrl() };
+  } finally { lock.releaseLock(); }
 }
 
 function processFormSubmission(data) {
@@ -247,9 +414,12 @@ function processFormSubmission(data) {
 
     return {
       serialNo: serial,
+      imageId: processResult.imageId || '',
       folderUrl: processResult.folderUrl,
       tm1Url: processResult.tm1Url,
       tm48Url: processResult.tm48Url,
+      tm1Name: processResult.tm1Name || '',
+      tm48Name: processResult.tm48Name || '',
       attachments: processResult.attachments || [],
       imageWarning: processResult.imageWarning
     };
@@ -276,31 +446,13 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
     rowData.date = Utilities.formatDate(new Date(), "Asia/Karachi", "EEEE, dd MMMM yyyy");
   }
 
-  var parentFolder = DriveApp.getFolderById(mainFolderId);
-  var newFolder;
-  if (formData && (formData.clientCode || formData.caseNo)) {
-    var clientCode = String(formData.clientCode || "000").replace(/\D/g, "").padStart(3, "0");
-    var clientPrefix = String(formData.clientPrefix || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
-    var caseSeries = String(formData.selectionMenu || "A").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 8) || "A";
-    var caseNo = String(formData.caseNo || "001").replace(/\D/g, "").padStart(3, "0");
-    var clientName = String(formData.clientName || formData.appName || "CLIENT").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientCity = String(formData.clientCity || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientReference = String(formData.clientFolderReference || "").toUpperCase().replace(/[\\/:*?"<>|]/g, "_").trim();
-    var clientFolderName = clientPrefix + "-" + clientCode + " " + clientName
-      + (clientCity ? " " + clientCity : "")
-      + (clientReference ? " " + clientReference : "");
-    var caseIdentity = caseSeries + clientCode + "-" + caseNo;
-    var caseFolderName = caseIdentity + " " + String(rowData.folder || "UNTITLED CASE").toUpperCase()
-      + (rowData.tm && rowData.tm !== "PENDING" ? " " + rowData.tm : "")
-      + (rowData.classNo ? " C" + String(rowData.classNo).replace(/\D/g, "") : "");
-    var clientRootName = clientPrefix === "A" ? "2 CONSULTANTS" : "1 ALL CLIENTS";
-    var clientRootFolder = getOrCreateClientFolder(parentFolder, clientRootName);
-    var clientFolder = getOrCreateClientFolder(clientRootFolder, clientFolderName);
-    newFolder = getOrCreateClientFolder(clientFolder, caseFolderName);
-  } else {
-    newFolder = getOrCreateClientFolder(parentFolder, rowData.folder);
-  }
+  var resolved = resolveCaseFolder(mainFolderId, formData);
+  var selectedDestination = resolved.selectedDestination;
+  var newFolder = resolved.folder;
 
+  var logoFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Logo') : newFolder;
+  var documentsFolder = selectedDestination ? getOrCreateClientFolder(newFolder, 'Documents') : newFolder;
+  if (selectedDestination) getOrCreateClientFolder(newFolder, 'Dispatch');
   var imageId = "";
   var tmImageBlob = null;
   var imageWarning = "";
@@ -316,89 +468,112 @@ function processRowAndReturnLinks(mainFolderId, tm1TemplateId, tm48TemplateId, f
         else if (formData.imageMime.indexOf("webp") !== -1) ext = "webp";
       }
       var safeName = (rowData.folder || "trademark").toString().replace(/[\\/:*?"<>|]/g, "_").trim();
-      var imageFileName = safeName + "_logo." + ext;
+      var imageFileName = String(formData.imageName || safeName + '_logo.' + ext).replace(/[\\/:*?"<>|]/g, '_').trim();
 
       var blob = Utilities.newBlob(bytes, formData.imageMime || "image/jpeg", imageFileName);
-      var existingLogo = newFolder.getFilesByName(imageFileName);
-      var file = existingLogo.hasNext() ? existingLogo.next() : newFolder.createFile(blob);
+      var file = saveVersionedBlob(logoFolder, imageFileName, blob);
       imageId = file.getId();
       tmImageBlob = blob;
 
       Logger.log("Image saved in folder: " + newFolder.getName() + " | File: " + imageFileName);
     } catch (imgErr) {
-      imageWarning = "Image upload warning: " + imgErr;
-      Logger.log("Image upload warning: " + imgErr);
+      throw new Error('Logo could not be saved. Original files were preserved. ' + imgErr);
     }
   } else if (rowData.img) {
-    imageId = rowData.img;
-    tmImageBlob = getImageFromDriveId(rowData.img);
+    imageId = normalizedDriveFileId(rowData.img);
+    tmImageBlob = getImageFromDriveId(imageId);
+    if (!tmImageBlob) throw new Error('The saved logo could not be read. Reattach it or explicitly remove it before generation.');
   }
 
-  var mergeData = {
-    "{{SERIAL}}": rowData.serialNo || "",
-    "{{TM}}": rowData.tm || "",
-    "{{CLASS}}": rowData.classNo || "",
-    "{{CLASS_DESC}}": rowData.classDesc || "",
-    "{{APP_TYPE}}": rowData.appType || "",
-    "{{APP_NAME}}": rowData.appName || "",
-    "{{APP_SO}}": rowData.appSo || "",
-    "{{APP_CNIC}}": rowData.appCnic || "",
-    "{{ISSUE_DATE}}": rowData.issueDate || "",
-    "{{EXPIRY_DATE}}": rowData.expiryDate || "",
-    "{{APP_TRADE}}": rowData.appTrade || "",
-    "{{APP_ADD}}": rowData.appAdd || "",
-    "{{YEAR}}": rowData.year || "",
-    "{{CON_NAME}}": rowData.conName || "",
-    "{{CON_ADD}}": rowData.conAdd || "",
-    "{{GOODS_SERVICES}}": rowData.goodsServices,
-    "{{DATE}}": rowData.date || "",
-    "{{FOLDER}}": rowData.folder || ""
-  };
+  if (imageId) rowData.img = 'https://drive.google.com/file/d/' + imageId + '/view';
+
+  var mergeData = buildCanonicalMergeData(rowData);
 
   var tm1Doc = null, tm48Doc = null;
   if (tm1TemplateId) {
-    tm1Doc = generateWordDocReturn(tm1TemplateId, newFolder, rowData.folder + " - TM-1",
+    tm1Doc = generateWordDocReturn(tm1TemplateId, documentsFolder, driveDocumentName(rowData, 'TM-1'),
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
   }
   if (tm48TemplateId) {
-    tm48Doc = generateWordDocReturn(tm48TemplateId, newFolder, rowData.folder + " - TM-48",
+    tm48Doc = generateWordDocReturn(tm48TemplateId, documentsFolder, driveDocumentName(rowData, 'TM-48'),
       mergeData, tmImageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 
-  var attachments = saveAdditionalFiles(newFolder, formData && formData.additionalFiles, formData || {});
+  var attachments = saveAdditionalFiles(documentsFolder, formData && formData.additionalFiles, formData || {});
 
   return {
     folderUrl: newFolder.getUrl(),
     tm1Url: tm1Doc ? tm1Doc.getUrl() : null,
     tm48Url: tm48Doc ? tm48Doc.getUrl() : null,
+    tm1Name: tm1Doc ? tm1Doc.getName() : '',
+    tm48Name: tm48Doc ? tm48Doc.getName() : '',
     attachments: attachments,
     imageId: imageId || rowData.img || '',
     imageWarning: imageWarning
   };
 }
 
+function sha256Bytes(bytes) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes).map(function(b) {
+    return ('0' + ((b + 256) % 256).toString(16)).slice(-2);
+  }).join('');
+}
+
+function singleNamedFile(folder, name) {
+  var matches = folder.getFilesByName(name);
+  if (!matches.hasNext()) return null;
+  var file = matches.next();
+  if (matches.hasNext()) throw new Error('Multiple files share the name "' + name + '". Review the folder before retrying.');
+  return file;
+}
+
+function versionedFileName(name, version) {
+  if (version === 1) return name;
+  var dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) + ' (' + version + ')' + name.slice(dot) : name + ' (' + version + ')';
+}
+
+function saveVersionedBlob(folder, name, blob) {
+  var hash = sha256Bytes(blob.getBytes());
+  for (var version = 1; version <= 1000; version++) {
+    var candidate = versionedFileName(name, version);
+    var file = singleNamedFile(folder, candidate);
+    if (file) {
+      if (file.getMimeType() === blob.getContentType() && file.getSize() <= 8 * 1024 * 1024 && sha256Bytes(file.getBlob().getBytes()) === hash) return file;
+    } else return folder.createFile(blob.setName(candidate));
+  }
+  throw new Error('Too many file versions. Review the case folder.');
+}
+
 function generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
-  var existing = folder.getFilesByName(docName);
-  var doc = existing.hasNext()
-    ? existing.next()
-    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
+  var template = DriveApp.getFileById(templateId);
+  var fields = {};
+  // Saving generated references changes bookkeeping time without changing application content.
+  Object.keys(mergeData).sort().forEach(function(key) { if (key !== '{{UPDATED_AT}}') fields[key] = mergeData[key]; });
+  var signature = sha256Bytes(Utilities.newBlob(JSON.stringify({
+    generatorVersion: 1,
+    template: templateId, templateUpdatedAt: template.getLastUpdated().toISOString(),
+    fields: fields, image: imageBlob ? sha256Bytes(imageBlob.getBytes()) : '',
+    placeholder: imagePlaceholder, fallback: fallbackText || ''
+  }), 'application/json').getBytes());
+  var marker = 'BRANDEX_GENERATED_V1:' + signature;
+  var doc = null;
+  for (var version = 1; version <= 1000; version++) {
+    var candidate = versionedFileName(docName, version);
+    var existing = singleNamedFile(folder, candidate);
+    if (existing) {
+      if (existing.getDescription() === marker) return existing;
+    } else { doc = template.makeCopy(candidate, folder); break; }
+  }
+  if (!doc) throw new Error('Too many document versions. Review the case folder.');
   var document = DocumentApp.openById(doc.getId());
   var body = document.getBody();
-
-  for (var key in mergeData) {
-    body.replaceText(escapeRegex(key), (mergeData[key] || "").toString());
-  }
-
+  for (var key in mergeData) body.replaceText(escapeRegex(key), (mergeData[key] || '').toString());
   if (imageBlob) {
-    var inserted = replaceTextWithImage(body, imagePlaceholder, imageBlob);
-    if (!inserted) {
-      body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[IMAGE FAILED]");
-    }
-  } else {
-    body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[NO IMAGE PROVIDED]");
-  }
-
+    if (!replaceTextWithImage(body, imagePlaceholder, imageBlob)) body.replaceText(escapeRegex(imagePlaceholder), fallbackText || '[IMAGE FAILED]');
+  } else body.replaceText(escapeRegex(imagePlaceholder), fallbackText || '[NO IMAGE PROVIDED]');
   document.saveAndClose();
+  doc.setDescription(marker);
   return doc;
 }
 
@@ -414,15 +589,19 @@ function validateRequiredData(rowData) {
   }
 }
 
+function normalizedDriveFileId(value) {
+  var text = String(value || '').trim();
+  if (/^[A-Za-z0-9_-]{10,200}$/.test(text)) return text;
+  if (!/^https:\/\/(drive|docs)\.google\.com\//.test(text)) return '';
+  var match = text.match(/\/d\/([A-Za-z0-9_-]{10,200})(?:[/?#]|$)/) || text.match(/[?&]id=([A-Za-z0-9_-]{10,200})(?:[&#]|$)/);
+  return match ? match[1] : '';
+}
+
 function getImageFromDriveId(imageId) {
   try {
     if (!imageId || imageId.toString().trim() === "") return null;
-    var cleanId = imageId.toString().trim();
-    if (cleanId.indexOf("drive.google.com") !== -1) {
-      var match = cleanId.match(/[-\w]{25,}/);
-      if (match) cleanId = match[0];
-      else return null;
-    }
+    var cleanId = normalizedDriveFileId(imageId);
+    if (!cleanId) return null;
     var file = DriveApp.getFileById(cleanId);
     var mimeType = file.getMimeType();
     if (!mimeType.startsWith("image/")) return null;
@@ -434,57 +613,18 @@ function getImageFromDriveId(imageId) {
 }
 
 function generateDocuments(rowData, folder, tm1TemplateId, tm48TemplateId, imageBlob) {
-  var mergeData = {
-    "{{SERIAL}}":        rowData.serialNo    || "",
-    "{{TM}}":            rowData.tm          || "",
-    "{{CLASS}}":         rowData.classNo     || "",
-    "{{CLASS_DESC}}":    rowData.classDesc   || "",
-    "{{APP_TYPE}}":      rowData.appType     || "",
-    "{{APP_NAME}}":      rowData.appName     || "",
-    "{{APP_SO}}":        rowData.appSo       || "",
-    "{{APP_CNIC}}":      rowData.appCnic     || "",
-    "{{ISSUE_DATE}}":    rowData.issueDate   || "",
-    "{{EXPIRY_DATE}}":   rowData.expiryDate  || "",
-    "{{APP_TRADE}}":     rowData.appTrade    || "",
-    "{{APP_ADD}}":       rowData.appAdd      || "",
-    "{{YEAR}}":          rowData.year        || "",
-    "{{CON_NAME}}":      rowData.conName     || "",
-    "{{CON_ADD}}":       rowData.conAdd      || "",
-    "{{GOODS_SERVICES}}":rowData.goodsServices,
-    "{{DATE}}":          rowData.date        || "",
-    "{{FOLDER}}":        rowData.folder      || ""
-  };
+  var mergeData = buildCanonicalMergeData(rowData);
 
   if (tm1TemplateId) {
-    generateWordDoc(tm1TemplateId, folder, rowData.folder + " - TM-1", mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
+    generateWordDoc(tm1TemplateId, folder, driveDocumentName(rowData, 'TM-1'), mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM1_TEMPLATE_ID");
   }
   if (tm48TemplateId) {
-    generateWordDoc(tm48TemplateId, folder, rowData.folder + " - TM-48", mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
+    generateWordDoc(tm48TemplateId, folder, driveDocumentName(rowData, 'TM-48'), mergeData, imageBlob, "{{IMAGE}}", rowData.noImg, "TM48_TEMPLATE_ID");
   }
 }
 
 function generateWordDoc(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel) {
-  var existing = folder.getFilesByName(docName);
-  var doc = existing.hasNext()
-    ? existing.next()
-    : DriveApp.getFileById(templateId).makeCopy(docName, folder);
-  var document = DocumentApp.openById(doc.getId());
-  var body = document.getBody();
-
-  for (var key in mergeData) {
-    body.replaceText(escapeRegex(key), (mergeData[key] || "").toString());
-  }
-
-  if (imageBlob) {
-    var imageInserted = replaceTextWithImage(body, imagePlaceholder, imageBlob);
-    if (!imageInserted) {
-      body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[IMAGE FAILED]");
-    }
-  } else {
-    body.replaceText(escapeRegex(imagePlaceholder), fallbackText || "[NO IMAGE PROVIDED]");
-  }
-
-  document.saveAndClose();
+  return generateWordDocReturn(templateId, folder, docName, mergeData, imageBlob, imagePlaceholder, fallbackText, templateLabel);
 }
 
 function replaceTextWithImage(body, placeholder, imageBlob) {
@@ -498,15 +638,31 @@ function replaceTextWithImage(body, placeholder, imageBlob) {
 
     parent.removeChild(textElement);
     var image = parent.insertInlineImage(childIndex, imageBlob);
-    image.setWidth(200);
-    image.setHeight(200);
+    var width = image.getWidth(), height = image.getHeight();
+    if (!(width > 0 && height > 0)) throw new Error('Logo dimensions are invalid');
+    var scale = Math.min(1, 200 / width, 200 / height);
+    image.setWidth(Math.max(1, Math.round(width * scale)));
+    image.setHeight(Math.max(1, Math.round(height * scale)));
     return true;
   } catch (error) {
     Logger.log("replaceTextWithImage error: " + error.toString());
-    return false;
+    throw new Error('Logo could not be inserted into the generated document. ' + error);
   }
 }
 
 function escapeRegex(str) {
   return str.replace(/[{}]/g, "\\$&");
 }
+
+// BEGIN GENERATED MERGE CONTRACT
+var CASE_MERGE_FIELDS = [{"tag":"SERIAL","api":"serialNo","record":"serialNo","storage":"serial_no"},{"tag":"TM","api":"tm","record":"tm","storage":"trademark_no"},{"tag":"CLASS","api":"classNo","record":"classNo","storage":"class_no"},{"tag":"CLASS_DESC","api":"classDesc","record":"classDesc","storage":"class_desc"},{"tag":"APP_TYPE","api":"appType","record":"appType","storage":"app_type"},{"tag":"APP_NAME","api":"appName","record":"appName","storage":"applicant_name"},{"tag":"APP_SO","api":"appSo","record":"fatherName","storage":"father_name"},{"tag":"APP_CNIC","api":"appCnic","record":"cnic","storage":"cnic"},{"tag":"ISSUE_DATE","api":"issueDate","record":"issueDate","storage":"issue_date"},{"tag":"EXPIRY_DATE","api":"expiryDate","record":"expiryDate","storage":"expiry_date"},{"tag":"FILING_DATE","api":"filingDate","record":"filingDate","storage":"filing_date; actual application filing date"},{"tag":"APP_TRADE","api":"appTrade","record":"appTrade","storage":"trading_as"},{"tag":"APP_ADD","api":"appAdd","record":"address","storage":"address"},{"tag":"YEAR","api":"year","record":"year","storage":"usage_year"},{"tag":"CON_NAME","api":"conName","record":"conName","storage":"consultant_name"},{"tag":"CON_ADD","api":"conAdd","record":"conAddr","storage":"consultant_addr"},{"tag":"GOODS_SERVICES","api":"goodsServices","record":"goodsServices","storage":"derived from numeric class"},{"tag":"DATE","api":"date","record":"generationDate","storage":"generation timestamp; not application issue_date"},{"tag":"FOLDER","api":"folder","record":"folder","storage":"mark_name"},{"tag":"CLIENT_ID","api":"clientId","record":"clientId","storage":"client_id"},{"tag":"CLIENT_CODE","api":"clientCode","record":"clientCode","storage":"client_code"},{"tag":"CASE_NO","api":"caseNo","record":"caseNo","storage":"case_no"},{"tag":"SERIES","api":"selectionMenu","record":"selectionMenu","storage":"selection_menu"},{"tag":"CATEGORY","api":"category","record":"category","storage":"category"},{"tag":"STATUS","api":"status","record":"status","storage":"status"},{"tag":"LEGAL_STAGE","api":"filingProcess","record":"filingProcess","storage":"filing_process"},{"tag":"TRACKING_ID","api":"trackingId","record":"trackingId","storage":"tracking_id"},{"tag":"NOTES","api":"notes","record":"notes","storage":"notes (decoded)"},{"tag":"NO_IMAGE_TEXT","api":"noImg","record":"noImg","storage":"notes (encoded companion)"},{"tag":"DISPATCH_DATE","api":"dispatchedDate","record":"dispatchedDate","storage":"dispatched_date"},{"tag":"DISPATCH_NOTE","api":"dispatchedNote","record":"dispatchedNote","storage":"dispatched_note"},{"tag":"DELIVERY_DATE","api":"deliveredDate","record":"deliveredDate","storage":"delivered_date"},{"tag":"RECEIVER","api":"receiverName","record":"receiverName","storage":"receiver_name"},{"tag":"CLIENT_PREFIX","api":"clientPrefix","record":"clientPrefix","storage":"clients.client_prefix"},{"tag":"CLIENT_NAME","api":"clientName","record":"clientName","storage":"clients.name"},{"tag":"CLIENT_CITY","api":"clientCity","record":"clientCity","storage":"clients.city"},{"tag":"CLIENT_FOLDER_REFERENCE","api":"clientFolderReference","record":"clientFolderReference","storage":"clients.folder_reference"},{"tag":"DRIVE_FOLDER_ID","api":"driveFolderId","record":"driveFolderId","storage":"drive_folder_id"},{"tag":"RECORD_ID","api":"recordId","record":"id","storage":"id"},{"tag":"LOGO_URL","api":"img","record":"img","storage":"logo_url; IMAGE is the binary placeholder"},{"tag":"DISPATCH_PROOF_URL","api":"dispatchedImage","record":"dispatchedImage","storage":"trademark_documents.file_url"},{"tag":"DISPATCH_DOCUMENT_ID","api":"dispatchDocumentId","record":"dispatchDocumentId","storage":"dispatch_document_id"},{"tag":"DISPATCH_PROOF_NAME","api":"dispatchedDocName","record":"dispatchedDocName","storage":"trademark_documents.file_name"},{"tag":"DISPATCH_PROOF_TYPE","api":"dispatchedDocType","record":"dispatchedDocType","storage":"trademark_documents.file_type"},{"tag":"RECEIPT_URL","api":"receiptImage","record":"receiptImage","storage":"receipt_image"},{"tag":"CREATED_AT","api":"createdAt","record":"createdAt","storage":"created_at"},{"tag":"UPDATED_AT","api":"updatedAt","record":"updatedAt","storage":"updated_at"}];
+function buildCanonicalMergeData(row) {
+  var result = {};
+  CASE_MERGE_FIELDS.forEach(function(field) {
+    var value = row[field.api];
+    if (value === undefined) value = row[field.record];
+    result['{{' + field.tag + '}}'] = value === undefined || value === null ? '' : String(value);
+  });
+  return result;
+}
+// END GENERATED MERGE CONTRACT

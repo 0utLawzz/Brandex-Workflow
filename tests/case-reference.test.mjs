@@ -14,6 +14,12 @@ test('case reference keeps series, client code, and case number as separate segm
   assert.equal(formatCaseReference('X', '842', '1'), 'X-842-001');
 });
 
+test('case reference display tolerates incomplete legacy series without weakening input validation', () => {
+  assert.equal(formatCaseReference('', '5', '10'), '');
+  assert.equal(formatCaseReference('bad-code', '5', '10'), '');
+  assert.throws(() => normalizeCaseSeries('bad-code'));
+});
+
 test('custom series is normalized and validated', () => {
   assert.equal(normalizeCaseSeries('brand2'), 'BRAND2');
   assert.throws(() => normalizeCaseSeries('2BRAND'));

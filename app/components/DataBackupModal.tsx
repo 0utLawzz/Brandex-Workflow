@@ -3,7 +3,13 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload, RefreshCw, X, ShieldCheck, Database, Check } from 'lucide-react';
 import { standaloneDB } from '@/lib/standalone-db';
-import { supabaseDB } from '@/lib/supabase-db';
+import { mapRowToRecord, supabaseDB } from '@/lib/supabase-db';
+import { preflightRestore } from '@/lib/restore-preflight';
+import type { RestorePreflight } from '@/lib/restore-preflight';
+import { planAssetRestore } from '@/lib/restore-assets';
+import { buildBackupAssetManifest, createBackupPackage } from '@/lib/backup-package';
+import type { RecoveryReport } from '@/lib/recovery-policy';
+import { MAX_RECOVERY_BYTES } from '@/lib/recovery-transfer';
 
 interface DataBackupModalProps {
   isOpen: boolean;
@@ -15,12 +21,18 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
   const [importText, setImportText] = useState('');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'warning' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [preflight, setPreflight] = useState<RestorePreflight | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [allowMissingAssets, setAllowMissingAssets] = useState(false);
+  const [restoreReport, setRestoreReport] = useState<RecoveryReport | null>(null);
 
   if (!isOpen) return null;
 
   const handleExport = async () => {
+    setChecking(true);
+    setStatusMsg({ text: 'Preparing a consistent backup and checking available file copies…', type: 'warning' });
     try {
-      const json = await supabaseDB.getBackupSnapshot();
+      const json = await supabaseDB.getBackupSnapshot(true);
       const parsed = JSON.parse(json);
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -36,26 +48,62 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         : { text: 'Backup JSON downloaded. Review the backup report before relying on it for recovery.', type: 'success' });
     } catch (e: any) {
       setStatusMsg({ text: e.message || 'Failed to export backup', type: 'error' });
-    }
+    } finally { setChecking(false); }
   };
 
   const importBackup = async (content: string) => {
-    try {
-      const restored = await supabaseDB.restoreBackupJSON(content);
-      const importedClientCount = restored.clients;
-      setStatusMsg({
-        text: `Imported ${restored.count} cases and ${importedClientCount} clients. Existing cloud rows were preserved, but history, document links, and external file contents were not restored. This is not a full recovery.`,
-        type: 'warning'
-      });
-      if (onDataChanged) onDataChanged();
-    } catch (err: any) {
-      setStatusMsg({ text: err.message || 'Failed to import backup', type: 'error' });
+    if (new TextEncoder().encode(content).length > MAX_RECOVERY_BYTES) {
+      setStatusMsg({ text: 'Backup exceeds the 64 MiB recovery limit.', type: 'error' });
+      setPreflight(null); setImportText(''); return;
     }
+    setChecking(true);
+    setPreflight(null);
+    setRestoreReport(null);
+    setImportText('');
+    setAllowMissingAssets(false);
+    try {
+      const destination = await supabaseDB.getBackupSnapshot();
+      const source = JSON.parse(content);
+      const raw = source.databaseSnapshot;
+      if (source.schemaVersion !== 3 || source.version !== '3.0-brandex' || !raw || ['records','clients','history','documents'].some(key => !Array.isArray(raw[key]))) throw new Error('A version 3 backup with the original database snapshot is required. Legacy backups need reviewed conversion.');
+      const actualSource = { ...createBackupPackage({ records: raw.records.map(mapRowToRecord), clients: raw.clients, history: raw.history, documents: raw.documents }), ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) };
+      const report = preflightRestore(JSON.stringify(actualSource), destination);
+      if (report.valid) {
+        const assets = await planAssetRestore(buildBackupAssetManifest(actualSource), source.assetCopies || []);
+        report.counts.missingAssets = assets.missing;
+        report.warnings = report.warnings.filter(warning => !warning.includes('file recovery is incomplete'));
+        if (assets.missing) report.warnings.push(`${assets.missing} referenced files have no verified byte copy; recovery will be partial.`);
+      }
+      setPreflight(report);
+      if (report.valid) setImportText(content);
+      setStatusMsg({ text: report.valid ? 'Preflight completed. No data was changed. Review collisions and missing files below.' : 'Preflight failed. No data was changed.', type: report.valid ? 'warning' : 'error' });
+    } catch (err: any) {
+      setStatusMsg({ text: err.message || 'Failed to inspect backup', type: 'error' });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const executeRestore = async () => {
+    if (!preflight?.valid || !importText || !confirm('Restore the reviewed cases, clients, history and document references into the administrator-approved target? Existing identities will never be overwritten.')) return;
+    setChecking(true);
+    try {
+      const report = await supabaseDB.restoreBackupJSON(importText, { confirmed: true, allowMissingAssets });
+      setRestoreReport(report);
+      setStatusMsg({ text: `${report.alreadyRestored ? 'Previously restored' : 'Restored'} in ${report.projectRef}: ${report.count} cases, ${report.clients} clients, ${report.history} history entries, ${report.documents} document references; ${report.restoredAssets} verified files copied. ${report.originalIdsPreserved ? 'Original IDs preserved.' : 'IDs remapped; download the report.'} ${report.missingAssets ? `${report.missingAssets} files remain unavailable; recovery is PARTIAL.` : 'Available embedded/copy bytes retained.'} ${report.configurationIncluded ? `${report.series} series and shared branding verified/restored.` : 'Series or shared branding was absent from this backup; configuration recovery is incomplete.'}`, type: report.missingAssets ? 'warning' : 'success' });
+      onDataChanged?.();
+    } catch (error) {
+      setStatusMsg({ text: error instanceof Error ? error.message : 'Restore failed.', type: 'error' });
+    } finally { setChecking(false); }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_RECOVERY_BYTES) {
+      setStatusMsg({ text: 'Backup exceeds the 64 MiB recovery limit.', type: 'error' });
+      setPreflight(null); setImportText(''); e.target.value = ''; return;
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
@@ -113,6 +161,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         )}
 
         {/* Export Backup */}
+        {restoreReport && <button type="button" onClick={() => { const url = URL.createObjectURL(new Blob([JSON.stringify(restoreReport, null, 2)], { type: 'application/json' })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'brandex-restore-report.json'; anchor.click(); URL.revokeObjectURL(url); }} className="mb-4 rounded border-2 bg-white px-3 py-2 text-sm font-bold">Download restore report &amp; ID maps</button>}
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">1. Download Backup File</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
@@ -120,6 +169,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
           </p>
           <button
             onClick={handleExport}
+            disabled={checking}
             className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#C94A00] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer"
           >
             <Download className="w-4 h-4" /> EXPORT BACKUP (.JSON)
@@ -130,7 +180,7 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
         <div className="mb-5 p-4 border-2 border-[#0C0C0C] bg-white rounded-[4px]">
           <h3 className="font-['Bebas_Neue'] text-[1.3rem] tracking-[1px] mb-1">2. Restore from Backup</h3>
           <p className="text-[0.75rem] font-['DM_Mono',monospace] text-[#555] mb-3">
-            Cloud restore currently imports cases and clients only. It does not restore history, document links, or external file contents; do not use it as a full disaster-recovery restore.
+            Inspect a backup against the current cloud snapshot before restoring. Execution requires an administrator-enabled target and explicit confirmation. Existing case/client identities are preserved; conflicts stop the transaction.
           </p>
           <div className="flex gap-2">
             <input
@@ -141,12 +191,22 @@ export default function DataBackupModal({ isOpen, onClose, onDataChanged }: Data
               className="hidden"
             />
             <button
+              disabled={checking}
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center gap-2 font-['DM_Mono',monospace] text-[0.8rem] font-bold py-2.5 px-4 bg-[#0D9970] text-white border-2 border-[#0C0C0C] rounded-[4px] shadow-[3px_3px_0_#0C0C0C] hover:translate-x-[-1px] hover:translate-y-[-1px] cursor-pointer"
             >
-              <Upload className="w-4 h-4" /> CHOOSE BACKUP FILE (.JSON)
+              <Upload className="w-4 h-4" /> {checking ? 'CHECKING…' : 'CHECK BACKUP FILE (.JSON)'}
             </button>
           </div>
+          {preflight && <div role="status" className="mt-4 text-sm">
+            <dl className="grid grid-cols-2 gap-2">{Object.entries(preflight.counts).map(([key, count]) => <React.Fragment key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{count}</dd></React.Fragment>)}</dl>
+            {preflight.errors.map((error, index) => <p key={`error-${index}`} className="mt-2 text-red-800">{error}</p>)}
+            {preflight.warnings.map((warning, index) => <p key={`warning-${index}`} className="mt-2 text-amber-900">{warning}</p>)}
+            {preflight.valid && <div className="mt-3 border-t pt-3">
+              {preflight.counts.missingAssets > 0 && <label className="mb-3 flex items-start gap-2"><input type="checkbox" checked={allowMissingAssets} onChange={event => setAllowMissingAssets(event.target.checked)} />I accept a partial file recovery: unavailable external bytes will not be restored.</label>}
+              <button type="button" disabled={checking || (preflight.counts.missingAssets > 0 && !allowMissingAssets)} onClick={() => void executeRestore()} className="rounded border-2 border-[#0C0C0C] bg-[#C94A00] px-3 py-2 font-bold text-white disabled:opacity-50">{checking ? 'Working…' : 'Confirm database restore'}</button>
+            </div>}
+          </div>}
         </div>
 
         {/* Clear Browser Data */}

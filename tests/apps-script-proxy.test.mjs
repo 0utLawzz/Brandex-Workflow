@@ -95,3 +95,21 @@ test('returns an actionable error when Apps Script rejects the backend token', a
     globalThis.fetch = previousFetch;
   }
 });
+
+test('server execution URL takes precedence over public legacy configuration for isolated testing', async()=>{
+  const previousFetch=globalThis.fetch;
+  const previousEndpoint=process.env.NEXT_APPS_SCRIPT_URL;
+  const previousToken=process.env.APPS_SCRIPT_RECORDS_TOKEN;
+  process.env.NEXT_APPS_SCRIPT_URL='https://script.google.com/macros/s/test-only-isolated/exec';
+  process.env.APPS_SCRIPT_RECORDS_TOKEN='test-only-token';
+  globalThis.fetch=async url=>{
+    assert.equal(url,process.env.NEXT_APPS_SCRIPT_URL);
+    return Response.json({ok:true});
+  };
+  try {assert.equal((await proxyAppsScript({action:'validateDriveFolder'})).status,200);}
+  finally {
+    globalThis.fetch=previousFetch;
+    if(previousEndpoint===undefined)delete process.env.NEXT_APPS_SCRIPT_URL;else process.env.NEXT_APPS_SCRIPT_URL=previousEndpoint;
+    if(previousToken===undefined)delete process.env.APPS_SCRIPT_RECORDS_TOKEN;else process.env.APPS_SCRIPT_RECORDS_TOKEN=previousToken;
+  }
+});

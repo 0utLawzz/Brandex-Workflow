@@ -1,19 +1,37 @@
 import { getSupabaseClient, getSupabaseCredentials } from './supabase';
 import { standaloneDB, RecordItem, ClientProfile, HistoryLog, DocumentAttachment } from './standalone-db';
-import { decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
+import { CASE_SELECT_WITH_PROOF, mapDispatchProofFromRow, decodeCaseNotesAndNoImage, encodeCaseNotesAndNoImage, mapCaseFieldsFromRow, mapCaseFieldsToRow } from './case-fields';
 import { normalizeCaseSeries } from './case-reference';
 import { normalizeSeriesCode, validateSeriesUpdate } from './case-series';
 import { validateWorkflowTransition } from './case-workflow';
+import { readAllRows } from './read-all-rows';
+import { preflightRestore } from './restore-preflight';
+import { assertRecoveryTarget } from './recovery-policy';
+import type { RecoveryOptions, RecoveryReport } from './recovery-policy';
+import { createBackupPackage } from './backup-package';
+import { copyBackupAssets } from './backup-assets';
+import { proxyAppsScript } from './apps-script-proxy';
+import { validateClientContact } from './client-contact';
+import { planAssetRestore, remapAssetUrls } from './restore-assets';
+import { downloadRecoveryBackup, uploadRecoveryBackup } from './recovery-transfer-client';
+import { safeAssetHref } from './asset-url';
+import { requestWithTransfer } from './api-request-client';
+import { issueDateForSave } from './issue-date';
+import { assertProofReference } from './proof-policy';
 
 const SUPABASE_REQUEST_TIMEOUT_MS = 10000;
 
-async function requestDatabase<T>(operation: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch('/api/database', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    cache: 'no-store',
-    body: JSON.stringify({ operation, ...payload }),
+async function readTable(client: ReturnType<typeof getSupabaseClient>, table: string, columns = '*'): Promise<{ data: any[]; error: { message: string } | null }> {
+  const data = await readAllRows<any>(before => {
+    let query = client.from(table).select(columns, { count: 'exact' }).order('id', { ascending: false }).limit(500);
+    if (before !== null) query = query.lt('id', before);
+    return withSupabaseTimeout(query);
   });
+  return { data, error: null };
+}
+
+async function requestDatabase<T>(operation: string, payload: Record<string, unknown> = {}): Promise<T> {
+  const response = await requestWithTransfer('/api/database', { operation, ...payload });
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.ok !== true) {
     throw new Error(result?.error || `Supabase request failed (${response.status}).`);
@@ -95,14 +113,12 @@ export function mapRowToRecord(row: any): RecordItem {
     notes: savedNotes.notes,
     dispatchedDate: row.dispatched_date || row.dispatchedDate || '',
     dispatchedNote: row.dispatched_note || row.dispatchedNote || '',
-    dispatchedImage: row.dispatched_image || row.dispatch_receipt || row.dispatchedImage || '',
-    dispatchedDocName: row.dispatched_doc_name || row.dispatchedDocName || '',
-    dispatchedDocType: row.dispatched_doc_type || row.dispatchedDocType || '',
+    ...mapDispatchProofFromRow(row),
     deliveredDate: row.delivered_date || row.deliveredDate || '',
     receiverName: row.receiver_name || row.receiverName || '',
     receiptImage: row.receipt_image || row.receiptImage || '',
-    createdAt: row.created_at || new Date().toISOString(),
-    updatedAt: row.updated_at || row.created_at || new Date().toISOString()
+    createdAt: row.created_at || '',
+    updatedAt: row.updated_at || row.created_at || ''
   };
 }
 
@@ -119,7 +135,8 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
   if (record.fatherName !== undefined) row.father_name = record.fatherName;
   if (record.cnic !== undefined) row.cnic = record.cnic;
   if (record.address !== undefined) row.address = record.address;
-  if (record.date !== undefined) row.issue_date = record.date;
+  const savedIssueDate = issueDateForSave(record.date, record.issueDate);
+  if (savedIssueDate !== undefined) row.issue_date = savedIssueDate;
   if (record.year !== undefined) row.usage_year = record.year;
   if (record.conName !== undefined) row.consultant_name = record.conName;
   if (record.lawFirm !== undefined && !row.consultant_name) row.consultant_name = record.lawFirm;
@@ -150,6 +167,9 @@ export function mapRecordToRow(record: Partial<RecordItem>): Record<string, any>
 // Helper to map DB row to ClientProfile
 export function mapRowToClient(row: any): ClientProfile {
   return {
+    drive_folder_id: row.drive_folder_id || '',
+    phone: row.phone || '',
+    email: row.email || '',
     id: Number(row.id),
     client_code: row.client_code || '',
     client_prefix: row.client_prefix || '',
@@ -168,6 +188,7 @@ export function mapRowToClient(row: any): ClientProfile {
 
 export function mapClientToRow(client: Partial<ClientProfile>): Record<string, any> {
   const row: Record<string, any> = {};
+  Object.assign(row, validateClientContact(client));
   if (client.client_code !== undefined) row.client_code = client.client_code;
   if (client.client_prefix !== undefined) row.client_prefix = client.client_prefix;
   if (client.city !== undefined) row.city = client.city;
@@ -261,10 +282,7 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await withSupabaseTimeout(client
-        .from('trademark_records')
-        .select('*')
-        .order('id', { ascending: false }));
+      const { data, error } = await readTable(client, 'trademark_records', CASE_SELECT_WITH_PROOF);
 
       if (error) {
         console.error('[SupabaseDB] Supabase records query failed:', error.message);
@@ -298,38 +316,9 @@ class SupabaseDBService {
         if (record.id) row.id = record.id;
         row.created_at = new Date().toISOString();
 
-        let { data, error } = await client
-          .from('trademark_records')
-          .insert([row])
-          .select()
-          .single();
-
-        // Existing projects may not yet have applied the additive client relationship migration.
-        if (error?.message.includes('client_id') && row.client_id !== undefined) {
-          delete row.client_id;
-          const retry = await client.from('trademark_records').insert([row]).select().single();
-          data = retry.data;
-          error = retry.error;
-        }
-
-        if (!error && data) {
-          const inserted = mapRowToRecord(data);
-          try {
-            const { error: historyError } = await client.from('trademark_history').insert([{
-              record_id: inserted.id,
-              status: 'RECORD_CREATED',
-              notes: `Case #${inserted.caseNo || '001'} created with initial status: ${inserted.status || 'PENDING'}`,
-              created_at: new Date().toISOString(),
-            }]);
-            if (historyError) console.warn('[SupabaseDB] Initial case history was not saved remotely:', historyError.message);
-          } catch (historyError) {
-            console.warn('[SupabaseDB] Initial case history request failed:', historyError);
-          }
-          return inserted;
-        } else if (error) {
-          console.warn('[SupabaseDB] Record insert failed on remote DB:', error.message);
-          throw new Error(`Supabase record save failed: ${error.message}`);
-        }
+        const { data, error } = await withSupabaseTimeout(client.rpc('create_case_record', { p_row: row }));
+        if (error || !data) throw new Error(`Atomic case creation failed: ${error?.message || 'No saved case returned'}`);
+        return mapRowToRecord(data);
       } catch (err) {
         console.warn('[SupabaseDB] Error sending record to Supabase:', err);
         throw err;
@@ -344,47 +333,33 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Import was not saved.');
 
-    const client = getSupabaseClient();
-    let importedCount = 0;
-    for (let offset = 0; offset < records.length; offset += 100) {
-      const batch = records.slice(offset, offset + 100);
-      const rows = batch.map(record => {
+    if (records.length > 5000) throw new Error('Import no more than 5000 cases at once.');
+    const rows = records.map(record => {
         const row = mapRecordToRow(record);
         row.selection_menu = record.selectionMenu ?? '';
         row.client_code = record.clientCode ?? '';
         row.case_no = record.caseNo ?? '';
         delete row.id;
-        row.created_at = record.createdAt || new Date().toISOString();
-        return row;
-      });
-
-      let result = await withSupabaseTimeout(client.from('trademark_records').insert(rows).select());
-      if (result.error?.message.includes('client_id') && rows.some(row => row.client_id !== undefined)) {
-        const compatibleRows = rows.map(row => {
-          const compatibleRow = { ...row };
-          delete compatibleRow.client_id;
-          return compatibleRow;
-        });
-        result = await withSupabaseTimeout(client.from('trademark_records').insert(compatibleRows).select());
-      }
-      if (result.error) {
-        throw new Error(`CSV import saved ${importedCount} of ${records.length} cases before failing: ${result.error.message}`);
-      }
-      const inserted = Array.isArray(result.data) ? result.data.map(mapRowToRecord) : [];
-      if (inserted.length !== batch.length) {
-        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${records.length} cases; Supabase returned an incomplete batch.`);
-      }
-      importedCount += inserted.length;
-    }
-    return importedCount;
+        if (record.createdAt) row.created_at = record.createdAt;
+        if (record.updatedAt) row.updated_at = record.updatedAt;
+        return { row, proof: { url: record.dispatchedImage || '', name: record.dispatchedDocName || '', type: record.dispatchedDocType || '' } };
+    });
+    const result = await withSupabaseTimeout(getSupabaseClient().rpc('import_case_csv', { p_rows: rows }));
+    if (result.error) throw new Error(`Atomic CSV import failed: ${result.error.message}`);
+    if (result.data !== records.length) throw new Error('Import confirmation is incomplete. Reload cases before retrying.');
+    return result.data;
   }
 
   public async updateRecord(id: number, updates: Partial<RecordItem>): Promise<RecordItem | null> {
     if (typeof window !== 'undefined') return requestDatabase('updateRecord', { id, updates });
+    if (updates.status === undefined) return this.updateRecordWithHistory(id, updates, 'Case metadata updated');
+    const allowed = new Set(['status','notes','dispatchedDate','dispatchedNote','trackingId','dispatchedImage','dispatchedDocName','dispatchedDocType','deliveredDate','receiverName','receiptImage']);
+    if (Object.keys(updates).some(key => !allowed.has(key))) throw new Error('Save case metadata separately from a workflow transition.');
+    if (updates.dispatchedImage) assertProofReference(updates.dispatchedImage);
+    if (updates.receiptImage) assertProofReference(updates.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const row = mapRecordToRow(updates);
       if (updates.status !== undefined) {
         const { data: currentStatusRow, error: statusReadError } = await withSupabaseTimeout(
           client.from('trademark_records').select('status').eq('id', id).maybeSingle()
@@ -412,42 +387,12 @@ class SupabaseDBService {
         }));
         if (transitionError) throw new Error(`Atomic workflow transition failed: ${transitionError.message}`);
         const { data: transitioned, error: transitionedError } = await withSupabaseTimeout(
-          client.from('trademark_records').select().eq('id', id).maybeSingle()
+          client.from('trademark_records').select(CASE_SELECT_WITH_PROOF).eq('id', id).maybeSingle()
         );
         if (transitionedError) throw new Error(`Workflow transition succeeded but case reload failed: ${transitionedError.message}`);
         return transitioned ? mapRowToRecord(transitioned) : null;
       }
-      if (updates.selectionMenu !== undefined || updates.clientCode !== undefined || updates.caseNo !== undefined) {
-        const { data: current, error: currentError } = await withSupabaseTimeout(
-          client.from('trademark_records').select('id, client_code, selection_menu, case_no').eq('id', id).maybeSingle()
-        );
-        if (currentError) throw new Error(`Could not read current case identity: ${currentError.message}`);
-        if (!current) throw new Error('Case was not found while validating its reference.');
-        const identity = {
-          clientCode: String(updates.clientCode ?? current.client_code ?? ''),
-          selectionMenu: String(updates.selectionMenu ?? current.selection_menu ?? 'A'),
-          caseNo: String(updates.caseNo ?? current.case_no ?? '')
-        };
-        await assertUniqueCaseReference(client, identity, id);
-        if (updates.clientCode !== undefined) row.client_code = identity.clientCode.replace(/\D/g, '').padStart(3, '0');
-        if (updates.selectionMenu !== undefined) row.selection_menu = normalizeCaseSeries(identity.selectionMenu);
-        if (updates.caseNo !== undefined) row.case_no = identity.caseNo.replace(/\D/g, '').padStart(3, '0');
-      }
 
-      const result = await withSupabaseTimeout(client.from('trademark_records').update(row).eq('id', id).select().maybeSingle());
-      if (result.error) throw new Error(`Supabase record update failed: ${result.error.message}`);
-      if (!result.data) throw new Error('Supabase record update returned no case. It may have been deleted or access denied.');
-
-      const updated = mapRowToRecord(result.data);
-      if (updates.dispatchedImage) {
-        await this.saveDocumentReferences([{
-          record_id: id,
-          file_name: updates.dispatchedDocName || `Dispatch_Receipt_${updates.trackingId || id}`,
-          file_type: updates.dispatchedDocType || (updates.dispatchedImage.startsWith('data:application/pdf') ? 'application/pdf' : 'image/jpeg'),
-          file_url: updates.dispatchedImage,
-        }]);
-      }
-      return updated;
     }
 
     throw new Error('Supabase server credentials are not configured. Case was not updated.');
@@ -469,6 +414,8 @@ class SupabaseDBService {
 
   public async updateRecordWithHistory(id: number, updates: Partial<RecordItem>, auditNote: string): Promise<RecordItem | null> {
     if (typeof window !== 'undefined') return requestDatabase('updateRecordWithHistory', { id, updates, auditNote });
+    if (updates.dispatchedImage) assertProofReference(updates.dispatchedImage);
+    if (updates.receiptImage) assertProofReference(updates.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Case was not updated.');
     if (updates.status !== undefined) throw new Error('Workflow status changes must use the guarded transition operation.');
@@ -503,7 +450,7 @@ class SupabaseDBService {
     }));
     if (error) throw new Error(`Atomic case edit failed: ${error.message}`);
     const { data, error: readError } = await withSupabaseTimeout(
-      client.from('trademark_records').select().eq('id', id).maybeSingle()
+      client.from('trademark_records').select(CASE_SELECT_WITH_PROOF).eq('id', id).maybeSingle()
     );
     if (readError) throw new Error(`Case was updated but reload failed: ${readError.message}`);
     return data ? mapRowToRecord(data) : null;
@@ -523,21 +470,21 @@ class SupabaseDBService {
       deliveredDate?: string;
       receiverName?: string;
       receiptImage?: string;
+      proofByCase?: Record<string, { dispatchedImage: string; dispatchedDocName: string; dispatchedDocType: string }>;
     }
   ): Promise<void> {
     if (typeof window !== 'undefined') {
       await requestDatabase('bulkUpdateStatus', { ids, newStatus, auditNote, meta });
       return;
     }
+    if (meta?.dispatchedImage) assertProofReference(meta.dispatchedImage);
+    if (meta?.receiptImage) assertProofReference(meta.receiptImage, true);
     const { isConfigured } = getSupabaseCredentials();
     if (isConfigured) {
       const client = getSupabaseClient();
-      const { error } = await withSupabaseTimeout(client.rpc('apply_case_workflow_transition', {
-        p_ids: ids,
-        p_new_status: newStatus,
-        p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`,
-        p_meta: meta || {},
-      }));
+      const { error } = await withSupabaseTimeout(meta?.proofByCase
+        ? client.rpc('apply_case_dispatch_with_proofs', { p_ids: ids, p_audit_note: auditNote || 'Cases dispatched with individual Drive proofs', p_meta: meta })
+        : client.rpc('apply_case_workflow_transition', { p_ids: ids, p_new_status: newStatus, p_audit_note: auditNote || `Bulk stage updated to ${newStatus}`, p_meta: meta || {} }));
       if (error) throw new Error(`Atomic bulk workflow transition failed: ${error.message}`);
     }
 
@@ -551,23 +498,12 @@ class SupabaseDBService {
     }
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Bulk client assignment was not saved.');
-    if (isConfigured) {
-      const client = getSupabaseClient();
-      const { error } = await withSupabaseTimeout(client
-          .from('trademark_records')
-          .update({
-            client_code: clientProfile.client_code,
-            applicant_name: clientProfile.client_name,
-            trading_as: clientProfile.trading_as,
-            father_name: clientProfile.father_name,
-            cnic: clientProfile.cnic,
-            address: clientProfile.address,
-            consultant_name: clientProfile.consultant_name,
-            updated_at: new Date().toISOString()
-          })
-          .in('id', ids));
-      if (error) throw new Error(`Supabase client reassignment failed: ${error.message}`);
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 500 || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length || !Number.isSafeInteger(clientProfile?.id) || clientProfile.id < 1) {
+      throw new Error('Choose valid cases and one saved client profile.');
     }
+    const { data: changed, error } = await withSupabaseTimeout(getSupabaseClient().rpc('assign_cases_to_client', { p_ids: ids, p_client_id: clientProfile.id }));
+    if (error) throw new Error(`Atomic client reassignment failed: ${error.message}`);
+    if (changed !== ids.length) throw new Error('Client reassignment count is uncertain. Reload cases before retrying.');
 
   }
 
@@ -672,10 +608,7 @@ class SupabaseDBService {
 
     try {
       const client = getSupabaseClient();
-      const { data, error } = await withSupabaseTimeout(client
-        .from('clients')
-        .select('*')
-        .order('id', { ascending: false }));
+      const { data, error } = await readTable(client, 'clients');
 
       if (error) {
         return { clients: [], source: 'supabase', error: error.message };
@@ -692,40 +625,40 @@ class SupabaseDBService {
     }
   }
 
-  public async getBackupSnapshot(): Promise<string> {
-    if (typeof window !== 'undefined') return requestDatabase('getBackupSnapshot');
-    const [recordsResult, clientsResult] = await Promise.all([this.getRecords(), this.getClients()]);
-    if (recordsResult.error || clientsResult.error) {
-      throw new Error(`Backup stopped because cloud data could not be read: ${recordsResult.error || clientsResult.error}`);
-    }
-    if (recordsResult.source !== clientsResult.source) {
-      throw new Error('Backup stopped because case and client data came from different sources. Reload and retry after the connection is restored.');
-    }
+  public async getBackupSnapshot(includeAssets = false): Promise<string> {
+    if (typeof window !== 'undefined') return downloadRecoveryBackup(includeAssets);
     const { isConfigured } = getSupabaseCredentials();
-    let history: HistoryLog[] | undefined;
-    let documents: DocumentAttachment[] | undefined;
-    if (isConfigured) {
-      const client = getSupabaseClient();
-      const [historyResult, documentsResult] = await Promise.all([
-        withSupabaseTimeout(client.from('trademark_history').select('*')),
-        withSupabaseTimeout(client.from('trademark_documents').select('*'))
-      ]);
-      if (historyResult.error || documentsResult.error) {
-        throw new Error(`Backup stopped because history or document data could not be read: ${historyResult.error?.message || documentsResult.error?.message}`);
-      }
-      history = (historyResult.data || []).map((row: any) => ({
-        id: Number(row.id), record_id: Number(row.record_id), action: row.status || row.action || 'STAGE_UPDATE', notes: row.notes || '', created_at: row.created_at || ''
-      }));
-      documents = (documentsResult.data || []).map((row: any) => ({
-        id: Number(row.id), record_id: Number(row.record_id), file_name: row.file_name || '', file_size: Number(row.file_size) || undefined, file_type: row.file_type || '', file_url: row.file_url || '', created_at: row.created_at || ''
-      }));
+    if (!isConfigured) throw new Error('Supabase server credentials are not configured.');
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('get_recovery_snapshot'));
+    if (error) throw new Error(`Consistent backup snapshot unavailable: ${error.message}. Verify the reviewed recovery migration before retrying.`);
+    if (!data || ['records', 'clients', 'history', 'documents', 'series', 'workspaceSettings'].some(key => !Array.isArray(data[key]))) throw new Error('Backup snapshot returned incomplete collections. Verify the workspace recovery migration.');
+    const exported = JSON.parse(standaloneDB.exportBackupJSON({
+      records: data.records.map(mapRowToRecord),
+      clients: data.clients.map(mapRowToClient),
+      history: data.history.map((row: any) => ({ ...row, action: row.status })),
+      documents: data.documents,
+    }));
+    // Preserve original database values alongside the portable application map.
+    exported.databaseSnapshot = data;
+    exported.series = data.series;
+    exported.workspaceSettings = data.workspaceSettings;
+    exported.capturedAt = data.capturedAt;
+    if (includeAssets) {
+      exported.assetCopies = await copyBackupAssets(exported.assets, async fileId => {
+        const response = await proxyAppsScript({ action: 'exportBackupAsset', fileId });
+        const file = await response.json();
+        if (!response.ok || !file.ok) throw new Error(file.error || 'Drive export failed.');
+        return file;
+      });
+      const missing = exported.assetCopies.filter((copy: any) => !copy.dataUrl).length;
+      const verifiedIds = new Set(exported.assetCopies.filter((copy: any) => copy.dataUrl && copy.sha256 && !copy.error).map((copy: any) => copy.assetId));
+      exported.assets = exported.assets.map((asset: any) => ({ ...asset, bytesIncluded: verifiedIds.has(asset.assetId) }));
+      exported.backupStatus = missing ? 'partial' : 'complete';
+      exported.counts.assetsMissingBytes = missing;
+      exported.counts.assetsWithBytes = exported.assetCopies.length - missing;
+      exported.backupNotice = missing ? `${missing} assets could not be copied. See assetCopies for individual failures.` : 'Referenced asset copies have verified SHA-256 checksums. Native Google files are exported to Office formats; Google sharing, revisions and comments are not preserved.';
     }
-    return standaloneDB.exportBackupJSON({
-      records: recordsResult.records,
-      clients: clientsResult.clients,
-      ...(history ? { history } : {}),
-      ...(documents ? { documents } : {})
-    });
+    return JSON.stringify(exported, null, 2);
   }
 
   public async addClient(client: Omit<ClientProfile, 'id'> & { id?: number }): Promise<ClientProfile> {
@@ -755,39 +688,44 @@ class SupabaseDBService {
     const { isConfigured } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Import was not saved.');
 
-    const client = getSupabaseClient();
-    let importedCount = 0;
-    for (let offset = 0; offset < clients.length; offset += 100) {
-      const batch = clients.slice(offset, offset + 100);
-      const rows = batch.map(profile => ({
-        ...mapClientToRow(profile),
-        created_at: profile.created_at || new Date().toISOString()
-      }));
-      const { data, error } = await withSupabaseTimeout(client.from('clients').insert(rows).select());
-      if (error) {
-        throw new Error(`CSV import saved ${importedCount} of ${clients.length} clients before failing: ${error.message}`);
-      }
-      const inserted = Array.isArray(data) ? data.map(mapRowToClient) : [];
-      if (inserted.length !== batch.length) {
-        throw new Error(`CSV import saved ${importedCount + inserted.length} of ${clients.length} clients; Supabase returned an incomplete batch.`);
-      }
-      importedCount += inserted.length;
-    }
-    return importedCount;
+    if (clients.length > 5000) throw new Error('Import no more than 5000 clients at once.');
+    const rows = clients.map(profile => ({ ...mapClientToRow(profile), ...(profile.created_at ? { created_at: profile.created_at } : {}) }));
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('import_client_csv', { p_rows: rows }));
+    if (error) throw new Error(`Atomic client import failed: ${error.message}`);
+    if (data !== clients.length) throw new Error('Client import confirmation is incomplete. Reload before retrying.');
+    return data;
   }
 
-  public async restoreBackupJSON(json: string): Promise<{ count: number; clients: number }> {
-    if (typeof window !== 'undefined') return requestDatabase('restoreBackupJSON', { json });
-    const parsed = standaloneDB.parseBackupJSON(json);
-    if (!parsed.success) throw new Error(parsed.message);
-    const { isConfigured } = getSupabaseCredentials();
+  public async restoreBackupJSON(json: string, options: RecoveryOptions = { confirmed: false, allowMissingAssets: false }): Promise<RecoveryReport> {
+    if (typeof window !== 'undefined') return uploadRecoveryBackup(json, options);
+    const { isConfigured, url } = getSupabaseCredentials();
     if (!isConfigured) throw new Error('Supabase server credentials are not configured. Backup was not restored.');
-
-    const records = (parsed.records || []).map(({ id: _id, ...record }) => record);
-    const clients = parsed.clients || [];
-    if (records.length) await this.importRecords(records);
-    if (clients.length) await this.importClients(clients);
-    return { count: records.length, clients: clients.length };
+    const projectRef = assertRecoveryTarget(url, process.env.RECOVERY_RESTORE_ENABLED, process.env.RECOVERY_RESTORE_PROJECT_REF, options.confirmed === true);
+    const packageData = JSON.parse(json);
+    const raw = packageData.databaseSnapshot;
+    if (packageData.schemaVersion !== 3 || !raw || ['records', 'clients', 'history', 'documents'].some(key => !Array.isArray(raw[key]))) throw new Error('A version 3 backup with the original database snapshot is required. Legacy backups need reviewed conversion.');
+    // Inspect the actual rows that the RPC will receive, not a potentially different portable view.
+    const actualPackage = createBackupPackage({ records: raw.records.map(mapRowToRecord), clients: raw.clients.map(mapRowToClient), history: raw.history, documents: raw.documents });
+    Object.assign(actualPackage, { ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) });
+    const destination = await this.getBackupSnapshot();
+    const preflight = preflightRestore(JSON.stringify(actualPackage), destination);
+    if (!preflight.valid) throw new Error(`Restore preflight failed: ${preflight.errors.join(' ')}`);
+    const assets = await planAssetRestore(actualPackage.assets, packageData.assetCopies || []);
+    if (assets.missing && options.allowMissingAssets !== true) throw new Error('File bytes are missing. Review the partial recovery warning before proceeding.');
+    const replacements = new Map<string, { url: string; mimeType: string }>();
+    const recoveryFolder = process.env.RECOVERY_DRIVE_FOLDER_ID;
+    if (assets.uploads.length && (!recoveryFolder || !/^[A-Za-z0-9_-]{10,200}$/.test(recoveryFolder))) throw new Error('An administrator-approved recovery Drive folder is required before copying files.');
+    for (const asset of assets.uploads) {
+      const response = await proxyAppsScript({ action: 'restoreBackupAsset', folderId: recoveryFolder, dataUrl: asset.dataUrl, sha256: asset.sha256, name: asset.name });
+      const restored = await response.json();
+      if (!response.ok || restored.ok !== true || restored.sha256 !== asset.sha256 || typeof restored.url !== 'string' || !restored.url.startsWith('https://drive.google.com/')) throw new Error(`Recovery file copy failed. ${replacements.size} previously copied files remain in the approved recovery folder; retrying reuses verified copies.`);
+      replacements.set(asset.sourceUrl, { url: restored.url, mimeType: asset.mimeType });
+    }
+    const snapshot = remapAssetUrls({ clients: raw.clients, records: raw.records, history: raw.history, documents: raw.documents, ...(raw.series !== undefined ? { series: raw.series } : {}), ...(raw.workspaceSettings !== undefined ? { workspaceSettings: raw.workspaceSettings } : {}) }, replacements);
+    const { data, error } = await withSupabaseTimeout(getSupabaseClient().rpc('restore_recovery_snapshot', { p_snapshot: snapshot }));
+    if (error) throw new Error(`Atomic restore failed: ${error.message}. No partial database restore was committed; retry the same file to check an uncertain response.`);
+    if (!data || !data.caseIdMap || !data.clientIdMap || ['records', 'clients', 'history', 'documents'].some(key => !Number.isSafeInteger(data[key]))) throw new Error('Restore response is incomplete. Retry the same file to retrieve the stored report.');
+    return { count: data.records, clients: data.clients, history: data.history, documents: data.documents, series: data.series || 0, workspaceSettings: data.workspaceSettings || 0, configurationIncluded: data.configurationIncluded === true, caseIdMap: data.caseIdMap, clientIdMap: data.clientIdMap, packageHash: data.packageHash, originalIdsPreserved: data.originalIdsPreserved === true, alreadyRestored: data.alreadyRestored === true, missingAssets: assets.missing, restoredAssets: replacements.size, projectRef };
   }
 
   public async updateClient(id: number, updates: Partial<ClientProfile>): Promise<ClientProfile | null> {
@@ -909,8 +847,8 @@ class SupabaseDBService {
     const client = getSupabaseClient();
     const byRecord = new Map<number, typeof documents>();
     for (const document of documents) {
-      if (!Number.isSafeInteger(document.record_id) || document.record_id < 1 || !document.file_url) {
-        throw new Error('Every document reference must include a valid case ID and Google Drive URL.');
+      if (!Number.isSafeInteger(document.record_id) || document.record_id < 1 || !safeAssetHref(document.file_url) || !document.file_name || document.file_name.length > 240) {
+        throw new Error('Every document reference requires a valid case ID, file name and safe HTTPS or supported embedded file URL.');
       }
       byRecord.set(document.record_id, [...(byRecord.get(document.record_id) || []), document]);
     }

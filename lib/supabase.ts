@@ -1,7 +1,8 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { DEFAULT_PRODUCTION_PROJECT_REF } from './preview-isolation';
 
 // Default Supabase project endpoints for Brandex Law Associates
-const DEFAULT_SUPABASE_URL = 'https://pjthtvkzuthxwpvcdqxy.supabase.co';
+const DEFAULT_SUPABASE_URL = `https://${DEFAULT_PRODUCTION_PROJECT_REF}.supabase.co`;
 const PLACEHOLDER_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpia2dlcmJkbmptY3RxcW5vcW5kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg4MDB9.placeholder';
 
 export function getSupabaseCredentials(): { url: string; key: string; isConfigured: boolean } {

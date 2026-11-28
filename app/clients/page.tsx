@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Navbar from '@/app/components/Navbar';
 import Footer from '@/app/components/Footer';
+import DriveFolderPicker from '@/app/components/DriveFolderPicker';
 import { ClientProfile } from '@/lib/standalone-db';
 import { supabaseDB } from '@/lib/supabase-db';
 import { formatPakistaniCnic, isValidPakistaniCnic } from '@/lib/case-reference';
@@ -22,10 +23,21 @@ export default function ClientsPage() {
   const [cnic, setCnic] = useState('');
   const [address, setAddress] = useState('');
   const [consultantName, setConsultantName] = useState('BRANDEX LAW ASSOCIATES');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [prefixFilter, setPrefixFilter] = useState('');
+  const [sort, setSort] = useState<{ field: 'client_prefix' | 'client_code' | 'client_name' | 'trading_as' | 'phone' | 'email'; descending: boolean }>({ field: 'client_code', descending: false });
+  const visibleClients = useMemo(() => clients.filter(client =>
+    (!prefixFilter || client.client_prefix === prefixFilter) &&
+    [client.client_prefix, client.client_code, client.client_name, client.father_name, client.trading_as, client.consultant_name, client.city, client.phone, client.email]
+      .some(value => String(value || '').toLowerCase().includes(search.trim().toLowerCase()))
+  ).sort((a, b) => String(a[sort.field] || '').localeCompare(String(b[sort.field] || ''), undefined, { numeric: true, sensitivity: 'base' }) * (sort.descending ? -1 : 1)), [clients, search, prefixFilter, sort]);
+  const sortHeading = (field: typeof sort.field, label: string) => <button type="button" onClick={() => setSort(current => ({ field, descending: current.field === field && !current.descending }))}>{label} {sort.field === field ? sort.descending ? '↓' : '↑' : '↕'}</button>;
 
   // Edit Client Modal State
   const [editingClient, setEditingClient] = useState<ClientProfile | null>(null);
@@ -39,21 +51,36 @@ export default function ClientsPage() {
   const loadClients = async () => {
     setLoading(true);
     setErrorMsg('');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const res = await supabaseDB.getClients();
-      setClients(res.clients);
-      setDbSource(res.source);
+      const response = await fetch('/api/clients', { cache: 'no-store', signal: controller.signal });
+      const res = await response.json().catch(() => null) as {
+        ok?: boolean;
+        error?: string;
+        clients?: ClientProfile[];
+        source?: 'supabase' | 'local';
+      } | null;
+      if (!response.ok || res?.ok !== true || !Array.isArray(res.clients)) {
+        throw new Error(res?.error || `Client profiles could not be loaded (${response.status}).`);
+      }
+      const loadedClients = res.clients;
+      setClients(loadedClients);
+      setDbSource(res.source === 'local' ? 'local' : 'supabase');
 
       // Compute next suggested client code
-      if (res.clients.length > 0) {
-        const codes = res.clients.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
+      if (loadedClients.length > 0) {
+        const codes = loadedClients.map(c => parseInt(c.client_code, 10)).filter(n => !isNaN(n));
         if (codes.length > 0) {
           setClientCode(String(Math.max(...codes) + 1).padStart(3, '0'));
         }
       }
     } catch (error: any) {
-      setErrorMsg(error?.message || 'Clients could not be loaded from Supabase.');
+      setErrorMsg(error?.name === 'AbortError'
+        ? 'Client profiles took too long to load. Retry, or check the database connection.'
+        : error?.message || 'Clients could not be loaded from Supabase.');
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };
@@ -66,6 +93,8 @@ export default function ClientsPage() {
       city: client.city || '',
       folder_reference: client.folder_reference || '',
       client_name: client.client_name,
+      phone: client.phone || '',
+      email: client.email || '',
       father_name: client.father_name || '',
       trading_as: client.trading_as || '',
       cnic: client.cnic || '',
@@ -77,6 +106,7 @@ export default function ClientsPage() {
   const handleSaveEditedClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClient || !editFormData.client_name?.trim()) return;
+    if (!/^\d{1,3}$/.test(String(editFormData.client_code || '').trim())) { setErrorMsg('Client code must contain 1 to 3 digits.'); return; }
     const editPrefix = String(editFormData.client_prefix || '').trim().toUpperCase();
     if (!/^[A-Z][A-Z0-9]{0,7}$/.test(editPrefix)) {
       setErrorMsg('Client prefix must start with a letter and contain 1–8 letters or numbers.');
@@ -90,7 +120,7 @@ export default function ClientsPage() {
     setEditSaving(true);
     try {
       const updated = await supabaseDB.updateClient(editingClient.id, {
-        client_code: (editFormData.client_code || '').replace(/\D/g, '').slice(0, 3).padStart(3, '0'),
+        client_code: (editFormData.client_code || '').trim().padStart(3, '0'),
         client_prefix: String(editFormData.client_prefix || '').trim().toUpperCase(),
         city: (editFormData.city || '').trim().toUpperCase(),
         folder_reference: (editFormData.folder_reference || '').trim().toUpperCase(),
@@ -99,7 +129,8 @@ export default function ClientsPage() {
         trading_as: (editFormData.trading_as || '').trim().toUpperCase(),
         cnic: editCnic,
         address: (editFormData.address || '').trim().toUpperCase(),
-        consultant_name: (editFormData.consultant_name || '').trim().toUpperCase()
+        consultant_name: (editFormData.consultant_name || '').trim().toUpperCase(),
+        phone: editFormData.phone || '', email: editFormData.email || ''
       });
       if (updated) {
         await loadClients();
@@ -145,6 +176,7 @@ export default function ClientsPage() {
         cnic: newCnic,
         address: address.trim().toUpperCase(),
         consultant_name: consultantName.trim().toUpperCase(),
+        phone: phone.trim(), email: email.trim(),
         total_cases: 0,
         created_at: new Date().toISOString()
       });
@@ -160,6 +192,7 @@ export default function ClientsPage() {
       setTradingAs('');
       setCnic('');
       setAddress('');
+      setPhone(''); setEmail('');
       setClientCode(String(parseInt(clientCode, 10) + 1).padStart(3, '0'));
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save client');
@@ -322,6 +355,8 @@ export default function ClientsPage() {
               <input type="text" placeholder="CA / OPTIONAL" value={clientFolderReference} onChange={e => setClientFolderReference(e.target.value.toUpperCase())}
                 className="w-full p-2.5 border-[2px] border-[#0C0C0C] bg-white font-['Space_Grotesk'] uppercase rounded-[4px]" />
             </div>
+            <label className="text-sm font-bold">Phone<input type="tel" maxLength={40} value={phone} onChange={event => setPhone(event.target.value)} className="mt-1 w-full rounded border-2 border-[#0C0C0C] bg-white p-2.5" /></label>
+            <label className="text-sm font-bold">Email<input type="email" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} className="mt-1 w-full rounded border-2 border-[#0C0C0C] bg-white p-2.5" /></label>
             <div className="sm:col-span-2">
               <label className="block font-['DM_Mono',monospace] text-[0.72rem] mb-1 font-bold">
                 Client Registered Address *
@@ -354,12 +389,17 @@ export default function ClientsPage() {
         {/* Clients Table */}
         <div className="bg-[#FAF6EE] border-[3px] border-[#0C0C0C] shadow-[5px_5px_0_#0C0C0C] p-6 rounded-[6px]">
           <div className="flex items-center justify-between pb-3 border-b-2 border-[#0C0C0C] mb-4">
-            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">Client Directory ({clients.length})</h2>
+            <h2 className="font-['Bebas_Neue'] text-[1.45rem] tracking-[1px]">Client Directory ({visibleClients.length}/{clients.length})</h2>
             <div className="font-['DM_Mono',monospace] text-[0.72rem] text-[#0D9970] font-bold">
               ✓ {dbSource === 'supabase' ? 'Connected to cloud' : 'Local data'}
             </div>
           </div>
 
+          <div className="mb-4 flex flex-wrap justify-end gap-2">
+            <input type="search" aria-label="Search clients" placeholder="Search clients, business, contact…" value={search} onChange={event => setSearch(event.target.value)} className="min-w-60 rounded border-2 border-[#0C0C0C] bg-white p-2 text-sm" />
+            <select aria-label="Filter client prefix" value={prefixFilter} onChange={event => setPrefixFilter(event.target.value)} className="rounded border-2 border-[#0C0C0C] bg-white p-2 text-sm"><option value="">All prefixes</option>{Array.from(new Set(clients.map(client => client.client_prefix).filter(Boolean))).sort().map(prefix => <option key={prefix} value={prefix}>{prefix}</option>)}</select>
+            {(search || prefixFilter) && <button type="button" onClick={() => { setSearch(''); setPrefixFilter(''); }} className="text-sm underline">Clear filters</button>}
+          </div>
           {loading ? (
             <div className="p-8 text-center font-['DM_Mono',monospace]">Loading client directory...</div>
           ) : clients.length === 0 ? (
@@ -371,29 +411,35 @@ export default function ClientsPage() {
               <table className="w-full border-collapse text-[0.85rem]">
                 <thead>
                   <tr className="bg-[#0C0C0C] text-[#FAF6EE]">
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Code</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Client Name</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">Trading As / Firm</th>
-                    <th className="p-2.5 text-left font-['DM_Mono',monospace] text-[0.7rem]">CNIC</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_prefix', 'Prefix')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_code', 'Code')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('client_name', 'Client / S/O')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('trading_as', 'Business / Consultant')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('phone', 'Phone')}</th>
+                    <th className="p-2.5 text-left text-xs">{sortHeading('email', 'Email')}</th>
                     <th className="p-2.5 text-center font-['DM_Mono',monospace] text-[0.7rem]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {clients.map((c, idx) => (
-                    <tr key={idx} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
+                  {visibleClients.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-sm">No clients match these filters.</td></tr>}
+                  {visibleClients.map(c => (
+                    <tr key={c.id} className="border-b border-[#ddd] hover:bg-[#E8DFC7]">
+                      <td className="p-2.5 font-bold">{c.client_prefix || '—'}</td>
                       <td className="p-2.5 font-['DM_Mono',monospace] font-bold text-[#C94A00]">
-                        {c.client_prefix ? `${c.client_prefix}-${String(c.client_code).padStart(3, '0')}` : `PREFIX NEEDED · ${String(c.client_code).padStart(3, '0')}`}
+                        {c.client_code || '—'}
                       </td>
                       <td className="p-2.5 font-bold">
                         <div>{c.client_name}</div>
+                        {c.city && <div className="text-xs font-normal text-[#666]">{c.city}</div>}
                         {c.father_name && (
                           <div className="text-[0.7rem] text-[#666] font-normal font-['DM_Mono',monospace]">
                             S/O: {c.father_name}
                           </div>
                         )}
                       </td>
-                      <td className="p-2.5 font-medium">{c.trading_as || '—'}</td>
-                      <td className="p-2.5 font-['DM_Mono',monospace] text-[0.78rem]">{c.cnic || '—'}</td>
+                      <td className="p-2.5 font-medium">{c.trading_as || '—'}<div className="text-xs text-[#666]">{c.consultant_name}</div></td>
+                      <td className="p-2.5 text-xs">{c.phone || '—'}</td>
+                      <td className="p-2.5 text-xs">{c.email || '—'}</td>
                       <td className="p-2.5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
@@ -442,6 +488,8 @@ export default function ClientsPage() {
             </div>
 
             <form onSubmit={handleSaveEditedClient} className="flex flex-col gap-3 font-['Space_Grotesk'] text-[0.85rem]">
+              <div className="grid gap-3 sm:grid-cols-2"><label>Phone<input type="tel" maxLength={40} value={editFormData.phone || ''} onChange={event => setEditFormData(current => ({ ...current, phone: event.target.value }))} className="mt-1 w-full rounded border-2 bg-white p-2" /></label><label>Email<input type="email" maxLength={254} value={editFormData.email || ''} onChange={event => setEditFormData(current => ({ ...current, email: event.target.value }))} className="mt-1 w-full rounded border-2 bg-white p-2" /></label></div>
+              <div className="rounded border p-3"><p className="mb-2 text-sm font-bold">Google Drive destination</p><DriveFolderPicker clientId={editingClient.id} onSaved={folderId => { setEditingClient(current => current ? { ...current, drive_folder_id: folderId } : null); void loadClients(); }} />{editingClient.drive_folder_id && <a href={`https://drive.google.com/drive/folders/${encodeURIComponent(editingClient.drive_folder_id)}`} target="_blank" rel="noopener noreferrer" className="mt-2 block text-xs underline">Open saved folder</a>}</div>
               <div className="grid grid-cols-4 gap-3">
                 <div>
                   <label className="block font-['DM_Mono',monospace] text-[0.7rem] font-bold mb-1">Prefix</label>

@@ -100,7 +100,7 @@ export function validateBackupPackage(json: string): {
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
       return { success: false, message: 'Invalid backup JSON object.' };
     }
-    for (const key of ['records', 'clients', 'history', 'documents']) {
+    for (const key of ['records', 'clients', 'history', 'documents', 'series', 'workspaceSettings']) {
       if (data[key] !== undefined && !Array.isArray(data[key])) {
         return { success: false, message: `Backup field "${key}" must be an array.` };
       }

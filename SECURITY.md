@@ -1,21 +1,26 @@
-# Security Policy
+# Security notes
 
-## Scope
+This application processes client names, CNICs, addresses, case records, and private document assets. Treat all application data and generated Drive files as confidential.
 
-This project handles trademark client names, CNICs, addresses, case details, and unfiled logo images. Security issues may expose confidential client information.
+## Current controls in source
 
-## Reporting a vulnerability
+- `middleware.ts` protects application and API routes with configured shared access credentials and signed sessions. This is shared staff access, not per-user identity or a per-user audit trail.
+- Supabase service-role operations are server-side. RLS remains enabled; migrations grant sensitive functions narrowly rather than adding public table policies.
+- API write routes check request origin, bound and validate JSON input, and keep Apps Script credentials on the server. Preview writes require the configured isolated test project and Apps Script target.
+- Dispatch proof and delivery receipts are optional/required according to their workflow policy: dispatch proof is optional; supplied dispatch proof is validated. Delivery requires a receipt. File and URL handlers apply bounded type/size and destination checks.
+- Recovery and CSV import paths validate identities and relationships, preflight conflicts, and use transactional database functions. Never run them against production during development or review.
+- Canonical mail-merge mappings and Apps Script access tokens are kept separate from browser payloads. Picker configuration values exposed to the browser must be restricted public identifiers only.
 
-Please report security issues privately to the repository owner rather than opening a public issue. Include what you found, why it is a security issue, steps to reproduce it, and any suggested fix.
+These are source-level controls; they do not prove the current hosted configuration or deployed Apps Script version. Check ADR 0008 for time-stamped evidence and open gates.
 
-## Current design risks
+## Operational risks and required handling
 
-- Client profiles and most case edits are stored in browser `localStorage`. This is not shared across users or devices and has no server-side access controls.
-- Production must have `APP_ACCESS_USER`, `APP_ACCESS_PASSWORD`, and server-only `APPS_SCRIPT_RECORDS_TOKEN` configured. The Next.js middleware applies Basic Auth to app pages and API routes, and the Apps Script proxy attaches the token server-side.
-- Apps Script direct `getRecords` requests and all POST actions are rejected unless the request includes the token matching Script Property `RECORDS_ACCESS_TOKEN`. Deploy the updated `Code.gs` and configure that property before relying on this protection; old deployments continue using their old access behavior.
-- Use HTTPS for Basic Auth. The shared app login does not provide per-user identity, and browser-local records are not isolated between people sharing an authenticated browser.
-- Successful authenticated app responses use `Cache-Control: private, no-store`; static Next.js assets are intentionally public and must never contain server secrets or live client records.
-- Basic Auth has no per-user audit trail or application-level rate limiting. Use strong credentials and hosting-layer rate limits; do not treat it as a substitute for user accounts or tenant isolation.
-- The app's local source changes do not update a live Google Apps Script deployment. Until the script is redeployed and its property configured, its existing public `getRecords` endpoint may still expose Sheet data.
-- The Supabase schema file is a draft. It does not provide application authentication or persistence. RLS is enabled without public policies in this branch.
-- Trademark logo images are embedded into generated Google Docs; review Apps Script and Drive sharing settings for those documents.
+- Shared access provides no individual attribution. On Vercel, every login POST and protected Basic Auth request requires the configured distributed Firewall rate-limit rule; a missing rule or failed check rejects the request. Configure and verify the rule in each deployment environment as described in [DEPLOY-GUIDE.md](DEPLOY-GUIDE.md). Keep credentials strong, rotate them when exposed, and use HTTPS.
+- Vercel Preview, Production, Supabase projects, Apps Script deployments, and Drive destinations must be verified independently. A successful build or Ready deployment is not proof of safe isolation.
+- Never paste credentials, private client data, CNICs, production row values, or private document URLs into issues, logs, pull requests, or screenshots.
+- Never introduce permissive RLS policies, client-side service keys, unbounded uploads, arbitrary URL fetches, or cross-case document references.
+- Production schema migrations, data writes, merges, and deployments require explicit user approval. Follow the preflight, backup, postflight, and rollback record in ADR 0008.
+
+## Reporting
+
+Report suspected vulnerabilities privately to the repository owner. Include the affected component, impact, and reproducible steps without sharing client data or secrets.
