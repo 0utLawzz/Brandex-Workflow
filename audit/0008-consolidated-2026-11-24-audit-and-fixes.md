@@ -316,3 +316,5 @@ No-code handoff: `DEPLOY-GUIDE.md` now includes the exact Google Cloud/Vercel Pr
 ### 2026-11-28 Records loading copy cleanup checkpoint
 
 **PASS — UI terminology cleanup.** The Records loading state now says `Loading case records...` instead of the inaccurate `Loading standalone cases...`, matching the Supabase-backed runtime. Commit `af62405` is pushed to both review refs. Focused verification passed: full test suite 132/132, lint, TypeScript and `git diff --check`; the change is application-only and does not affect data or deployment configuration.
+
+**PASS — current-head reproducibility and CI checkpoint.** At review head `d0889d5`, `npm test` passed 132/132, `npm run lint` passed, `npx tsc --noEmit` passed, `npm audit --audit-level=high` reported zero vulnerabilities, `git diff --check` passed, and `npm run build` completed successfully. GitHub Actions CI run #201 completed successfully for this commit, and the Vercel status check is successful. Existing non-fatal Node typeless-module warnings remain; no database, Drive, Production environment, or deployment configuration was changed by this verification.
