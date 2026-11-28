@@ -23,6 +23,19 @@ This guide describes the guarded release sequence. It is not authorization to ch
 
 Before the app can write in Preview, configure Preview-only environment values to point at the test project, including `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, and `PREVIEW_WRITE_PROJECT_REF=clviaughxebohniopzyg`. Configure a distinct non-production `PREVIEW_APPS_SCRIPT_URL` and matching `APPS_SCRIPT_RECORDS_TOKEN`; it must differ from `PRODUCTION_APPS_SCRIPT_URL`. Configure the restricted Google Picker client, API key, and project number. Keep service-role keys and Apps Script tokens server-side; never put them in browser-visible variables, Git, or logs. Until both test database and test Apps Script targets are independently confirmed, leave the Preview write/file guard enabled.
 
+#### No-code Google Picker setup for the audit Preview
+
+The Picker is intentionally fail-closed. If any of the three public values is missing, Case Edit and Client Edit show `Google Drive Picker is not configured` and do not write anything. To prepare the isolated Preview test:
+
+1. In Google Cloud Console, open the same project used by the Apps Script/Drive test, enable **Google Picker API** and **Google Drive API**, and open **APIs & Services → Credentials**.
+2. Create or reuse a **Web application OAuth client ID**. Add the audit Preview origin (without a path) to its authorized JavaScript origins: `https://brandex-workflow-git-audit-baseline-2026-11-24-projectsb.vercel.app`.
+3. Create a restricted API key and restrict it to the Picker API. Copy the OAuth client ID, API key, and the numeric Google Cloud project number; these are the three values, not passwords.
+4. In Vercel → `brandex-workflow` → Settings → Environment Variables, add each value only to the `audit-baseline-2026-11-24` Preview branch under the exact names `NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`, `NEXT_PUBLIC_GOOGLE_PICKER_API_KEY`, and `NEXT_PUBLIC_GOOGLE_PROJECT_NUMBER`. Do not add them to Production or Development.
+5. Redeploy the audit Preview branch from its branch deployment page. Do not use the environment-variable page's default redeploy if it selects Production.
+6. Open the protected Preview, edit the disposable test case, choose a folder inside the approved QA Drive folder, and confirm that the app reports a saved destination. The server independently checks that both the Picker user and Apps Script execution identity can add children before saving `drive_folder_id`.
+
+Do not paste API keys, OAuth client secrets, Apps Script tokens, or service-role keys into GitHub, this guide, screenshots, or chat. The current audit evidence confirms the Picker control and safe missing-config guard; real Picker authorization and Drive writes remain pending until this checklist is completed.
+
 ### Authentication rate limiting
 
 The Vercel login handler and protected HTTP Basic requests use `@vercel/firewall` with the configured `VERCEL_AUTH_RATE_LIMIT_ID`. Configure the Vercel Firewall in the project before enabling protected Vercel authentication:
