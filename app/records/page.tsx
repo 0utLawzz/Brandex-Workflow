@@ -1047,7 +1047,7 @@ export default function RecordsPage() {
                   <tr>
                     <td colSpan={10} className="p-12 text-center font-['DM_Mono',monospace]">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#C94A00]" />
-                      Loading standalone cases...
+                      Loading case records...
                     </td>
                   </tr>
                 ) : pageRecords.length === 0 ? (
